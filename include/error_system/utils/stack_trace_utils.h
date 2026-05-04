@@ -7,9 +7,13 @@
 #include <cxxabi.h>
 #include <execinfo.h>
 #elif defined(_WIN32) || defined(_WIN64)
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0600
+#endif
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 #include <dbghelp.h>
 #include <sstream>
-#include <windows.h>
 #endif
 #if defined(__MINGW32__) || defined(__MINGW64__)
 #include <cxxabi.h>

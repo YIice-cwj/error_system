@@ -105,14 +105,20 @@ namespace error_system::utils {
                     std::string symbol_str = symbol->Name;
 
 #if defined(__MINGW32__) || defined(__MINGW64__)
-                    if (symbol_str.rfind("_Z", 0) == 0) {
-                        int status = -1;
-                        char* demangled = abi::__cxa_demangle(symbol_str.c_str(), nullptr, nullptr, &status);
-                        if (status == 0 && demangled) {
-                            symbol_str = std::string(demangled);
-                            free(demangled);
-                        }
+                std::string mangled_name = symbol_str;
+                
+                if (mangled_name.rfind("Z", 0) == 0) {
+                    mangled_name = "_" + mangled_name;
+                }
+
+                if (mangled_name.rfind("_Z", 0) == 0) { 
+                    int status = -1;
+                    char* demangled = abi::__cxa_demangle(mangled_name.c_str(), nullptr, nullptr, &status);
+                    if (status == 0 && demangled) {
+                        symbol_str = std::string(demangled);
+                        free(demangled);
                     }
+                }
 #endif
                     trace.push_back(symbol_str);
                 } else {
