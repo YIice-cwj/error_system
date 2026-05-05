@@ -7,6 +7,7 @@
         "fatal": "致命错误"
     },
     "domain": {
+        "none": "无层",
         "system": "系统层",
         "kernel": "内核层",
         "middleware": "中间件层",

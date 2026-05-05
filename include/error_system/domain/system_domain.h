@@ -20,24 +20,25 @@ namespace error_system::domain {
      * @details 定义错误码系统中的系统域分类，用于标识错误码所属的系统域
      */
     enum class system_domain_t : uint8_t {
-        system = 0,        // 系统层
-        kernel = 1,        // 内核层
-        middleware = 2,    // 中间件层
-        application = 3,   // 应用层
-        service = 4,       // 服务层
-        network = 5,       // 网络层
-        storage = 6,       // 存储层
-        database = 7,      // 数据库层
-        security = 8,      // 安全层
-        ai = 9,            // 人工智能层
-        cloud = 10,        // 云计算层
-        edge = 11,         // 边缘计算层
-        iot = 12,          // 物联网层
-        blockchain = 13,   // 区块链层
-        bigdata = 14,      // 大数据层
-        devops = 15,       // 运维开发层
-        distributed = 16,  // 分布式层
-        monitoring = 17,   // 监控告警层
+        none = 0,          // 无层
+        system = 1,        // 系统层
+        kernel = 2,        // 内核层
+        middleware = 3,    // 中间件层
+        application = 4,   // 应用层
+        service = 5,       // 服务层
+        network = 6,       // 网络层
+        storage = 7,       // 存储层
+        database = 8,      // 数据库层
+        security = 9,      // 安全层
+        ai = 10,            // 人工智能层
+        cloud = 11,        // 云计算层
+        edge = 12,         // 边缘计算层
+        iot = 13,          // 物联网层
+        blockchain = 14,   // 区块链层
+        bigdata = 15,      // 大数据层
+        devops = 16,       // 运维开发层
+        distributed = 17,  // 分布式层
+        monitoring = 18,   // 监控告警层
         _count             // 占位符：表示系统域的总数
     };
 
@@ -46,7 +47,8 @@ namespace error_system::domain {
      * @details 用于表示系统域的字符串
      *          与系统域分类一一对应，用于日志打印和错误处理
      */
-    constexpr const char* SYSTEM_DOMAIN_STRING[] = {"system",
+    constexpr const char* SYSTEM_DOMAIN_STRING[] = {"none",
+                                                    "system",
                                                     "kernel",
                                                     "middleware",
                                                     "application",
@@ -143,7 +145,7 @@ namespace error_system::domain {
             case utils::string_utils_t::hash("monitoring"):
                 return system_domain_t::monitoring;
             default:
-                return system_domain_t::system;
+                return system_domain_t::none;
         }
     }
 

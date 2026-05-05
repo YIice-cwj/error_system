@@ -14,7 +14,17 @@
  */
 namespace error_system::core {
 
+    /**
+     * @brief 错误码类型
+     * @details 使用64位无符号整型表示错误码
+     */
     using code_t = uint64_t;
+
+    /**
+     * @brief 模块组 ID 类型
+     * @details 用于标识一个模块组（系统 + 子系统 + 模块）
+     */
+    using module_group_id_t = uint64_t;
 
     /**
      * @brief 错误码数据类
@@ -108,6 +118,15 @@ namespace error_system::core {
          * @return uint16_t 错误编号
          */
         constexpr uint16_t get_number() const noexcept { return union_.fields.number; }
+
+        /**
+         * @brief 获取模块的聚合隔离 ID
+         * @details 直接通过位掩码，高8位(Level)和低16位(Number)置零，只保留中间的系统与模块信息
+         * @return uint64_t 模块的聚合隔离 ID
+         */
+        constexpr module_group_id_t get_module_group_id() const noexcept {
+            return union_.code & 0x00FFFFFFFFFF0000ULL;
+        }
 
         /**
          * @brief 隐式转换为原始码
