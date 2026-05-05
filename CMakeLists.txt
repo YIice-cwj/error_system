@@ -25,6 +25,9 @@ else()
     endif()
 endif()
 
+option(ERROR_SYSTEM_ENABLE_STACKTRACE "是否编译堆栈追踪功能 (关闭可减小体积，免链接 OS 底层库)" ON)
+option(ERROR_SYSTEM_ENABLE_VALIDATION "是否编译严格的错误码验证器" ON)
+
 file(GLOB_RECURSE SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cc ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
 
 add_library(${PROJECT_NAME} ${SOURCE_FILES})
@@ -38,8 +41,15 @@ target_include_directories(${PROJECT_NAME}
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-if (WIN32)
-    target_link_libraries(${PROJECT_NAME} PRIVATE dbghelp)
+if (ERROR_SYSTEM_ENABLE_STACKTRACE)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC ERROR_SYSTEM_ENABLE_STACKTRACE)
+    if (WIN32)
+        target_link_libraries(${PROJECT_NAME} PRIVATE dbghelp)
+    endif()
+endif()
+
+if (ERROR_SYSTEM_ENABLE_VALIDATION)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC ERROR_SYSTEM_ENABLE_VALIDATION)
 endif()
 
 option(ERROR_SYSTEM_BUILD_TESTS "Build tests for error_system" ON)

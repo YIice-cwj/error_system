@@ -1,5 +1,7 @@
 #pragma once
 #include "error_system/core/error_code.h"
+#include "error_system/core/error_builder.h"
+#include "error_system/core/error_registry.h"
 #include "error_system/i18n/translator_registry.h"
 #include "error_system/utils/string_utils.h"
 #include "error_system/memory/object_pool.h"
@@ -54,13 +56,22 @@ namespace error_system::core {
         template<typename... Args>
         error_context_t(error_code_t code, std::string format = "", Args&&... args) noexcept
             : code(code), message(utils::string_utils_t::format(format, std::forward<Args>(args)...)) {
-
-            if (code.get_level() >= error_config::get_stacktrace_level()) {
-                stack_frames = utils::stack_trace_utils_t::generate(1);
-            }
-           
             if (code.get_code() != 0) {
-                __notify_plugins(*this);
+                if (error_config::is_validation_enabled()) {
+                    if (!error_registry_t::instance().is_registered(code)) {
+                        payload["illegal_raw_code"] = std::to_string(code.get_code());
+                        message = "[UNREGISTERED CODE] " + message;
+                        this->code = error_builder_t::make_error_code(error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFF);
+                    }
+                }
+
+                if (error_config::is_stacktrace_enabled() && code.get_level() >= error_config::get_stacktrace_level()) {
+                    stack_frames = utils::stack_trace_utils_t::generate(1);
+                }
+            
+                if (code.get_code() != 0) {
+                    __notify_plugins(*this);
+                }
             }
         }
 

@@ -1,6 +1,9 @@
 #include "error_system/utils/stack_trace_utils.h"
 
 namespace error_system::utils {
+
+#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
+
     namespace {
 #if defined(__APPLE__) || defined(__linux__)
         /**
@@ -35,12 +38,9 @@ namespace error_system::utils {
                     if (end_name == std::string::npos) {
                         end_name = symbol_str.length();
                     }
-
                     std::string mangled_name = symbol_str.substr(begin_name, end_name - begin_name);
-
                     int status = -1;
                     char* demangled = abi::__cxa_demangle(mangled_name.c_str(), nullptr, nullptr, &status);
-
                     if (status == 0 && demangled) {
                         symbol_str.replace(begin_name, end_name - begin_name, demangled);
                         free(demangled);
@@ -54,12 +54,12 @@ namespace error_system::utils {
 
                 trace.push_back(symbol_str);
             }
-
             free(symbols);
             return trace;
         }
 
-#elif defined(_WIN32) || defined(_WIN64)
+#elif defined(_WIN32)
+
         /**
          * @brief 格式化不可解析的地址
          * @param address 地址
@@ -91,6 +91,7 @@ namespace error_system::utils {
         std::vector<std::string> resolve_os_symbols(void** callstack, int frames, int skip_frames) noexcept {
             std::vector<std::string> trace;
             HANDLE process = GetCurrentProcess();
+
             SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
             SymInitialize(process, NULL, TRUE);
 
@@ -101,34 +102,40 @@ namespace error_system::utils {
 
             for (int i = skip_frames; i < frames; i++) {
                 DWORD64 address = (DWORD64)(callstack[i]);
-                if (SymFromAddr(process, address, 0, symbol)) {
+                DWORD64 displacement = 0;
+
+                if (SymFromAddr(process, address, &displacement, symbol)) {
                     std::string symbol_str = symbol->Name;
 
 #if defined(__MINGW32__) || defined(__MINGW64__)
-                std::string mangled_name = symbol_str;
-                
-                if (mangled_name.rfind("Z", 0) == 0) {
-                    mangled_name = "_" + mangled_name;
-                }
-
-                if (mangled_name.rfind("_Z", 0) == 0) { 
-                    int status = -1;
-                    char* demangled = abi::__cxa_demangle(mangled_name.c_str(), nullptr, nullptr, &status);
-                    if (status == 0 && demangled) {
-                        symbol_str = std::string(demangled);
-                        free(demangled);
+                    std::string mangled_name = symbol_str;
+                    
+                    if (mangled_name.rfind("Z", 0) == 0) {
+                        mangled_name = "_" + mangled_name;
                     }
-                }
+
+                    if (mangled_name.rfind("_Z", 0) == 0) { 
+                        int status = -1;
+                        char* demangled = abi::__cxa_demangle(mangled_name.c_str(), nullptr, nullptr, &status);
+                        if (status == 0 && demangled) {
+                            symbol_str = std::string(demangled);
+                            free(demangled);
+                        }
+                    }
 #endif
                     trace.push_back(symbol_str);
                 } else {
                     trace.push_back(format_fallback_address(callstack[i]));
                 }
             }
+            
+            SymCleanup(process);
             return trace;
         }
 #endif
     }  // namespace
+
+#endif // ERROR_SYSTEM_ENABLE_STACKTRACE
 
     /**
      * @brief 抓取当前线程的函数调用栈
@@ -137,15 +144,24 @@ namespace error_system::utils {
      * @return std::vector<std::string> 每一层调用栈的可读字符串
      */
     std::vector<std::string> stack_trace_utils_t::generate(int skip_frames, int max_frames) noexcept {
+#ifndef ERROR_SYSTEM_ENABLE_STACKTRACE
+        (void)skip_frames; 
+        (void)max_frames;  
+        return {};
+
+#else
         if (max_frames <= 0) {
             return {};
         }
         std::vector<void*> callstack(max_frames);
         int frames = capture_os_frames(callstack.data(), max_frames);
+
         if (frames <= skip_frames) {
             return {};
         }
+
         return resolve_os_symbols(callstack.data(), frames, skip_frames);
+#endif
     }
 
 }  // namespace error_system::utils
