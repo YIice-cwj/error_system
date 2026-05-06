@@ -47,9 +47,10 @@ Domain/Traits      error_context_t  ←─── Plugin 层监听
 | `error_level.h` | `error_level_t` | 错误等级枚举及转换函数 |
 | `error_builder.h` | `error_builder_t` | 编译期错误码构建工厂 |
 | `error_context.h` | `error_context_t` | 错误上下文（码+消息+因果链+结构化负载+堆栈跟踪） |
-| `error_config.h` | `error_config` | 全局错误配置（堆栈阈值、默认语言） |
-| `result_t.h` | `result_t<T>` | 类 Rust Result，替代异常传递错误 |
-| `error_registry.h` | `error_registry_t` | 错误码注册（预留扩展） |
+| `error_config.h` | `error_config` | 全局错误配置（堆栈阈值、默认语言、验证开关） |
+| `result.h` | `result_t<T>` | 类 Rust Result，替代异常传递错误 |
+| `error_registry.h` | `error_registry_t` | 错误码注册表，支持按模块组索引 |
+| `error_exception.h` | `error_exception_t` | 基于 `std::exception` 的异常封装 |
 
 ### Domain / Subsystem / Module / Traits 层
 
@@ -85,6 +86,7 @@ Domain/Traits      error_context_t  ←─── Plugin 层监听
 | `json_utils.h` | `json_dict_t` | JSON 字典加载与点路径访问 |
 | `file_utils.h` | `file_utils` | 文件读写、创建、删除、存在性检查 |
 | `stack_trace_utils.h` | `stack_trace_utils_t` | 跨平台堆栈跟踪（Linux/macOS/Windows） |
+| `error_formatter.h` | `operator<<` | `error_context_t` 输出流运算符重载 |
 
 ---
 
@@ -152,9 +154,17 @@ if (ptr) {
 }
 ```
 
-### 7. 自动堆栈跟踪
+### 7. JSON 与二进制序列化
 
-`error_context_t` 构造函数根据 `error_config::get_stacktrace_level()` 阈值自动决定是否抓取调用栈：
+`error_context_t` 提供两种序列化方式，满足不同场景需求：
+
+- **`to_json()`**: 生成人类可读的 JSON 字符串，包含 `code`、`message`、`payload`、`stack_frames`、`cause` 等完整字段，便于日志存储和网络传输。
+- **`to_binary()`**: 生成紧凑的二进制格式，包含原始 `uint64_t` 错误码、消息长度与内容、payload 键值对等，适合高性能 RPC 或持久化存储。
+
+底层使用 `string_utils_t::escape_json()` 处理 JSON 中的特殊字符转义。
+
+### 8. 自动堆栈跟踪
+`error_context_t` 构造函数根据 `error_config::get_stacktrace_level()` 阈值和编译选项自动决定是否抓取调用栈：
 
 ```cpp
 // 设置 WARN 及以上自动捕获堆栈
@@ -166,18 +176,31 @@ error_context_t ctx(code, "错误信息");  // 若 code.level >= warn，ctx.stac
 
 底层使用 `stack_trace_utils_t::generate()` 实现跨平台堆栈抓取，支持 Linux (`backtrace`)、macOS (`backtrace`) 和 Windows (`CaptureStackBackTrace`)。
 
-### 8. 全局错误配置
+> **注意**：堆栈追踪功能可通过 CMake 选项 `ERROR_SYSTEM_ENABLE_STACKTRACE` 在编译期开启或关闭。关闭后相关 API 将标记为 `[[deprecated]]` 并返回默认值。
 
-`error_config` 提供进程级的错误行为配置：
+### 9. 错误码验证
+
+若 `error_config::is_validation_enabled()` 为 `true` 且错误码未在 `error_registry_t` 中注册，则 `error_context_t` 构造函数自动将错误码替换为 `fatal` 级别的未注册错误码，并在 `payload` 中附加 `illegal_raw_code` 字段。
+
+> **注意**：验证功能可通过 CMake 选项 `ERROR_SYSTEM_ENABLE_VALIDATION` 在编译期开启或关闭。
+
+### 10. 全局错误配置
+
+`error_config_t` 提供进程级的错误行为配置：
 - **堆栈捕获阈值**：控制自动堆栈跟踪的触发等级
 - **默认语言**：影响 `translator_registry_t` 自动创建的默认翻译器语言
+- **验证开关**：控制错误码注册验证的开启/关闭
 
 ```cpp
 // 配置堆栈捕获阈值
-error_config::set_stacktrace_level(error_level_t::error);
+error_config_t::set_stacktrace_level(error_level_t::error);
 
 // 配置默认语言
-error_config::set_default_language("en_us");
+error_config_t::set_default_language("en_us");
+
+// 检查功能是否开启
+if (error_config_t::is_stacktrace_enabled()) { /* ... */ }
+if (error_config_t::is_validation_enabled()) { /* ... */ }
 ```
 
 ---

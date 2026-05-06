@@ -33,7 +33,8 @@
 *   **模块化预定义**: 已经内置了 18 大系统域（Kernel、Network、Database、Middleware、AI、Cloud 等），每个域下包含丰富的子系统和模块枚举，开箱即用。
 *   **Traits 类型萃取**: 为所有子系统和模块提供统一的 `traits` 接口，支持编译期枚举与字符串的双向转换。
 *   **对象池优化**: `error_context_t` 的因果链包装使用线程局部对象池，减少高频场景下的堆分配开销。
-*   **完备的测试**: 深度集成 GoogleTest，180+ 单元测试确保核心逻辑坚如磐石。
+*   **完备的测试**: 深度集成 GoogleTest，200+ 单元测试确保核心逻辑坚如磐石。
+*   **异常封装**: 提供 `error_exception_t` 继承 `std::exception`，在需要异常机制的场景中无缝传递错误上下文。
 
 ---
 
@@ -119,6 +120,13 @@ ctx.with("host", "192.168.1.100")
 
 // 输出完整错误信息（含堆栈和负载）
 std::cout << ctx.to_string() << "\n";
+
+// 序列化为 JSON（便于网络传输或日志存储）
+std::string json = ctx.to_json();
+// {"code":...,"message":"数据库连接失败: timeout","payload":{"host":"192.168.1.100",...}}
+
+// 序列化为二进制（高效紧凑）
+std::string binary = ctx.to_binary();
 ```
 
 ### 4. 使用 result_t 进行错误传递
@@ -126,7 +134,7 @@ std::cout << ctx.to_string() << "\n";
 `result_t<T>` 提供类似 Rust Result 的类型安全错误处理，无需异常：
 
 ```cpp
-#include "error_system/core/result_t.h"
+#include "error_system/core/result.h"
 
 using namespace error_system::core;
 
@@ -148,7 +156,32 @@ if (result.is_error()) {
 }
 ```
 
-### 5. 使用 Traits 进行枚举转换
+### 5. 使用异常传递错误 (error_exception_t)
+
+在需要异常机制的场景中，使用 `error_exception_t` 传递错误上下文：
+
+```cpp
+#include "error_system/core/error_exception.h"
+
+using namespace error_system::core;
+
+void may_throw() {
+    auto code = error_builder_t::make_error_code(
+        error_level_t::error, domain::system_domain_t::application, 0, 0, 2);
+    error_context_t ctx(code, "操作失败");
+    throw error_exception_t(std::move(ctx));
+}
+
+try {
+    may_throw();
+} catch (const error_exception_t& e) {
+    std::cerr << e.what() << "\n";      // 完整错误信息
+    std::cerr << e.code().get_code() << "\n"; // 原始错误码
+    std::cerr << e.context().to_json() << "\n"; // JSON 格式上下文
+}
+```
+
+### 6. 使用 Traits 进行枚举转换
 
 系统为所有子系统和模块提供了类型萃取，支持编译期枚举与字符串的双向转换：
 
@@ -172,7 +205,7 @@ constexpr auto value = subsystem_traits<database_subsystem_t>::to_int(database_s
 // 结果: 0x0701
 ```
 
-### 6. 多语言翻译 (i18n)
+### 7. 多语言翻译 (i18n)
 
 内置的 `json_translator_t` 支持将错误码映射为具体语言的字符串：
 
@@ -191,7 +224,7 @@ translator_registry_t::instance().set(&translator);
 std::string msg = ctx.to_string(); // 自动使用全局翻译器
 ```
 
-### 7. 注册插件
+### 8. 注册插件
 
 通过插件系统接入自定义的错误处理能力：
 
@@ -382,7 +415,7 @@ error_system/
 ├── CMakeLists.txt              # CMake 配置
 ├── README.md                   # 项目说明
 ├── include/error_system/       # 对外公开的头文件
-│   ├── core/                   # 核心定义 (error_code_t, error_builder_t, error_level_t, error_context_t, result_t, error_config)
+│   ├── core/                   # 核心定义 (error_code_t, error_builder_t, error_level_t, error_context_t, result_t, error_config_t, error_exception_t)
 │   ├── domain/                 # 系统域定义 (system_domain_t)
 │   ├── module/                 # 17 个模块枚举定义
 │   ├── subsystem/              # 36+ 个子系统枚举定义
@@ -393,7 +426,7 @@ error_system/
 │   │   └── languages/          # JSON 翻译字典 (zh_cn.json, en_us.json)
 │   ├── plugin/                 # 插件系统接口
 │   ├── memory/                 # 内存管理 (对象池)
-│   └── utils/                  # 辅助工具 (string, json, file, stack_trace)
+│   └── utils/                  # 辅助工具 (string, json, file, stack_trace, error_formatter)
 ├── src/                        # 核心实现代码
 │   ├── core/                   # error_context 实现
 │   ├── i18n/                   # json_translator, translator_registry 实现

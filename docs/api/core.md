@@ -2,7 +2,7 @@
 
 > 命名空间：`error_system::core`
 
-Core 层是整个错误系统的基础，定义了错误码数据结构、错误等级、错误上下文、构建器、全局配置及结果封装。
+Core 层是整个错误系统的基础，定义了错误码数据结构、错误等级、错误上下文、构建器、全局配置、结果封装、异常封装及错误注册表。
 
 ---
 
@@ -36,6 +36,8 @@ Core 层是整个错误系统的基础，定义了错误码数据结构、错误
 | `get_subsys()` | `uint16_t` | 获取子系统编号 |
 | `get_module()` | `uint16_t` | 获取模块编号 |
 | `get_number()` | `uint16_t` | 获取错误编号 |
+| `get_module_group_id()` | `uint64_t` | 获取模块聚合隔离 ID（高 8 位和低 16 位置零，保留系统+子系统+模块信息） |
+| `operator uint64_t()` | `uint64_t` | 隐式转换为原始码 |
 
 ### 示例
 
@@ -45,6 +47,7 @@ if (code.get_sign() == 1) {
     auto level = code.get_level();   // error_level_t::fatal
     auto sys   = code.get_system();  // system_domain_t::database
     auto num   = code.get_number();  // 404
+    auto group = code.get_module_group_id(); // 模块聚合 ID
 }
 ```
 
@@ -138,28 +141,34 @@ constexpr auto db_conn_err = error_builder_t::make_error_code(
 
 全局错误配置类，提供进程级的错误行为配置。所有方法均为 `static`，不可实例化。
 
+> **注意**：堆栈追踪和错误码验证功能可通过 CMake 选项 `ERROR_SYSTEM_ENABLE_STACKTRACE` / `ERROR_SYSTEM_ENABLE_VALIDATION` 在编译期开启或关闭。关闭后相关 API 将标记为 `[[deprecated]]` 并返回默认值。
+
 ### 配置项
 
 | 配置项 | 类型 | 默认值 | 描述 |
 |--------|------|--------|------|
-| `min_stacktrace_level_` | `error_level_t` | `error` | 自动捕获堆栈的最低错误等级 |
-| `default_language_` | `std::string` | `"zh_cn"` | 默认语言标识 |
+| `default_language_` | `language_t` | `zh_cn` | 默认语言标识 |
+| `min_stacktrace_level_` | `error_level_t` | `error` | 自动捕获堆栈的最低错误等级（仅在开启堆栈追踪时有效） |
+| `enable_stacktrace_` | `bool` | `true` | 是否开启堆栈追踪（仅在开启编译选项时有效） |
+| `enable_validation_` | `bool` | `true` | 是否开启错误码验证（仅在开启编译选项时有效） |
 
 ### 方法
 
 ```cpp
-// 设置自动捕获堆栈的最低错误等级
-// 当 error_context_t 的 code.level >= level 时，构造函数自动抓取调用栈
-static void set_stacktrace_level(error_level_t level) noexcept;
-
-// 获取当前堆栈捕获阈值
-static error_level_t get_stacktrace_level() noexcept;
-
-// 设置默认语言（影响 translator_registry 自动创建的默认翻译器）
+// 设置/获取默认语言（支持 std::string 和 language_t 两种重载）
 static void set_default_language(const std::string& language);
-
-// 获取当前默认语言
+static void set_default_language(const i18n::language_t language);
 static std::string get_default_language();
+
+// 堆栈追踪配置（若编译期关闭则标记 deprecated）
+static error_level_t get_stacktrace_level() noexcept;
+static void set_stacktrace_level(error_level_t level) noexcept;
+static void set_enable_stacktrace(bool enable) noexcept;
+static bool is_stacktrace_enabled() noexcept;
+
+// 错误码验证配置（若编译期关闭则标记 deprecated）
+static void set_enable_validation(bool enable) noexcept;
+static bool is_validation_enabled() noexcept;
 ```
 
 ### 示例
@@ -170,6 +179,11 @@ error_config::set_stacktrace_level(error_level_t::warn);
 
 // 设置默认语言为英文
 error_config::set_default_language("en_us");
+
+// 检查功能是否开启
+if (error_config::is_stacktrace_enabled()) {
+    // ...
+}
 
 // 创建错误上下文时，若等级 >= warn 则自动抓取堆栈
 error_context_t ctx(code, "连接超时");  // 可能自动包含 stack_frames
@@ -213,26 +227,36 @@ explicit operator bool() const noexcept;
 
 // 包装因果链：将 underlying 作为 this 的 cause
 // 优先使用线程局部对象池分配，池满时回退到堆分配
-error_context_t wrap(const error_context_t& underlying) const;
-error_context_t wrap(error_context_t&& underlying) const;
+error_context_t wrap(const error_context_t& underlying) const noexcept;
+error_context_t wrap(error_context_t&& underlying) const noexcept;
 
 // 添加结构化键值对，支持链式调用
-error_context_t& with(const std::string& key, const std::string& value);
-error_context_t& with(std::string&& key, std::string&& value);
+error_context_t& with(const std::string& key, const std::string& value) noexcept;
+error_context_t& with(std::string&& key, std::string&& value) noexcept;
 
 // 转为可读字符串
 // translator 优先级：传入参数 > 全局注册翻译器 > 降级英文名
 // 输出格式包含：翻译后的错误码信息、message、payload、stack_frames、cause chain
-std::string to_string(const i18n::i_translator_t* translator = nullptr) const;
+std::string to_string(const i18n::i_translator_t* translator = nullptr) const noexcept;
+
+// 转为 JSON 字符串
+std::string to_json() const noexcept;
+
+// 转为二进制字符串（用于网络传输或持久化）
+std::string to_binary() const noexcept;
 ```
 
 ### 插件触发
 
 构造 `error_context_t` 时（`code != 0`），会自动调用 `plugin::plugin_registry_t::instance().notify_error()`，通知所有已注册插件。
 
+### 错误码验证
+
+若 `error_config::is_validation_enabled()` 为 `true` 且错误码未在 `error_registry_t` 中注册，则自动将错误码替换为 `fatal` 级别的未注册错误码，并在 `payload` 中附加 `illegal_raw_code` 字段。
+
 ### 堆栈跟踪
 
-当构造时的错误等级满足 `code.get_level() >= error_config::get_stacktrace_level()` 时，构造函数内部自动调用 `utils::stack_trace_utils_t::generate(1)` 抓取当前调用栈，存储到 `stack_frames` 中。
+当构造时的错误等级满足 `code.get_level() >= error_config::get_stacktrace_level()` 且堆栈追踪功能已开启时，构造函数内部自动调用 `utils::stack_trace_utils_t::generate(1)` 抓取当前调用栈，存储到 `stack_frames` 中。
 
 ### 示例
 
@@ -263,7 +287,7 @@ std::cout << chained.to_string() << std::endl;
 
 ## result_t\<T\>
 
-**头文件**：`error_system/core/result_t.h`
+**头文件**：`error_system/core/result.h`
 
 类 Rust `Result` 的返回值封装，持有成功值或错误上下文，不使用异常。
 
@@ -286,12 +310,18 @@ result_t<void> r4 = {some_code, "操作失败"};   // 错误
 
 ```cpp
 // and_then: 成功时继续执行，失败时短路传递错误
+// 支持左值引用和右值引用两种版本
 template <typename Function>
 auto and_then(Function&& function) &&;
+template <typename Function>
+auto and_then(Function&& function) &;
 
 // or_else: 失败时执行恢复逻辑
+// 支持左值引用和右值引用两种版本
 template <typename Function>
-auto or_else(Function&& function) &&;
+result_t<value_type> or_else(Function&& function) &&;
+template <typename Function>
+result_t<value_type> or_else(Function&& function) &;
 ```
 
 ### 示例
@@ -314,11 +344,54 @@ if (result.is_error()) {
 
 ---
 
+## error_exception_t
+
+**头文件**：`error_system/core/error_exception.h`
+
+基于 `std::exception` 的异常封装类，用于在需要异常机制的场景中传递错误上下文。
+
+### 方法
+
+| 方法 | 返回值 | 描述 |
+|------|--------|------|
+| `error_exception_t(error_context_t context)` | — | 从错误上下文构造异常（显式构造，移动语义） |
+| `what()` | `const char*` | 返回完整的错误详情字符串（缓存，noexcept） |
+| `context()` | `const error_context_t&` | 获取原始错误上下文（noexcept） |
+| `code()` | `error_code_t` | 获取原始错误码（noexcept） |
+
+### 示例
+
+```cpp
+error_context_t ctx(code, "操作失败");
+throw error_exception_t(std::move(ctx));
+
+try {
+    // ...
+} catch (const error_exception_t& e) {
+    std::cerr << e.what() << "\n";
+    auto code = e.code();
+}
+```
+
+---
+
 ## error_registry_t
 
 **头文件**：`error_system/core/error_registry.h`
 
-错误码注册表，用于注册和查询错误码的元信息（预留扩展）。
+错误码注册表，用于注册和查询错误码的元信息，支持按模块组索引。
+
+### 元数据结构
+
+```cpp
+struct error_metadata_t {
+    std::string name;         // 宏名称 (例: "ERR_TCP_TIMEOUT")
+    std::string description;  // 中文描述 (例: "TCP 连接超时")
+    uint16_t module_id;       // 所属模块 ID
+    uint16_t error_number;    // 局部错误编号
+    error_level_t level;      // 错误等级
+};
+```
 
 ### 方法
 
@@ -326,17 +399,26 @@ if (result.is_error()) {
 // 获取单例
 static error_registry_t& instance() noexcept;
 
-// 注册错误码信息
+// 注册/注销错误码
 void register_error(error_code_t code, std::string_view name, std::string_view description) noexcept;
+void register_errors(const std::vector<error_code_t>& codes,
+                     const std::vector<std::string_view>& names,
+                     const std::vector<std::string_view>& descriptions) noexcept;
+void unregister_error(error_code_t code) noexcept;
+void unregister_error(std::string_view name) noexcept;
+void unregister_module(module_group_id_t module_group_id) noexcept;
+void unregister_all() noexcept;
 
-// 查询错误码名称
-std::string_view get_name(error_code_t code) const noexcept;
+// 查询错误码信息
+bool is_registered(error_code_t code) const noexcept;
+std::optional<error_metadata_t> get_info(error_code_t code) const noexcept;
+std::vector<error_metadata_t> get_errors_by_module(module_group_id_t module_group_id) const noexcept;
 
-// 查询错误码描述
-std::string_view get_description(error_code_t code) const noexcept;
-
-// 是否包含指定错误码
-bool contains(error_code_t code) const noexcept;
+// 模板版本：通过枚举获取模块下的所有错误码
+template <typename SystemEnum, typename SubSystemEnum, typename ModuleEnum>
+std::vector<error_metadata_t> get_errors_by_module(SystemEnum system,
+                                                    SubSystemEnum subsystem,
+                                                    ModuleEnum module) const noexcept;
 ```
 
 ### 使用示例
@@ -346,7 +428,20 @@ bool contains(error_code_t code) const noexcept;
 error_registry_t::instance().register_error(
     db_conn_err, "DB_CONNECTION_TIMEOUT", "数据库连接超时");
 
+// 批量注册
+error_registry_t::instance().register_errors(
+    {code1, code2}, {"NAME1", "NAME2"}, {"DESC1", "DESC2"});
+
 // 查询
 auto name = error_registry_t::instance().get_name(db_conn_err);
 // → "DB_CONNECTION_TIMEOUT"
+
+auto info = error_registry_t::instance().get_info(db_conn_err);
+if (info) {
+    std::cout << info->description << "\n";
+}
+
+// 按模块查询
+auto errors = error_registry_t::instance().get_errors_by_module(
+    domain::system_domain_t::database, database_subsystem_t::mysql, database_module_t::connection);
 ```

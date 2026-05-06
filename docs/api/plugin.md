@@ -20,7 +20,7 @@ error_context_t 构造（code != 0）
  i_error_plugin_t::on_error()  × N  ← 依次通知每个插件
 ```
 
-> **注意**：插件收到的 `error_context_t` 可能包含 `stack_frames`（如果错误等级满足 `error_config::get_stacktrace_level()` 阈值），插件可以利用堆栈信息进行更详细的日志记录或监控。
+> **注意**：插件收到的 `error_context_t` 可能包含 `stack_frames`（如果错误等级满足 `error_config::get_stacktrace_level()` 阈值且堆栈追踪功能已开启），插件可以利用堆栈信息进行更详细的日志记录或监控。
 
 ---
 

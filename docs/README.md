@@ -8,17 +8,16 @@
 
 | 文档 | 命名空间 | 描述 |
 |------|----------|------|
-| [Core 层](api/core.md) | `error_system::core` | 错误码、等级、上下文、Result |
+| [Core 层](api/core.md) | `error_system::core` | 错误码、等级、上下文、Result、异常、注册表 |
 | [i18n 层](api/i18n.md) | `error_system::i18n` | 多语言翻译、翻译器接口与注册 |
 | [Plugin 层](api/plugin.md) | `error_system::plugin` | 插件系统、日志/统计扩展 |
-| [Utils 层](api/utils.md) | `error_system::utils` | 字符串工具、JSON 解析、文件操作 |
+| [Utils 层](api/utils.md) | `error_system::utils` | 字符串工具、JSON 解析、文件操作、堆栈跟踪 |
 
 ## 设计文档
 
 | 文档 | 描述 |
 |------|------|
 | [架构设计](architecture.md) | 模块划分、依赖关系、关键设计决策、扩展指南 |
-| [优化建议](error_system_improvements.md) | 架构痛点分析与进阶改进方案 |
 
 ## 快速导航
 

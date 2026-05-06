@@ -18,10 +18,10 @@ Utils 层提供字符串处理、JSON 解析、文件操作和堆栈跟踪等通
 
 ```cpp
 // 编译期哈希
-constexpr uint64_t hash(std::string_view str) noexcept;
+static constexpr uint64_t hash(std::string_view str) noexcept;
 
 // 限制长度后哈希（超出则截断）
-constexpr uint64_t hash_limit(std::string_view str, size_t max_length = 128) noexcept;
+static constexpr uint64_t hash_limit(std::string_view str, size_t max_length = 128) noexcept;
 
 // 用法：switch 中进行字符串匹配
 switch (string_utils_t::hash(input)) {
@@ -48,8 +48,8 @@ std::string msg = string_utils_t::format(
 ### starts_with / ends_with
 
 ```cpp
-constexpr bool starts_with(std::string_view str, std::string_view prefix) noexcept;
-constexpr bool ends_with(std::string_view str, std::string_view suffix) noexcept;
+static constexpr bool starts_with(std::string_view str, std::string_view prefix) noexcept;
+static constexpr bool ends_with(std::string_view str, std::string_view suffix) noexcept;
 ```
 
 ### parse_number
@@ -85,6 +85,18 @@ static std::string_view trim(std::string_view str) noexcept;
 ```cpp
 static std::string to_lower(std::string_view str) noexcept;
 static std::string to_upper(std::string_view str) noexcept;
+```
+
+### escape_json
+
+将字符串中的控制字符转义为合法的 JSON 格式，用于 `error_context_t::to_json()` 的序列化。
+
+```cpp
+static std::string escape_json(std::string_view str) noexcept;
+
+// 示例
+std::string json = string_utils_t::escape_json("quote\"newline\n");
+// → "quote\\\"newline\\n"
 ```
 
 ---
@@ -162,6 +174,8 @@ static bool file_path_exists(const std::filesystem::path& path) noexcept;
 
 跨平台堆栈跟踪工具类，支持 Linux、macOS 和 Windows。自动处理符号解析（demangle C++ 函数名）。
 
+> **注意**：堆栈追踪功能可通过 CMake 选项 `ERROR_SYSTEM_ENABLE_STACKTRACE` 在编译期开启或关闭。关闭后 `generate()` 返回空向量。
+
 ### 方法
 
 ```cpp
@@ -198,7 +212,7 @@ for (size_t i = 0; i < frames.size(); ++i) {
 
 ### 在 error_context_t 中的使用
 
-`error_context_t` 的构造函数内部自动调用 `stack_trace_utils_t::generate(1)` 来抓取堆栈。捕获行为由 `error_config::set_stacktrace_level()` 控制：
+`error_context_t` 的构造函数内部自动调用 `stack_trace_utils_t::generate(1)` 来抓取堆栈。捕获行为由 `error_config::set_stacktrace_level()` 和编译选项共同控制：
 
 ```cpp
 // 设置 WARN 及以上自动捕获堆栈
@@ -208,4 +222,25 @@ error_config::set_stacktrace_level(error_level_t::warn);
 auto code = error_builder_t::make_error_code(
     error_level_t::error, domain::system_domain_t::database, 0, 0, 500);
 error_context_t ctx(code, "数据库错误");  // ctx.stack_frames 自动填充
+```
+
+---
+
+## operator<< (error_context_t)
+
+**头文件**：`error_system/utils/error_formatter.h`
+
+为 `error_context_t` 提供的 `std::ostream` 输出流运算符重载，方便直接打印错误上下文。
+
+```cpp
+inline std::ostream& operator<<(std::ostream& os, const error_system::core::error_context_t& context);
+```
+
+### 示例
+
+```cpp
+#include "error_system/utils/error_formatter.h"
+
+error_context_t ctx(code, "操作失败");
+std::cout << ctx << "\n";  // 等价于 ctx.to_string()
 ```
