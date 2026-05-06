@@ -17,10 +17,10 @@
 #include "error_system/core/error_builder.h"
 #include "error_system/core/error_code.h"
 #include "error_system/core/error_context.h"
+#include "error_system/core/error_exception.h"
 #include "error_system/core/error_level.h"
 #include "error_system/core/error_registry.h"
-#include "error_system/core/result_t.h"
-
+#include "error_system/core/result.h"
 // ─── Domain ───────────────────────────────────────────────────────────────────
 #include "error_system/domain/system_domain.h"
 
@@ -43,4 +43,6 @@
 #include "error_system/i18n/language.h"
 #include "error_system/i18n/translator_registry.h"
 
+// ─── Utils ─────────────────────────────────────────────────────────────────────
+#include "error_system/utils/error_formatter.h"
 // IWYU pragma: end_exports

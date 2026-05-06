@@ -1,12 +1,12 @@
 #pragma once
 #include <charconv>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
-#include <cstdint>
 // IWYU pragma: begin_exports
 #include <algorithm>
 // IWYU pragma: end_exports
@@ -202,6 +202,14 @@ namespace error_system::utils {
          * @return std::string 转换后的字符串
          */
         static std::string to_upper(std::string_view string) noexcept;
+
+        /**
+         * @brief 安全转义 JSON 字符串
+         * @details 将包含控制字符的字符串转义为合法的 JSON 字符串格式
+         * @param string 输入字符串
+         * @return std::string 转义后的字符串
+         */
+        static std::string escape_json(std::string_view string) noexcept;
     };
 
 }  // namespace error_system::utils

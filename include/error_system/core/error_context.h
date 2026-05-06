@@ -1,19 +1,20 @@
 #pragma once
-#include "error_system/core/error_code.h"
 #include "error_system/core/error_builder.h"
+#include "error_system/core/error_code.h"
+#include "error_system/core/error_config.h"
 #include "error_system/core/error_registry.h"
 #include "error_system/i18n/translator_registry.h"
-#include "error_system/utils/string_utils.h"
 #include "error_system/memory/object_pool.h"
 #include "error_system/utils/stack_trace_utils.h"
-#include "error_system/core/error_config.h"
+#include "error_system/utils/string_utils.h"
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
-namespace error_system::core {
+namespace error_system::plugin {
     class plugin_registry_t;
-}  // forward declaration
+}  // namespace error_system::plugin
 
 /**
  * @file error_context.h
@@ -39,7 +40,7 @@ namespace error_system::core {
      */
     struct error_context_t {
         using object_pool_t = memory::object_pool_t<error_context_t, 128>;
-        
+
         error_code_t code{};
         std::string message{};
         std::unordered_map<std::string, std::string> payload{};
@@ -53,22 +54,23 @@ namespace error_system::core {
          * @param code 错误码
          * @param message 错误信息
          */
-        template<typename... Args>
+        template <typename... Args>
         error_context_t(error_code_t code, std::string format = "", Args&&... args) noexcept
             : code(code), message(utils::string_utils_t::format(format, std::forward<Args>(args)...)) {
             if (code.get_code() != 0) {
-                if (error_config::is_validation_enabled()) {
+                if (error_config_t::is_validation_enabled()) {
                     if (!error_registry_t::instance().is_registered(code)) {
                         payload["illegal_raw_code"] = std::to_string(code.get_code());
                         message = "[UNREGISTERED CODE] " + message;
-                        this->code = error_builder_t::make_error_code(error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFF);
+                        this->code = error_builder_t::make_error_code(
+                            error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFF);
                     }
                 }
 
-                if (error_config::is_stacktrace_enabled() && code.get_level() >= error_config::get_stacktrace_level()) {
+                if (error_config_t::is_stacktrace_enabled() && code.get_level() >= error_config_t::get_stacktrace_level()) {
                     stack_frames = utils::stack_trace_utils_t::generate(1);
                 }
-            
+
                 if (code.get_code() != 0) {
                     __notify_plugins(*this);
                 }
@@ -79,55 +81,21 @@ namespace error_system::core {
          * @brief 检查错误上下文是否有效
          * @return bool 有效则返回true
          */
-        explicit operator bool() const noexcept { return code.get_code() != 0; }
+        explicit operator bool() const noexcept;
 
         /**
          * @brief 包装底层错误上下文
          * @param underlying 底层错误上下文
          * @return error_context_t 包装后的错误上下文
          */
-        error_context_t wrap(const error_context_t& underlying) const {
-            error_context_t new_code_context = *this;
-
-            object_pool_t& object_pool = object_pool_t::instance_thread_local();
-            error_context_t* context_pointer = object_pool.acquire();
-            if (context_pointer) {
-                *context_pointer = underlying;
-                new_code_context.cause = std::shared_ptr<error_context_t>(
-                    context_pointer, 
-                    [&object_pool](error_context_t* context_pointer) -> void { 
-                        object_pool.release(context_pointer);
-                    }
-                );
-            } else {
-                new_code_context.cause = std::make_shared<error_context_t>(underlying);
-            }
-            return new_code_context;
-        }
+        error_context_t wrap(const error_context_t& underlying) const noexcept;
 
         /**
          * @brief 包装底层错误上下文
          * @param underlying 底层错误上下文
          * @return error_context_t 包装后的错误上下文
          */
-        error_context_t wrap(error_context_t&& underlying) const {
-            error_context_t new_code_context = *this;
-
-            object_pool_t& object_pool = object_pool_t::instance_thread_local();
-            error_context_t* context_pointer = object_pool.acquire();
-            if (context_pointer) {
-                *context_pointer = std::move(underlying);
-                new_code_context.cause = std::shared_ptr<error_context_t>(
-                    context_pointer, 
-                    [&object_pool](error_context_t* context_pointer) -> void { 
-                        object_pool.release(context_pointer);
-                    }
-                );
-            } else {
-                new_code_context.cause = std::make_shared<error_context_t>(std::move(underlying));
-            }
-            return new_code_context;
-        }
+        error_context_t wrap(error_context_t&& underlying) const noexcept;
 
         /**
          * @brief 添加字段
@@ -135,10 +103,7 @@ namespace error_system::core {
          * @param val 字段值
          * @return error_context_t& 当前错误上下文的引用
          */
-        error_context_t& with(const std::string& key, const std::string& value) {
-            payload[key] = value;
-            return *this;
-        }
+        error_context_t& with(const std::string& key, const std::string& value) noexcept;
 
         /**
          * @brief 添加字段
@@ -146,10 +111,7 @@ namespace error_system::core {
          * @param val 字段值
          * @return error_context_t& 当前错误上下文的引用
          */
-        error_context_t& with(std::string&& key, std::string&& value) {
-            payload[std::move(key)] = std::move(value);
-            return *this;
-        }
+        error_context_t& with(std::string&& key, std::string&& value) noexcept;
 
         /**
          * @brief 转换为字符串
@@ -158,38 +120,18 @@ namespace error_system::core {
          * @param translator 可选的翻译器接口指针，默认为 nullptr
          * @return std::string 错误上下文的字符串表示
          */
-        std::string to_string(const i18n::i_translator_t* translator = nullptr) const {
-            if (!translator) {
-                translator = i18n::translator_registry_t::instance().get();
-            }
+        std::string to_string(const i18n::i_translator_t* translator = nullptr) const noexcept;
 
-            std::string result = utils::string_utils_t::format("{} - {}", translator->translate(code), message);
-            
-            if (!payload.empty()) {
-                result += " {";
-                bool first = true;
-                for (const auto& [key, value] : payload) {
-                    if (!first) {
-                        result += ", ";
-                    }
-                    result += key + "=" + value;
-                    first = false;
-                }
-                result += "}";
-            }
+        /**
+         * @brief 转换为 JSON 字符串
+         * @return std::string 错误上下文的 JSON 字符串表示
+         */
+        std::string to_json() const noexcept;
 
-            if (!stack_frames.empty()) {
-                result += "\n  [Stacktrace]:";
-                for (size_t i = 0; i < stack_frames.size(); ++i) {
-                    result += "\n    #" + std::to_string(i) + "  " + stack_frames[i];
-                }
-            }
-
-            if (cause) {
-                result += "\n  ↳ Caused by: " + cause->to_string(translator);
-            }
-            return result;
-        }
+        /**
+         * @brief 转换为二进制字符串
+         * @return std::string 错误上下文的二进制字符串表示
+         */
+        std::string to_binary() const noexcept;
     };
-
 }  // namespace error_system::core

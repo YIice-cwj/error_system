@@ -2,14 +2,12 @@
 #include "error_system/core/error_code.h"
 #include "error_system/core/error_context.h"
 #include "error_system/core/error_level.h"
-#include "error_system/core/result_t.h"
+#include "error_system/core/result.h"
 #include "error_system/domain/system_domain.h"
 #include "error_system/module/ai_module.h"
 #include "error_system/subsystem/ai_llm_subsystem.h"
 #include "error_system/traits/module_dispatcher.h"
-#include "error_system/traits/module_traits.h"
 #include "error_system/traits/subsystem_dispatcher.h"
-#include "error_system/traits/subsystem_traits.h"
 
 #include <iostream>
 #include <string>

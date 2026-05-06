@@ -109,4 +109,50 @@ namespace error_system::utils {
         std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c) { return std::toupper(c); });
         return result;
     }
+
+    /**
+     * @brief 安全转义 JSON 字符串
+     * @details 将包含控制字符的字符串转义为合法的 JSON 字符串格式
+     * @param string 输入字符串
+     * @return std::string 转义后的字符串
+     */
+    std::string string_utils_t::escape_json(std::string_view string) noexcept {
+        std::string result;
+        result.reserve(string.size() + 10);  // 预分配一点额外空间
+        for (char c : string) {
+            switch (c) {
+                case '"':
+                    result += "\\\"";
+                    break;
+                case '\\':
+                    result += "\\\\";
+                    break;
+                case '\b':
+                    result += "\\b";
+                    break;
+                case '\f':
+                    result += "\\f";
+                    break;
+                case '\n':
+                    result += "\\n";
+                    break;
+                case '\r':
+                    result += "\\r";
+                    break;
+                case '\t':
+                    result += "\\t";
+                    break;
+                default:
+                    if (static_cast<unsigned char>(c) < 0x20) {
+                        // 处理其他不可见的控制字符
+                        char buf[7];
+                        snprintf(buf, sizeof(buf), "\\u%04x", c);
+                        result += buf;
+                    } else {
+                        result += c;
+                    }
+            }
+        }
+        return result;
+    }
 }  // namespace error_system::utils
