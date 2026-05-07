@@ -18,6 +18,7 @@ namespace error_system::core {
         protected:
         void SetUp() override {
             error_config_t::set_enable_validation(false);
+            error_config_t::set_enable_source_location(true);
             plugin::plugin_registry_t::instance().clear();
         }
 
@@ -458,6 +459,142 @@ namespace error_system::core {
         error_context_t ctx(code, "no stack");
 
         EXPECT_TRUE(ctx.stack_frames.empty());
+    }
+
+    // ─── 源位置追踪 ───
+
+    TEST_F(error_context_test, source_location_captured_when_enabled) {
+        error_config_t::set_enable_source_location(true);
+
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        error_context_t ctx(code, "location test");
+
+#ifdef ERROR_SYSTEM_ENABLE_LOCATION
+        EXPECT_NE(ctx.file_name, nullptr);
+        EXPECT_NE(ctx.function_name, nullptr);
+        EXPECT_NE(ctx.line_number, 0u);
+#endif
+    }
+
+    TEST_F(error_context_test, source_location_not_captured_when_disabled) {
+        error_config_t::set_enable_source_location(false);
+
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        error_context_t ctx(code, "no location");
+
+#ifdef ERROR_SYSTEM_ENABLE_LOCATION
+        EXPECT_EQ(ctx.file_name, nullptr);
+        EXPECT_EQ(ctx.function_name, nullptr);
+        EXPECT_EQ(ctx.line_number, 0u);
+#endif
+    }
+
+    TEST_F(error_context_test, source_location_short_filename) {
+        error_config_t::set_enable_source_location(true);
+        error_config_t::set_enable_short_filename(true);
+
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        error_context_t ctx(code, "short filename test");
+
+#ifdef ERROR_SYSTEM_ENABLE_LOCATION
+        if (ctx.file_name != nullptr) {
+            EXPECT_EQ(std::strchr(ctx.file_name, '/'), nullptr);
+            EXPECT_EQ(std::strchr(ctx.file_name, '\\'), nullptr);
+        }
+#endif
+    }
+
+    TEST_F(error_context_test, source_location_full_filename) {
+        error_config_t::set_enable_source_location(true);
+        error_config_t::set_enable_short_filename(false);
+
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        error_context_t ctx(code, "full filename test");
+
+#ifdef ERROR_SYSTEM_ENABLE_LOCATION
+        if (ctx.file_name != nullptr) {
+            EXPECT_TRUE(std::strchr(ctx.file_name, '/') != nullptr || std::strchr(ctx.file_name, '\\') != nullptr ||
+                        std::strlen(ctx.file_name) > 0);
+        }
+#endif
+    }
+
+    TEST_F(error_context_test, source_location_in_to_string) {
+        error_config_t::set_enable_source_location(true);
+
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        error_context_t ctx(code, "location in string");
+
+        std::string str = ctx.to_string();
+
+#ifdef ERROR_SYSTEM_ENABLE_LOCATION
+        EXPECT_NE(str.find("Location:"), std::string::npos);
+        EXPECT_NE(str.find(ctx.function_name), std::string::npos);
+#endif
+    }
+
+    TEST_F(error_context_test, source_location_in_to_json) {
+        error_config_t::set_enable_source_location(true);
+
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        error_context_t ctx(code, "location in json");
+
+        std::string json = ctx.to_json();
+
+#ifdef ERROR_SYSTEM_ENABLE_LOCATION
+        EXPECT_NE(json.find("\"location\""), std::string::npos);
+        EXPECT_NE(json.find("\"file\""), std::string::npos);
+        EXPECT_NE(json.find("\"function\""), std::string::npos);
+        EXPECT_NE(json.find("\"line\""), std::string::npos);
+#endif
+    }
+
+    TEST_F(error_context_test, source_location_in_to_binary) {
+        error_config_t::set_enable_source_location(true);
+
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        error_context_t ctx(code, "location in binary");
+
+        std::string bin = ctx.to_binary();
+
+#ifdef ERROR_SYSTEM_ENABLE_LOCATION
+        size_t offset = sizeof(uint64_t);  // raw_code
+        uint32_t msg_len = 0;
+        std::memcpy(&msg_len, bin.data() + offset, sizeof(msg_len));
+        offset += sizeof(uint32_t) + msg_len;  // msg_len + message
+
+        EXPECT_GE(bin.size(), offset + sizeof(uint8_t));
+        uint8_t has_location = static_cast<uint8_t>(bin[offset]);
+        EXPECT_EQ(has_location, 1u);
+#endif
+    }
+
+    TEST_F(error_context_test, source_location_zero_code_no_location) {
+        error_config_t::set_enable_source_location(true);
+
+        error_context_t ctx(error_code_t{0}, "zero code");
+
+#ifdef ERROR_SYSTEM_ENABLE_LOCATION
+        EXPECT_EQ(ctx.file_name, nullptr);
+        EXPECT_EQ(ctx.function_name, nullptr);
+        EXPECT_EQ(ctx.line_number, 0u);
+#endif
+    }
+
+    TEST_F(error_context_test, source_location_function_name_contains_test) {
+        error_config_t::set_enable_source_location(true);
+
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        error_context_t ctx(code, "function name test");
+
+#ifdef ERROR_SYSTEM_ENABLE_LOCATION
+        if (ctx.function_name != nullptr) {
+            std::string func(ctx.function_name);
+            EXPECT_TRUE(func.find("source_location_function_name_contains_test") != std::string::npos ||
+                        func.find("TestBody") != std::string::npos || func.find("lambda") != std::string::npos)
+                << "function_name should contain test function name, got: " << func;
+        }
+#endif
     }
 
 }  // namespace error_system::core

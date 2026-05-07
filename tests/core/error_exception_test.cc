@@ -201,4 +201,56 @@ namespace error_system::core {
         EXPECT_TRUE(noexcept(ex.code()));
     }
 
+    // ─── 源位置追踪 ───
+
+    TEST_F(error_exception_test, exception_preserves_source_location) {
+        error_config_t::set_enable_source_location(true);
+
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        error_context_t ctx(code, "location test");
+
+        error_exception_t ex(std::move(ctx));
+        const error_context_t& ref = ex.context();
+
+#ifdef ERROR_SYSTEM_ENABLE_LOCATION
+        EXPECT_NE(ref.file_name, nullptr);
+        EXPECT_NE(ref.function_name, nullptr);
+        EXPECT_NE(ref.line_number, 0u);
+#endif
+    }
+
+    TEST_F(error_exception_test, what_contains_source_location) {
+        error_config_t::set_enable_source_location(true);
+
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        error_context_t ctx(code, "location in what");
+
+        error_exception_t ex(std::move(ctx));
+        std::string what_str = ex.what();
+
+#ifdef ERROR_SYSTEM_ENABLE_LOCATION
+        EXPECT_NE(what_str.find("Location:"), std::string::npos);
+#endif
+    }
+
+    TEST_F(error_exception_test, exception_with_cause_chain_preserves_location) {
+        error_config_t::set_enable_source_location(true);
+
+        auto code1 = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 0, 0, 1);
+        auto code2 = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::kernel, 0, 0, 2);
+
+        error_context_t root(code1, "root cause");
+        error_context_t outer(code2, "outer error");
+        outer = outer.wrap(root);
+
+        error_exception_t ex(std::move(outer));
+        const error_context_t& ref = ex.context();
+
+#ifdef ERROR_SYSTEM_ENABLE_LOCATION
+        EXPECT_NE(ref.file_name, nullptr);
+        ASSERT_NE(ref.cause, nullptr);
+        EXPECT_NE(ref.cause->file_name, nullptr);
+#endif
+    }
+
 }  // namespace error_system::core
