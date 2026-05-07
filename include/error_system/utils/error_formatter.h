@@ -2,6 +2,15 @@
 #include "error_system/core/error_context.h"
 #include <ostream>
 
+/**
+ * @file error_formatter.h
+ * @brief 错误格式化
+ * @details 定义错误格式化相关的函数
+ * @author yiice
+ * @version 1.0.0
+ * @date 2026-05-06
+ * @copyright Copyright (c) 2026
+ */
 namespace error_system::utils {
 
     /**

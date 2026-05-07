@@ -27,6 +27,7 @@ endif()
 
 option(ERROR_SYSTEM_ENABLE_STACKTRACE "是否编译堆栈追踪功能 (关闭可减小体积，免链接 OS 底层库)" ON)
 option(ERROR_SYSTEM_ENABLE_VALIDATION "是否编译严格的错误码验证器" ON)
+option(ERROR_SYSTEM_ENABLE_LOCATION "是否编译源位置宏" ON)
 
 file(GLOB_RECURSE SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cc ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
 
@@ -50,6 +51,10 @@ endif()
 
 if (ERROR_SYSTEM_ENABLE_VALIDATION)
     target_compile_definitions(${PROJECT_NAME} PUBLIC ERROR_SYSTEM_ENABLE_VALIDATION)
+endif()
+
+if (ERROR_SYSTEM_ENABLE_LOCATION)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC ERROR_SYSTEM_ENABLE_LOCATION)
 endif()
 
 option(ERROR_SYSTEM_BUILD_TESTS "Build tests for error_system" ON)

@@ -34,7 +34,7 @@ namespace demo {
     void demo_stack_trace() {
         std::cout << "\n========== 2. 堆栈跟踪 ==========\n";
 
-        core::error_config::set_stacktrace_level(core::error_level_t::warn);
+        core::error_config_t::set_stacktrace_level(core::error_level_t::warn);
 
         auto code = core::error_builder_t::make_error_code(
             core::error_level_t::error, domain::system_domain_t::kernel, 0, 0, 500);
@@ -42,7 +42,7 @@ namespace demo {
         core::error_context_t ctx(code, "内核 panic");
         std::cout << "包含堆栈的错误:\n" << ctx.to_string() << "\n";
 
-        core::error_config::set_stacktrace_level(core::error_level_t::fatal);
+        core::error_config_t::set_stacktrace_level(core::error_level_t::fatal);
     }
 
     // ========================================================================
@@ -190,20 +190,20 @@ namespace demo {
     /**
      * @brief 演示错误配置功能
      */
-    void demo_error_config() {
+    void demo_error_config_t() {
         std::cout << "\n========== 6. 错误配置 ==========\n";
 
-        std::cout << "当前堆栈等级: " << core::to_string(core::error_config::get_stacktrace_level()) << "\n";
-        std::cout << "当前默认语言: " << core::error_config::get_default_language() << "\n";
+        std::cout << "当前堆栈等级: " << core::to_string(core::error_config_t::get_stacktrace_level()) << "\n";
+        std::cout << "当前默认语言: " << core::error_config_t::get_default_language() << "\n";
 
-        core::error_config::set_stacktrace_level(core::error_level_t::warn);
-        core::error_config::set_default_language("en_us");
+        core::error_config_t::set_stacktrace_level(core::error_level_t::warn);
+        core::error_config_t::set_default_language("en_us");
 
-        std::cout << "修改后堆栈等级: " << core::to_string(core::error_config::get_stacktrace_level()) << "\n";
-        std::cout << "修改后默认语言: " << core::error_config::get_default_language() << "\n";
+        std::cout << "修改后堆栈等级: " << core::to_string(core::error_config_t::get_stacktrace_level()) << "\n";
+        std::cout << "修改后默认语言: " << core::error_config_t::get_default_language() << "\n";
 
-        core::error_config::set_stacktrace_level(core::error_level_t::error);
-        core::error_config::set_default_language("zh_cn");
+        core::error_config_t::set_stacktrace_level(core::error_level_t::error);
+        core::error_config_t::set_default_language("zh_cn");
     }
 
 }  // namespace demo
@@ -221,7 +221,7 @@ int main() {
     demo::demo_i18n();
     demo::demo_plugin();
     demo::demo_result_chain();
-    demo::demo_error_config();
+    demo::demo_error_config_t();
 
     std::cout << "\n演示结束\n";
     return 0;

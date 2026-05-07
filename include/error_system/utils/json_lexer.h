@@ -2,6 +2,15 @@
 #include <string>
 #include <string_view>
 
+/**
+ * @file json_lexer.h
+ * @brief JSON词法分析器
+ * @details 定义JSON词法分析器相关的操作，如解析JSON字符串为JSON字典
+ * @author yiice
+ * @version 1.0.0
+ * @date 2026-04-28
+ * @copyright Copyright (c) 2026
+ */
 namespace error_system::utils::detail {
 
     /**

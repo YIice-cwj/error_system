@@ -6,7 +6,7 @@ namespace error_system::core {
      * @brief 通知所有已注册插件
      * @details 实现在 plugin_registry_t::notify_error()
      */
-    void __notify_plugins(const error_context_t& context) noexcept {
+    void notify_plugins(const error_context_t& context) noexcept {
         plugin::plugin_registry_t::instance().notify_error(context);
     }
 
@@ -94,7 +94,14 @@ namespace error_system::core {
             translator = i18n::translator_registry_t::instance().get();
         }
 
-        std::string result = utils::string_utils_t::format("{} - {}", translator->translate(code), message);
+        std::string result{};
+        result.reserve(256);
+#ifdef ERROR_SYSTEM_ENABLE_LOCATION
+        if (error_config_t::is_source_location_enabled() && file_name != nullptr) {
+            result += utils::string_utils_t::format(" [Location: {}:{} @ {}]", file_name, line_number, function_name);
+        }
+#endif
+        result += utils::string_utils_t::format("{} - {}", translator->translate(code), message);
 
         if (!payload.empty()) {
             result += " {";
@@ -109,12 +116,14 @@ namespace error_system::core {
             result += "}";
         }
 
+#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
         if (!stack_frames.empty()) {
             result += "\n  [Stacktrace]:";
             for (size_t i = 0; i < stack_frames.size(); ++i) {
                 result += "\n    #" + std::to_string(i) + "  " + stack_frames[i];
             }
         }
+#endif
 
         if (cause) {
             result += "\n  ↳ Caused by: " + cause->to_string(translator);
@@ -127,40 +136,54 @@ namespace error_system::core {
      * @return std::string 错误上下文的 JSON 字符串表示
      */
     std::string error_context_t::to_json() const noexcept {
-        std::string json;
+        std::string json{};
         json.reserve(256);
-
         json += "{";
 
+        bool first_field = true;
+#ifdef ERROR_SYSTEM_ENABLE_LOCATION
+        if (error_config_t::is_source_location_enabled() && file_name != nullptr && function_name != nullptr) {
+            json += "\"location\":{";
+            json += "\"file\":\"" + utils::string_utils_t::escape_json(file_name) + "\",";
+            json += "\"function\":\"" + utils::string_utils_t::escape_json(function_name ? function_name : "unknown") +
+                    "\",";
+            json += "\"line\":" + std::to_string(line_number);
+            json += "}";
+            first_field = false;
+        }
+#endif
+        if (!first_field)
+            json += ",";
         json += "\"code\":" + std::to_string(code.get_code()) + ",";
 
         json += "\"message\":\"" + utils::string_utils_t::escape_json(message) + "\"";
 
         if (!payload.empty()) {
             json += ",\"payload\":{";
-            bool first = true;
+            bool first_p = true;
             for (const auto& [key, value] : payload) {
-                if (!first)
+                if (!first_p)
                     json += ",";
                 json += "\"" + utils::string_utils_t::escape_json(key) + "\":\"" +
                         utils::string_utils_t::escape_json(value) + "\"";
-                first = false;
+                first_p = false;
             }
             json += "}";
         }
 
+#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
         if (!stack_frames.empty()) {
             json += ",\"stack_frames\":[";
-            bool first = true;
+            bool first_s = true;
             for (const auto& frame : stack_frames) {
-                if (!first)
+                if (!first_s)
                     json += ",";
                 json += "\"" + utils::string_utils_t::escape_json(frame) + "\"";
-                first = false;
+                first_s = false;
             }
             json += "]";
         }
-
+#endif
         if (cause) {
             json += ",\"cause\":" + cause->to_json();
         }
@@ -189,12 +212,30 @@ namespace error_system::core {
         write_data(&raw_code, sizeof(raw_code));
         write_string(message);
 
+#ifdef ERROR_SYSTEM_ENABLE_LOCATION
+        uint8_t has_location = 0;
+        if (error_config_t::is_source_location_enabled() && file_name != nullptr && function_name != nullptr) {
+            has_location = 1;
+        }
+        write_data(&has_location, sizeof(has_location));
+
+        if (has_location) {
+            write_string(file_name);
+            write_string(function_name ? function_name : "unknown");
+            write_data(&line_number, sizeof(line_number));
+        }
+#else
+        uint8_t has_location = 0;
+        write_data(&has_location, sizeof(has_location));
+#endif
+
         uint32_t payload_size = static_cast<uint32_t>(payload.size());
         write_data(&payload_size, sizeof(payload_size));
         for (const auto& [key, value] : payload) {
             write_string(key);
             write_string(value);
         }
+
         return buf;
     }
 
