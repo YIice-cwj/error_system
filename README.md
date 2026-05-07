@@ -28,6 +28,7 @@
 *   **丰富的错误上下文**: 统一的 64 位错误码结构，包含了等级（Level）、系统域（Domain）、子系统（Subsystem）、模块（Module）和错误编号（Number），轻松实现问题的快速定位。
 *   **结构化负载 (Payload)**: `error_context_t` 支持键值对形式的结构化负载，方便附加任意调试信息。
 *   **自动堆栈跟踪**: 可配置的错误等级阈值，当错误等级达到阈值时自动捕获当前调用栈，加速问题定位。
+*   **源位置追踪**: 自动记录错误发生的文件名、函数名和行号，支持完整路径或短文件名模式。
 *   **多语言支持 (i18n)**: 内置 `json_translator`，支持动态加载 JSON 字典，将冷冰冰的错误码转换为对用户友好的多语言文本。
 *   **插件系统 (Plugin)**: 提供可扩展的插件接口，支持日志、统计、告警等自定义错误处理能力的接入。
 *   **模块化预定义**: 已经内置了 18 大系统域（Kernel、Network、Database、Middleware、AI、Cloud 等），每个域下包含丰富的子系统和模块枚举，开箱即用。
@@ -426,7 +427,7 @@ error_system/
 │   │   └── languages/          # JSON 翻译字典 (zh_cn.json, en_us.json)
 │   ├── plugin/                 # 插件系统接口
 │   ├── memory/                 # 内存管理 (对象池)
-│   └── utils/                  # 辅助工具 (string, json, file, stack_trace, error_formatter)
+│   └── utils/                  # 辅助工具 (string, json, file, stack_trace, source_location, error_formatter)
 ├── src/                        # 核心实现代码
 │   ├── core/                   # error_context 实现
 │   ├── i18n/                   # json_translator, translator_registry 实现

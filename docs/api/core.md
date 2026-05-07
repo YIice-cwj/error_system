@@ -135,13 +135,13 @@ constexpr auto db_conn_err = error_builder_t::make_error_code(
 
 ---
 
-## error_config
+## error_config_t
 
 **头文件**：`error_system/core/error_config.h`
 
 全局错误配置类，提供进程级的错误行为配置。所有方法均为 `static`，不可实例化。
 
-> **注意**：堆栈追踪和错误码验证功能可通过 CMake 选项 `ERROR_SYSTEM_ENABLE_STACKTRACE` / `ERROR_SYSTEM_ENABLE_VALIDATION` 在编译期开启或关闭。关闭后相关 API 将标记为 `[[deprecated]]` 并返回默认值。
+> **注意**：堆栈追踪、错误码验证和源位置追踪功能可通过 CMake 选项 `ERROR_SYSTEM_ENABLE_STACKTRACE` / `ERROR_SYSTEM_ENABLE_VALIDATION` / `ERROR_SYSTEM_ENABLE_LOCATION` 在编译期开启或关闭。关闭后相关 API 将标记为 `[[deprecated]]` 并返回默认值。
 
 ### 配置项
 
@@ -151,12 +151,14 @@ constexpr auto db_conn_err = error_builder_t::make_error_code(
 | `min_stacktrace_level_` | `error_level_t` | `error` | 自动捕获堆栈的最低错误等级（仅在开启堆栈追踪时有效） |
 | `enable_stacktrace_` | `bool` | `true` | 是否开启堆栈追踪（仅在开启编译选项时有效） |
 | `enable_validation_` | `bool` | `true` | 是否开启错误码验证（仅在开启编译选项时有效） |
+| `enable_source_location_` | `bool` | `true` | 是否开启源位置追踪（仅在开启编译选项时有效） |
+| `enable_short_filename_` | `bool` | `true` | 是否使用短文件名（仅在开启源位置追踪时有效） |
 
 ### 方法
 
 ```cpp
 // 设置/获取默认语言（支持 std::string 和 language_t 两种重载）
-static void set_default_language(const std::string& language);
+static void set_default_language(std::string_view language);
 static void set_default_language(const i18n::language_t language);
 static std::string get_default_language();
 
@@ -169,19 +171,25 @@ static bool is_stacktrace_enabled() noexcept;
 // 错误码验证配置（若编译期关闭则标记 deprecated）
 static void set_enable_validation(bool enable) noexcept;
 static bool is_validation_enabled() noexcept;
+
+// 源位置追踪配置（若编译期关闭则标记 deprecated）
+static void set_enable_source_location(bool enable) noexcept;
+static bool is_source_location_enabled() noexcept;
+static void set_enable_short_filename(bool enable) noexcept;
+static bool is_short_filename_enabled() noexcept;
 ```
 
 ### 示例
 
 ```cpp
 // 设置 WARN 及以上自动捕获堆栈
-error_config::set_stacktrace_level(error_level_t::warn);
+error_config_t::set_stacktrace_level(error_level_t::warn);
 
 // 设置默认语言为英文
-error_config::set_default_language("en_us");
+error_config_t::set_default_language("en_us");
 
 // 检查功能是否开启
-if (error_config::is_stacktrace_enabled()) {
+if (error_config_t::is_stacktrace_enabled()) {
     // ...
 }
 
@@ -204,8 +212,11 @@ error_context_t ctx(code, "连接超时");  // 可能自动包含 stack_frames
 | `code` | `error_code_t` | 错误码 |
 | `message` | `std::string` | 错误描述文本（已格式化） |
 | `payload` | `std::unordered_map<std::string, std::string>` | 结构化键值对负载 |
-| `stack_frames` | `std::vector<std::string>` | 调用栈帧列表（可选，由 error_config 控制） |
 | `cause` | `shared_ptr<error_context_t>` | 上级原因（可选） |
+| `stack_frames` | `std::vector<std::string>` | 调用栈帧列表（仅在开启 `ERROR_SYSTEM_ENABLE_STACKTRACE` 时存在） |
+| `file_name` | `const char*` | 源文件名（仅在开启 `ERROR_SYSTEM_ENABLE_LOCATION` 时存在） |
+| `function_name` | `const char*` | 函数名（仅在开启 `ERROR_SYSTEM_ENABLE_LOCATION` 时存在） |
+| `line_number` | `uint32_t` | 行号（仅在开启 `ERROR_SYSTEM_ENABLE_LOCATION` 时存在） |
 
 ### 构造函数
 
@@ -213,10 +224,11 @@ error_context_t ctx(code, "连接超时");  // 可能自动包含 stack_frames
 // 默认构造（code = 0，表示无错误）
 constexpr error_context_t() noexcept = default;
 
-// 带格式化参数的构造
-// 若 code.get_level() >= error_config::get_stacktrace_level()，自动抓取调用栈
+// 带格式化参数和自动源位置捕获的构造
+// 若 code.get_level() >= error_config_t::get_stacktrace_level()，自动抓取调用栈
+// 若源位置追踪开启，自动记录 file_name, function_name, line_number
 template<typename... Args>
-error_context_t(error_code_t code, std::string format = "", Args&&... args) noexcept;
+error_context_t(code_with_location_t code_with, std::string format = "", Args&&... args) noexcept;
 ```
 
 ### 方法
@@ -256,13 +268,28 @@ std::string to_binary() const noexcept;
 
 ### 堆栈跟踪
 
-当构造时的错误等级满足 `code.get_level() >= error_config::get_stacktrace_level()` 且堆栈追踪功能已开启时，构造函数内部自动调用 `utils::stack_trace_utils_t::generate(1)` 抓取当前调用栈，存储到 `stack_frames` 中。
+当构造时的错误等级满足 `code.get_level() >= error_config_t::get_stacktrace_level()` 且堆栈追踪功能已开启时，构造函数内部自动调用 `utils::stack_trace_utils_t::generate(1)` 抓取当前调用栈，存储到 `stack_frames` 中。
+
+### 源位置追踪
+
+当 `ERROR_SYSTEM_ENABLE_LOCATION` 编译选项开启且 `error_config_t::is_source_location_enabled()` 为 `true` 时，构造函数通过 `code_with_location_t` 自动捕获源文件位置：
+
+```cpp
+// code_with_location_t 自动调用 source_location_t::current()
+error_context_t ctx(code, "错误信息");  // 隐式构造 code_with_location_t
+```
+
+- `file_name`: 源文件路径（可通过 `set_enable_short_filename()` 切换为短文件名）
+- `function_name`: 函数签名
+- `line_number`: 行号
+
+源位置信息会自动嵌入到 `to_string()`、`to_json()` 和 `to_binary()` 的输出中。
 
 ### 示例
 
 ```cpp
 // 设置堆栈捕获阈值
-error_config::set_stacktrace_level(error_level_t::warn);
+error_config_t::set_stacktrace_level(error_level_t::warn);
 
 // 创建错误上下文（自动抓取堆栈，因为 error >= warn）
 error_context_t ctx{db_err, "数据库连接超时: {}", "timeout"};

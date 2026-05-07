@@ -226,6 +226,68 @@ error_context_t ctx(code, "数据库错误");  // ctx.stack_frames 自动填充
 
 ---
 
+## source_location_t
+
+**头文件**：`error_system/utils/source_location.h`
+
+轻量级源文件位置信息封装，用于 `error_context_t` 的源位置追踪功能。基于编译器内置宏（`__builtin_FILE()` / `__builtin_FUNCTION()` / `__builtin_LINE()`）实现，支持 GCC、Clang 和 MSVC 1926+。
+
+> **注意**：源位置追踪功能可通过 CMake 选项 `ERROR_SYSTEM_ENABLE_LOCATION` 在编译期开启或关闭。
+
+### 方法
+
+```cpp
+// 获取当前源位置（编译期）
+static constexpr source_location_t current(
+    const char* file = __builtin_FILE(),
+    const char* func = __builtin_FUNCTION(),
+    uint32_t line = __builtin_LINE()
+) noexcept;
+
+// 访问字段
+constexpr const char* file_name() const noexcept;
+constexpr const char* function_name() const noexcept;
+constexpr uint32_t line() const noexcept;
+```
+
+### 辅助函数
+
+```cpp
+// 从完整路径中提取短文件名（constexpr）
+constexpr const char* extract_short_filename(const char* path) noexcept;
+```
+
+### 示例
+
+```cpp
+#include "error_system/utils/source_location.h"
+
+auto loc = utils::source_location_t::current();
+std::cout << "File: " << loc.file_name() << "\n";
+std::cout << "Function: " << loc.function_name() << "\n";
+std::cout << "Line: " << loc.line() << "\n";
+```
+
+### 在 error_context_t 中的使用
+
+当 `ERROR_SYSTEM_ENABLE_LOCATION` 开启时，`error_context_t` 的构造函数自动通过 `code_with_location_t` 捕获源位置：
+
+```cpp
+error_context_t ctx(code, "错误信息");  // 自动记录 file_name, function_name, line_number
+```
+
+捕获行为由 `error_config_t::is_source_location_enabled()` 控制：
+
+```cpp
+// 关闭源位置追踪（运行时）
+error_config_t::set_enable_source_location(false);
+
+// 使用短文件名模式
+error_config_t::set_enable_short_filename(true);
+```
+
+---
+
 ## operator<< (error_context_t)
 
 **头文件**：`error_system/utils/error_formatter.h`

@@ -163,8 +163,21 @@ if (ptr) {
 
 底层使用 `string_utils_t::escape_json()` 处理 JSON 中的特殊字符转义。
 
-### 8. 自动堆栈跟踪
-`error_context_t` 构造函数根据 `error_config::get_stacktrace_level()` 阈值和编译选项自动决定是否抓取调用栈：
+### 8. 源位置追踪
+
+通过 `ERROR_SYSTEM_ENABLE_LOCATION` CMake 选项开启后，`error_context_t` 构造函数会自动捕获错误发生的源文件位置：
+
+```cpp
+error_context_t ctx(code, "连接超时");  // 自动记录 file_name, function_name, line_number
+```
+
+- 使用 `utils::source_location_t::current()` 获取编译器内置的源位置信息
+- 支持完整路径和短文件名两种模式（通过 `error_config_t::set_enable_short_filename()` 切换）
+- 源位置信息会嵌入到 `to_string()`、`to_json()` 和 `to_binary()` 的输出中
+- 若编译期关闭此功能，相关 API 将标记为 `[[deprecated]]` 并返回默认值
+
+### 9. 自动堆栈跟踪
+`error_context_t` 构造函数根据 `error_config_t::get_stacktrace_level()` 阈值和编译选项自动决定是否抓取调用栈：
 
 ```cpp
 // 设置 WARN 及以上自动捕获堆栈
@@ -178,13 +191,13 @@ error_context_t ctx(code, "错误信息");  // 若 code.level >= warn，ctx.stac
 
 > **注意**：堆栈追踪功能可通过 CMake 选项 `ERROR_SYSTEM_ENABLE_STACKTRACE` 在编译期开启或关闭。关闭后相关 API 将标记为 `[[deprecated]]` 并返回默认值。
 
-### 9. 错误码验证
+### 10. 错误码验证
 
 若 `error_config::is_validation_enabled()` 为 `true` 且错误码未在 `error_registry_t` 中注册，则 `error_context_t` 构造函数自动将错误码替换为 `fatal` 级别的未注册错误码，并在 `payload` 中附加 `illegal_raw_code` 字段。
 
 > **注意**：验证功能可通过 CMake 选项 `ERROR_SYSTEM_ENABLE_VALIDATION` 在编译期开启或关闭。
 
-### 10. 全局错误配置
+### 11. 全局错误配置
 
 `error_config_t` 提供进程级的错误行为配置：
 - **堆栈捕获阈值**：控制自动堆栈跟踪的触发等级
