@@ -246,6 +246,38 @@ log_plugin_t logger;
 plugin_registry_t::instance().register_plugin(&logger);
 ```
 
+### 9. 使用错误路由插件 (error_router_plugin_t)
+
+错误路由插件提供按错误码、模块组 ID 或系统域路由错误事件的能力：
+
+```cpp
+#include "error_system/plugin/error_router_plugin.h"
+
+using namespace error_system::plugin;
+
+// 按错误码注册特定处理函数
+error_router_plugin_t::instance().register_handler_by_code(
+    some_error_code,
+    [](const core::error_context_t& ctx) {
+        std::cerr << "特定错误: " << ctx.message << "\n";
+    }
+);
+
+// 按系统域注册处理函数
+error_router_plugin_t::instance().register_handler_by_domain(
+    domain::system_domain_t::database,
+    [](const core::error_context_t& ctx) {
+        std::cerr << "数据库错误: " << ctx.to_string() << "\n";
+    }
+);
+
+// 将路由插件注册到全局插件注册表
+plugin_registry_t::instance().register_plugin(&error_router_plugin_t::instance());
+
+// 之后创建的错误上下文会自动路由到对应的处理函数
+error_context_t ctx{db_error_code, "连接超时"};  // 触发数据库域处理函数
+```
+
 ---
 
 ## 架构概览 (Architecture)
@@ -282,7 +314,8 @@ plugin_registry_t::instance().register_plugin(&logger);
 ├─────────────────────────────────────────────────────────────┤
 │  Plugin Layer                                                │
 │  ├── i_error_plugin_t   (插件抽象接口)                       │
-│  └── plugin_registry_t  (插件单例注册表，负责广播)           │
+│  ├── plugin_registry_t  (插件单例注册表，负责广播)           │
+│  └── error_router_plugin_t (错误路由插件，按码/域分发)       │
 ├─────────────────────────────────────────────────────────────┤
 │  Memory Layer                                                │
 │  └── object_pool_t<T>   (线程局部对象池，优化高频分配)       │

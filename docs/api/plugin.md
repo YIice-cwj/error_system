@@ -180,6 +180,74 @@ reg.clear();
 
 ---
 
+## error_router_plugin_t
+
+**头文件**：`error_system/plugin/error_router_plugin.h`
+
+错误路由插件，提供按错误码、模块组 ID 或系统域路由错误事件的能力。继承自 `i_error_plugin_t`，使用单例模式管理。
+
+### 处理优先级
+
+当错误事件发生时，按以下优先级匹配处理函数：
+1. **特定错误码处理函数** - 精确匹配错误码
+2. **模块组处理函数** - 匹配错误码所属的模块组
+3. **系统域处理函数** - 匹配错误码所属的系统域
+
+### 方法
+
+```cpp
+// 获取单例
+static error_router_plugin_t& instance() noexcept;
+
+// 按错误码注册处理函数
+void register_handler_by_code(core::code_t code, error_handler_t handler) noexcept;
+
+// 按模块组 ID 注册处理函数
+void register_handler_by_module_group_id(core::module_group_id_t module_group_id,
+                                         error_handler_t handler) noexcept;
+
+// 按系统域注册处理函数
+void register_handler_by_domain(domain::system_domain_t domain, error_handler_t handler) noexcept;
+
+// 注销处理函数
+void unregister_handler_by_code(core::code_t code) noexcept;
+void unregister_handler_by_module_group_id(core::module_group_id_t module_group_id) noexcept;
+void unregister_handler_by_domain(domain::system_domain_t domain) noexcept;
+```
+
+### 使用示例
+
+```cpp
+#include "error_system/plugin/error_router_plugin.h"
+#include <iostream>
+
+using namespace error_system::plugin;
+
+// 注册特定错误码的处理函数
+error_router_plugin_t::instance().register_handler_by_code(
+    some_error_code,
+    [](const core::error_context_t& ctx) {
+        std::cerr << "特定错误: " << ctx.message << "\n";
+    }
+);
+
+// 按系统域注册处理函数
+error_router_plugin_t::instance().register_handler_by_domain(
+    domain::system_domain_t::database,
+    [](const core::error_context_t& ctx) {
+        std::cerr << "数据库错误: " << ctx.to_string() << "\n";
+    }
+);
+
+// 将路由插件注册到全局插件注册表
+plugin_registry_t::instance().register_plugin(&error_router_plugin_t::instance());
+
+// 之后创建的错误上下文会自动路由到对应的处理函数
+error_context_t ctx{db_error_code, "连接超时"};  // 触发数据库域处理函数
+```
+
+---
+
 ## 设计说明：循环依赖的打破
 
 `plugin_registry.h` 依赖 `i_error_plugin.h`，后者依赖 `error_context.h`。若 `error_context.h` 直接 include `plugin_registry.h` 则产生循环。
