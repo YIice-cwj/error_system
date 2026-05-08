@@ -31,6 +31,7 @@
 #include "error_system/module/module.h"
 
 // ─── Plugin ─────────────────────────────────────────────────────────────────────
+#include "error_system/plugin/error_router_plugin.h"
 #include "error_system/plugin/plugin_registry.h"
 
 // ─── Traits ───────────────────────────────────────────────────────────────────

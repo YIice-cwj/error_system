@@ -60,6 +60,24 @@ namespace error_system::utils {
 
 #elif defined(_WIN32)
 
+        struct dbghelp_manager_t {
+            HANDLE process;
+            std::mutex mutex;
+
+            dbghelp_manager_t() {
+                process = GetCurrentProcess();
+                SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
+                SymInitialize(process, NULL, TRUE);
+            }
+
+            ~dbghelp_manager_t() { SymCleanup(process); }
+
+            static dbghelp_manager_t& instance() {
+                static dbghelp_manager_t instance;
+                return instance;
+            }
+        };
+
         /**
          * @brief 格式化不可解析的地址
          * @param address 地址
@@ -90,10 +108,10 @@ namespace error_system::utils {
          */
         std::vector<std::string> resolve_os_symbols(void** callstack, int frames, int skip_frames) noexcept {
             std::vector<std::string> trace;
-            HANDLE process = GetCurrentProcess();
 
-            SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
-            SymInitialize(process, NULL, TRUE);
+            auto& dbghelp = dbghelp_manager_t::instance();
+
+            std::lock_guard<std::mutex> lock(dbghelp.mutex);
 
             char buffer[sizeof(SYMBOL_INFO) + MAX_SYM_NAME * sizeof(TCHAR)];
             PSYMBOL_INFO symbol = (PSYMBOL_INFO)buffer;
@@ -104,17 +122,17 @@ namespace error_system::utils {
                 DWORD64 address = (DWORD64)(callstack[i]);
                 DWORD64 displacement = 0;
 
-                if (SymFromAddr(process, address, &displacement, symbol)) {
+                if (SymFromAddr(dbghelp.process, address, &displacement, symbol)) {
                     std::string symbol_str = symbol->Name;
 
 #if defined(__MINGW32__) || defined(__MINGW64__)
                     std::string mangled_name = symbol_str;
-                    
+
                     if (mangled_name.rfind("Z", 0) == 0) {
                         mangled_name = "_" + mangled_name;
                     }
 
-                    if (mangled_name.rfind("_Z", 0) == 0) { 
+                    if (mangled_name.rfind("_Z", 0) == 0) {
                         int status = -1;
                         char* demangled = abi::__cxa_demangle(mangled_name.c_str(), nullptr, nullptr, &status);
                         if (status == 0 && demangled) {
@@ -128,14 +146,13 @@ namespace error_system::utils {
                     trace.push_back(format_fallback_address(callstack[i]));
                 }
             }
-            
-            SymCleanup(process);
+
             return trace;
         }
 #endif
     }  // namespace
 
-#endif // ERROR_SYSTEM_ENABLE_STACKTRACE
+#endif  // ERROR_SYSTEM_ENABLE_STACKTRACE
 
     /**
      * @brief 抓取当前线程的函数调用栈
@@ -145,8 +162,8 @@ namespace error_system::utils {
      */
     std::vector<std::string> stack_trace_utils_t::generate(int skip_frames, int max_frames) noexcept {
 #ifndef ERROR_SYSTEM_ENABLE_STACKTRACE
-        (void)skip_frames; 
-        (void)max_frames;  
+        (void)skip_frames;
+        (void)max_frames;
         return {};
 
 #else
