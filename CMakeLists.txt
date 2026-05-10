@@ -114,3 +114,12 @@ install(EXPORT ${PROJECT_NAME}Targets
     NAMESPACE ${PROJECT_NAME}::
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
 )
+
+if(NOT TARGET uninstall)
+    add_custom_target(uninstall
+        COMMAND ${CMAKE_COMMAND} -E echo "开始卸载..."
+        COMMAND xargs rm -vf < install_manifest.txt || echo "卸载完成或部分文件已不存在"
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMENT "Uninstalling the project..."
+    )
+endif()
