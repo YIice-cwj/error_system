@@ -14,6 +14,7 @@
 #include <windows.h>
 #include <dbghelp.h>
 #include <mutex>
+#include <sstream>
 #endif
 #if defined(__MINGW32__) || defined(__MINGW64__)
 #include <cxxabi.h>
@@ -21,7 +22,7 @@
 
 /**
  * @file stack_trace_utils.h
- * @brief 堆栈跟踪工具
+ * @brief 堆栈跟踪工具 error_exception_test.cc
  * @details 提供当前线程的函数调用栈抓取功能
  * @author yiice
  * @version 1.0.0

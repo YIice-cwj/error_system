@@ -459,16 +459,64 @@ error_registry_t::instance().register_error(
 error_registry_t::instance().register_errors(
     {code1, code2}, {"NAME1", "NAME2"}, {"DESC1", "DESC2"});
 
-// 查询
-auto name = error_registry_t::instance().get_name(db_conn_err);
-// → "DB_CONNECTION_TIMEOUT"
-
+// 查询错误码信息
 auto info = error_registry_t::instance().get_info(db_conn_err);
 if (info) {
-    std::cout << info->description << "\n";
+    std::cout << "Name: " << info->name << "\n";
+    std::cout << "Description: " << info->description << "\n";
+}
+
+// 检查错误码是否已注册
+if (error_registry_t::instance().is_registered(db_conn_err)) {
+    // 错误码已注册
 }
 
 // 按模块查询
 auto errors = error_registry_t::instance().get_errors_by_module(
     domain::system_domain_t::database, database_subsystem_t::mysql, database_module_t::connection);
+
+// 注销错误码
+error_registry_t::instance().unregister_error(db_conn_err);
+
+// 注销整个模块的所有错误码
+error_registry_t::instance().unregister_module(module_group_id);
+
+// 注销所有错误码
+error_registry_t::instance().unregister_all();
 ```
+
+### 宏注册（推荐）
+
+使用 `DEFINE_ERROR_CODE` 宏可以在定义错误码的同时自动注册到错误码注册表：
+
+```cpp
+// 在头文件或源文件中定义错误码
+DEFINE_ERROR_CODE(
+    ERR_DB_CONNECTION_TIMEOUT,                    // 错误码名称
+    error_system::core::error_level_t::error,     // 错误等级
+    error_system::domain::system_domain_t::database, // 系统域
+    1,                                            // 子系统 ID
+    1,                                            // 模块 ID
+    0x0001,                                       // 错误编号
+    "数据库连接超时");                              // 描述
+
+// 宏会自动在静态初始化阶段注册错误码
+// 无需手动调用 register_error()
+```
+
+**宏参数说明**：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `NAME` | 标识符 | 错误码宏名称，将创建同名 `constexpr` 常量 |
+| `LEVEL` | `error_level_t` | 错误等级（`debug`/`info`/`warn`/`error`/`fatal`） |
+| `SYSTEM` | `system_domain_t` | 系统域枚举值 |
+| `SUBSYS` | `uint16_t` | 子系统 ID（1-65535） |
+| `MODULE` | `uint16_t` | 模块 ID（1-65535） |
+| `NUMBER` | `uint16_t` | 错误编号（1-65535） |
+| `DESC` | 字符串 | 错误描述，将自动注册到注册表 |
+
+**使用建议**：
+- 在项目的错误码定义头文件中使用此宏集中定义所有错误码
+- 宏创建的常量可以在编译期使用（`constexpr`）
+- 宏自动处理注册，避免手动注册遗漏

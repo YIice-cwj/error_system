@@ -12,5 +12,10 @@ foreach(test_source IN LISTS TEST_SOURCES)
         GTest::gtest_main
     )
 
+    if (MSVC)
+        target_compile_options(${test_name} PRIVATE /Zi)
+        target_link_options(${test_name} PRIVATE /DEBUG)
+    endif()
+
     gtest_discover_tests(${test_name}) 
 endforeach()

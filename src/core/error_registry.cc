@@ -168,5 +168,4 @@ namespace error_system::core {
         }
         return {};
     }
-
 }  // namespace error_system::core

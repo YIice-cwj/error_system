@@ -1,9 +1,11 @@
 #pragma once
 #include "error_system/plugin/i_error_plugin.h"
-#include <vector>
-#include <string_view>
 #include <shared_mutex>
+#include <string_view>
+#include <vector>
+// IWYU pragma: begin_exports
 #include <mutex>
+// IWYU pragma: end_exports
 
 /**
  * @file plugin_registry.h
@@ -32,11 +34,11 @@ namespace error_system::plugin {
         ~plugin_registry_t() = default;
 
         plugin_registry_t(const plugin_registry_t&) = delete;
-        
+
         plugin_registry_t& operator=(const plugin_registry_t&) = delete;
 
         plugin_registry_t(plugin_registry_t&&) = delete;
-        
+
         plugin_registry_t& operator=(plugin_registry_t&&) = delete;
 
         public:

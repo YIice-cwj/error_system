@@ -121,12 +121,10 @@ namespace error_system::core {
 
         /**
          * @brief 获取模块的聚合隔离 ID
-         * @details 直接通过位掩码，高8位(Level)和低16位(Number)置零，只保留中间的系统与模块信息
+         * @details 直接通过位掩码，高8位(Sign+Reserved+Level)和低16位(Number)置零，只保留系统与模块信息
          * @return uint64_t 模块的聚合隔离 ID
          */
-        constexpr module_group_id_t get_module_group_id() const noexcept {
-            return union_.code & 0x00FFFFFFFFFF0000ULL;
-        }
+        constexpr module_group_id_t get_module_group_id() const noexcept { return union_.code & 0x0000FFFFFFFF0000ULL; }
 
         /**
          * @brief 隐式转换为原始码

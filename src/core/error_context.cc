@@ -32,7 +32,10 @@ namespace error_system::core {
             *context_pointer = underlying;
             new_code_context.cause = std::shared_ptr<error_context_t>(
                 context_pointer,
-                [&object_pool](error_context_t* context_pointer) -> void { object_pool.release(context_pointer); });
+                [](error_context_t* context_pointer) -> void {
+                    *context_pointer = error_context_t{};
+                    object_pool_t::instance_thread_local().release(context_pointer);
+                });
         } else {
             new_code_context.cause = std::make_shared<error_context_t>(underlying);
         }
@@ -53,7 +56,10 @@ namespace error_system::core {
             *context_pointer = std::move(underlying);
             new_code_context.cause = std::shared_ptr<error_context_t>(
                 context_pointer,
-                [&object_pool](error_context_t* context_pointer) -> void { object_pool.release(context_pointer); });
+                [](error_context_t* context_pointer) -> void {
+                    *context_pointer = error_context_t{};
+                    object_pool_t::instance_thread_local().release(context_pointer);
+                });
         } else {
             new_code_context.cause = std::make_shared<error_context_t>(std::move(underlying));
         }

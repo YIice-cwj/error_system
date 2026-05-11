@@ -147,7 +147,9 @@ namespace error_system::core {
         std::vector<error_metadata_t> get_errors_by_module(const SystemEnum system,
                                                            const SubSystemEnum subsystem,
                                                            const ModuleEnum module) const noexcept {
-            return get_errors_by_module(error_builder_t::make_error_code(error_level_t::info, system, subsystem, module, 0).get_module_group_id());
+            return get_errors_by_module(
+                error_builder_t::make_error_code(error_level_t::info, system, subsystem, module, 0)
+                    .get_module_group_id());
         }
 
         public:
@@ -161,4 +163,42 @@ namespace error_system::core {
         }
     };
 
+    /**
+     * @brief 错误码自动注册辅助类
+     * @details 配合 DEFINE_ERROR_CODE 宏使用，利用静态初始化在 main 函数前注册错误码
+     */
+    struct error_registrar_t {
+        error_registrar_t(const error_code_t code, const char* name, const char* desc) noexcept {
+            error_registry_t::instance().register_error(code, name, desc);
+        }
+    };
+
 }  // namespace error_system::core
+
+/**
+ * @brief 定义并自动注册错误码的宏
+ * @param NAME 错误码名称（宏名）
+ * @param LEVEL 错误等级 (error_level_t)
+ * @param SYSTEM 系统域 (system_domain_t)
+ * @param SUBSYS 子系统 ID
+ * @param MODULE 模块 ID
+ * @param NUMBER 错误编号
+ * @param DESC 错误描述字符串
+ * @details 该宏会：
+ *          1. 创建一个 constexpr error_code_t 常量
+ *          2. 在静态初始化阶段自动将错误码注册到 error_registry_t
+ * @note 必须在全局命名空间使用
+ * @example
+ * DEFINE_ERROR_CODE(
+ *     ERR_DB_CONNECTION_TIMEOUT,
+ *     error_system::core::error_level_t::error,
+ *     error_system::domain::system_domain_t::database,
+ *     1, 1, 0x0001,
+ *     "数据库连接超时")
+ */
+#define DEFINE_ERROR_CODE(NAME, LEVEL, SYSTEM, SUBSYS, MODULE, NUMBER, DESC)                                           \
+    constexpr ::error_system::core::error_code_t NAME =                                                                \
+        ::error_system::core::error_builder_t::make_error_code(LEVEL, SYSTEM, SUBSYS, MODULE, NUMBER);                 \
+    namespace {                                                                                                        \
+        const ::error_system::core::error_registrar_t NAME##_registrar_(NAME, #NAME, DESC);                            \
+    }
