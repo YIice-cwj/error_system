@@ -9,7 +9,13 @@ namespace error_system::utils {
 
     /**
      * @brief 辅助函数：用于验证栈帧中包含当前函数名
+     * @note 禁止内联：Release 模式下内联会让该函数从栈帧中消失，导致 Windows 上测试失败
      */
+#if defined(_MSC_VER)
+    __declspec(noinline)
+#elif defined(__GNUC__) || defined(__clang__)
+    __attribute__((noinline))
+#endif
     static void helper_for_stacktrace(std::vector<std::string>& out) {
         out = stack_trace_utils_t::generate(0);
     }

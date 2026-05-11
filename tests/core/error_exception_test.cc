@@ -5,7 +5,7 @@
 #include "error_system/core/error_exception.h"
 #include "error_system/core/error_level.h"
 #include "error_system/domain/system_domain.h"
-
+#include <cstring>
 #include <gtest/gtest.h>
 
 namespace error_system::core {
