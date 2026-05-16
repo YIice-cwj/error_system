@@ -1,0 +1,39 @@
+{
+    "namespace": "biz::payment_errors",
+    "service_name": "支付服务",
+    "domain": "third_party",
+    "subsystem_id": 103,
+    "modules": {
+        "gateway": { 
+            "id": 1, 
+            "desc": "支付网关" 
+        },
+        "wallet": { 
+            "id": 2, 
+            "desc": "内部钱包" 
+        }
+    },
+    "errors": [
+        {
+            "name": "ERR_WX_PAY_TIMEOUT",
+            "module": "gateway",
+            "level": "error",
+            "number": 1,
+            "desc": "调用微信支付接口超时"
+        },
+        {
+            "name": "ERR_INSUFFICIENT_BALANCE",
+            "module": "wallet",
+            "level": "warn",
+            "number": 1,
+            "desc": "钱包余额不足，无法扣款"
+        },
+        {
+            "name": "ERR_ACCOUNT_FROZEN",
+            "module": "wallet",
+            "level": "fatal",
+            "number": 2,
+            "desc": "支付账户存在风险，已被冻结"
+        }
+    ]
+}

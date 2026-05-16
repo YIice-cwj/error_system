@@ -1,11 +1,17 @@
 {
     "namespace": "biz::trade_errors",
-    "service_name": "trade",
+    "service_name": "交易服务",
     "domain": "application",
     "subsystem_id": 101,
     "modules": {
-        "order": { "id": 1, "desc": "订单模块" },
-        "payment": { "id": 2, "desc": "支付模块" }
+        "order": { 
+            "id": 1, 
+            "desc": "订单模块" 
+        },
+        "cart": { 
+            "id": 2, 
+            "desc": "购物车模块" 
+        }
     },
     "errors": [
         {
@@ -16,11 +22,11 @@
             "desc": "订单不存在或已删除"
         },
         {
-            "name": "ERR_PAYMENT_TIMEOUT",
-            "module": "payment",
+            "name": "ERR_CART_IS_EMPTY",
+            "module": "cart",
             "level": "warn",
             "number": 1,
-            "desc": "支付网关连接超时"
+            "desc": "购物车为空，无法进行结算"
         }
     ]
 }

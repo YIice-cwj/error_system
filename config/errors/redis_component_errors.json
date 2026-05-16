@@ -1,0 +1,32 @@
+{
+    "namespace": "infra::redis_errors",
+    "service_name": "Redis组件",
+    "domain": "middleware",
+    "subsystem_id": 10,
+    "modules": {
+        "connection": { 
+            "id": 1, 
+            "desc": "连接池模块" 
+        },
+        "command": { 
+            "id": 2, 
+            "desc": "指令执行模块" 
+        }
+    },
+    "errors": [
+        {
+            "name": "ERR_POOL_EXHAUSTED",
+            "module": "connection",
+            "level": "fatal",
+            "number": 1,
+            "desc": "Redis 连接池已耗尽，无法获取新连接"
+        },
+        {
+            "name": "ERR_KEY_NOT_FOUND",
+            "module": "command",
+            "level": "info",
+            "number": 1,
+            "desc": "查询的 Redis Key 不存在"
+        }
+    ]
+}
