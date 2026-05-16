@@ -24,25 +24,9 @@
 // ─── Domain ───────────────────────────────────────────────────────────────────
 #include "error_system/domain/system_domain.h"
 
-// ─── Subsystem (聚合) ─────────────────────────────────────────────────────────
-#include "error_system/subsystem/subsystem.h"
-
-// ─── Module (聚合) ────────────────────────────────────────────────────────────
-#include "error_system/module/module.h"
-
 // ─── Plugin ─────────────────────────────────────────────────────────────────────
 #include "error_system/plugin/error_router_plugin.h"
 #include "error_system/plugin/plugin_registry.h"
-
-// ─── Traits ───────────────────────────────────────────────────────────────────
-#include "error_system/traits/module_dispatcher.h"
-#include "error_system/traits/subsystem_dispatcher.h"
-
-// ─── I18n ─────────────────────────────────────────────────────────────────────
-#include "error_system/i18n/i_translator.h"
-#include "error_system/i18n/json_translator.h"
-#include "error_system/i18n/language.h"
-#include "error_system/i18n/translator_registry.h"
 
 // ─── Utils ─────────────────────────────────────────────────────────────────────
 #include "error_system/utils/error_formatter.h"

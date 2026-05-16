@@ -25,11 +25,11 @@ namespace error_system::core {
      * @brief 错误码元数据信息 (数据负载)
      */
     struct error_metadata_t {
-        std::string name;         // 宏名称 (例: "ERR_TCP_TIMEOUT")
-        std::string description;  // 中文描述 (例: "TCP 连接超时")
-        uint16_t module_id;       // 所属模块 ID
-        uint16_t error_number;    // 局部错误编号
-        error_level_t level;      // 错误等级
+        std::string name;
+        std::string description;
+        uint16_t module_id;
+        uint16_t error_number;
+        error_level_t level;
     };
 
     /**
@@ -132,25 +132,6 @@ namespace error_system::core {
          * @return std::vector<error_metadata_t> 模块下所有错误码的元数据
          */
         std::vector<error_metadata_t> get_errors_by_module(const module_group_id_t module_group_id) const noexcept;
-
-        /**
-         * @brief 通过系统、子系统、模块获取所有错误码
-         * @tparam SystemEnum 系统枚举类型
-         * @tparam SubSystemEnum 子系统枚举类型
-         * @tparam ModuleEnum 模块枚举类型
-         * @param system 系统枚举值
-         * @param subsystem 子系统枚举值
-         * @param module 模块枚举值
-         * @return std::vector<error_metadata_t> 模块下所有错误码的元数据
-         */
-        template <typename SystemEnum, typename SubSystemEnum, typename ModuleEnum>
-        std::vector<error_metadata_t> get_errors_by_module(const SystemEnum system,
-                                                           const SubSystemEnum subsystem,
-                                                           const ModuleEnum module) const noexcept {
-            return get_errors_by_module(
-                error_builder_t::make_error_code(error_level_t::info, system, subsystem, module, 0)
-                    .get_module_group_id());
-        }
 
         public:
         /**

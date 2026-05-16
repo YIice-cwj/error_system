@@ -1,9 +1,9 @@
 #pragma once
+#include "error_system/config/error_config.h"
 #include "error_system/core/error_builder.h"
 #include "error_system/core/error_code.h"
-#include "error_system/core/error_config.h"
+#include "error_system/core/error_level.h"
 #include "error_system/core/error_registry.h"
-#include "error_system/i18n/translator_registry.h"
 #include "error_system/memory/object_pool.h"
 #include "error_system/utils/source_location.h"
 #include "error_system/utils/stack_trace_utils.h"
@@ -28,7 +28,6 @@ namespace error_system::plugin {
  */
 namespace error_system::core {
 
-    struct error_context_t;
     /**
      * @brief 通知所有已注册插件
      * @details 实现在 plugin_registry_t::notify_error()
@@ -76,7 +75,7 @@ namespace error_system::core {
         error_context_t(code_with_location_t code_with, std::string format = "", Args&&... args) noexcept
             : code(code_with.code), message(utils::string_utils_t::format(format, std::forward<Args>(args)...)) {
             if (code.get_code() != 0) {
-                if (error_config_t::is_validation_enabled()) {
+                if (config::error_config_t::is_validation_enabled()) {
                     if (!error_registry_t::instance().is_registered(code)) {
                         payload["illegal_raw_code"] = std::to_string(code.get_code());
                         message = "[UNREGISTERED CODE] " + message;
@@ -86,15 +85,15 @@ namespace error_system::core {
                 }
 
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
-                if (error_config_t::is_stacktrace_enabled() &&
-                    code.get_level() >= error_config_t::get_stacktrace_level()) {
+                if (config::error_config_t::is_stacktrace_enabled() &&
+                    code.get_level() >= config::error_config_t::get_stacktrace_level()) {
                     stack_frames = utils::stack_trace_utils_t::generate(1);
                 }
 #endif
 
 #ifdef ERROR_SYSTEM_ENABLE_LOCATION
-                if (error_config_t::is_source_location_enabled()) {
-                    if (error_config_t::is_short_filename_enabled()) {
+                if (config::error_config_t::is_source_location_enabled()) {
+                    if (config::error_config_t::is_short_filename_enabled()) {
                         file_name = utils::extract_short_filename(code_with.source_location.file_name());
                     } else {
                         file_name = code_with.source_location.file_name();
@@ -153,7 +152,7 @@ namespace error_system::core {
          * @param translator 可选的翻译器接口指针，默认为 nullptr
          * @return std::string 错误上下文的字符串表示
          */
-        std::string to_string(const i18n::i_translator_t* translator = nullptr) const noexcept;
+        std::string to_string() const noexcept;
 
         /**
          * @brief 转换为 JSON 字符串

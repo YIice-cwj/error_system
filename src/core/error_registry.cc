@@ -11,7 +11,7 @@ namespace error_system::core {
     void error_registry_t::register_error(const error_code_t code,
                                           const std::string_view name,
                                           const std::string_view description) noexcept {
-        std::unique_lock<std::shared_mutex> lcok(index_mutex_);
+        std::unique_lock<std::shared_mutex> lock(index_mutex_);
 
         code_t raw_code = code.get_code();
         if (primary_index_.find(raw_code) != primary_index_.end()) {
@@ -44,9 +44,12 @@ namespace error_system::core {
                 continue;
             }
 
-            error_metadata_t meta{
-                std::string(names[i]), std::string(descriptions[i]), codes[i].get_module(), codes[i].get_number(), codes[i].get_level()};
-                
+            error_metadata_t meta{std::string(names[i]),
+                                  std::string(descriptions[i]),
+                                  codes[i].get_module(),
+                                  codes[i].get_number(),
+                                  codes[i].get_level()};
+
             primary_index_.emplace(raw_code, meta);
             module_index_[codes[i].get_module_group_id()].push_back(raw_code);
         }
@@ -58,7 +61,7 @@ namespace error_system::core {
      */
     void error_registry_t::unregister_error(const error_code_t code) noexcept {
         std::unique_lock<std::shared_mutex> lock(index_mutex_);
-        
+
         code_t raw_code = code.get_code();
         auto it = primary_index_.find(raw_code);
         if (it == primary_index_.end()) {
@@ -95,7 +98,7 @@ namespace error_system::core {
                     }
                 }
                 primary_index_.erase(it);
-                return; 
+                return;
             }
         }
     }
@@ -115,7 +118,7 @@ namespace error_system::core {
         }
         module_index_.erase(mod_it);
     }
-   
+
     /**
      * @brief 注销所有错误码
      */

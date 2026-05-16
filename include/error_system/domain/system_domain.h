@@ -20,26 +20,13 @@ namespace error_system::domain {
      * @details 定义错误码系统中的系统域分类，用于标识错误码所属的系统域
      */
     enum class system_domain_t : uint8_t {
-        none = 0,          // 无层
-        system = 1,        // 系统层
-        kernel = 2,        // 内核层
-        middleware = 3,    // 中间件层
-        application = 4,   // 应用层
-        service = 5,       // 服务层
-        network = 6,       // 网络层
-        storage = 7,       // 存储层
-        database = 8,      // 数据库层
-        security = 9,      // 安全层
-        ai = 10,            // 人工智能层
-        cloud = 11,        // 云计算层
-        edge = 12,         // 边缘计算层
-        iot = 13,          // 物联网层
-        blockchain = 14,   // 区块链层
-        bigdata = 15,      // 大数据层
-        devops = 16,       // 运维开发层
-        distributed = 17,  // 分布式层
-        monitoring = 18,   // 监控告警层
-        _count             // 占位符：表示系统域的总数
+        none = 0,         // 无分类 / 未知
+        system = 1,       // 系统与底层基础设施层 (OS, 内核, 网络底层等)
+        middleware = 2,   // 中间件层 (Redis, Kafka, 注册中心等)
+        database = 3,     // 数据库层 (MySQL, PostgreSQL等)
+        application = 4,  // 内部业务应用/微服务层 (90% 的业务错误码填这个)
+        third_party = 5,  // 外部/第三方依赖层 (专门用于记录调用外部 API 失败)
+        _count            // 占位符：表示系统域的总数
     };
 
     /**
@@ -47,25 +34,8 @@ namespace error_system::domain {
      * @details 用于表示系统域的字符串
      *          与系统域分类一一对应，用于日志打印和错误处理
      */
-    constexpr const char* SYSTEM_DOMAIN_STRING[] = {"none",
-                                                    "system",
-                                                    "kernel",
-                                                    "middleware",
-                                                    "application",
-                                                    "service",
-                                                    "network",
-                                                    "storage",
-                                                    "database",
-                                                    "security",
-                                                    "ai",
-                                                    "cloud",
-                                                    "edge",
-                                                    "iot",
-                                                    "blockchain",
-                                                    "bigdata",
-                                                    "devops",
-                                                    "distributed",
-                                                    "monitoring"};
+    constexpr const char* SYSTEM_DOMAIN_STRING[] = {
+        "none", "system", "middleware", "database", "application", "third_party"};
 
     /**
      * @brief 系统域整数
@@ -75,6 +45,16 @@ namespace error_system::domain {
      */
     constexpr uint8_t to_int(system_domain_t domain) noexcept {
         return static_cast<uint8_t>(std::underlying_type_t<system_domain_t>(domain));
+    }
+
+    /**
+     * @brief 系统域字符串
+     * @details 用于将系统域转换为系统域字符串
+     * @param domain 系统域
+     * @return const char* 系统域字符串
+     */
+    constexpr const char* to_string(system_domain_t domain) noexcept {
+        return SYSTEM_DOMAIN_STRING[to_int(domain)];
     }
 
     /**
@@ -95,7 +75,7 @@ namespace error_system::domain {
      */
     constexpr system_domain_t from_int(uint8_t domain) noexcept {
         if (!is_valid(domain)) {
-            return system_domain_t::devops;
+            return system_domain_t::none;
         }
         return static_cast<system_domain_t>(domain);
     }
@@ -108,55 +88,20 @@ namespace error_system::domain {
      */
     constexpr system_domain_t from_string(const char* string) noexcept {
         switch (utils::string_utils_t::hash(string)) {
+            case utils::string_utils_t::hash("none"):
+                return system_domain_t::none;
             case utils::string_utils_t::hash("system"):
                 return system_domain_t::system;
-            case utils::string_utils_t::hash("kernel"):
-                return system_domain_t::kernel;
             case utils::string_utils_t::hash("middleware"):
                 return system_domain_t::middleware;
-            case utils::string_utils_t::hash("application"):
-                return system_domain_t::application;
-            case utils::string_utils_t::hash("service"):
-                return system_domain_t::service;
-            case utils::string_utils_t::hash("network"):
-                return system_domain_t::network;
-            case utils::string_utils_t::hash("storage"):
-                return system_domain_t::storage;
             case utils::string_utils_t::hash("database"):
                 return system_domain_t::database;
-            case utils::string_utils_t::hash("security"):
-                return system_domain_t::security;
-            case utils::string_utils_t::hash("ai"):
-                return system_domain_t::ai;
-            case utils::string_utils_t::hash("cloud"):
-                return system_domain_t::cloud;
-            case utils::string_utils_t::hash("edge"):
-                return system_domain_t::edge;
-            case utils::string_utils_t::hash("iot"):
-                return system_domain_t::iot;
-            case utils::string_utils_t::hash("blockchain"):
-                return system_domain_t::blockchain;
-            case utils::string_utils_t::hash("bigdata"):
-                return system_domain_t::bigdata;
-            case utils::string_utils_t::hash("devops"):
-                return system_domain_t::devops;
-            case utils::string_utils_t::hash("distributed"):
-                return system_domain_t::distributed;
-            case utils::string_utils_t::hash("monitoring"):
-                return system_domain_t::monitoring;
+            case utils::string_utils_t::hash("application"):
+                return system_domain_t::application;
+            case utils::string_utils_t::hash("third_party"):
+                return system_domain_t::third_party;
             default:
                 return system_domain_t::none;
         }
     }
-
-    /**
-     * @brief 系统域字符串
-     * @details 用于将系统域转换为系统域字符串
-     * @param domain 系统域
-     * @return const char* 系统域字符串
-     */
-    constexpr const char* to_string(system_domain_t domain) noexcept {
-        return SYSTEM_DOMAIN_STRING[to_int(domain)];
-    }
-
 }  // namespace error_system::domain

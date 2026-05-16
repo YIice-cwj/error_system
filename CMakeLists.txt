@@ -29,10 +29,34 @@ option(ERROR_SYSTEM_ENABLE_STACKTRACE "是否编译堆栈追踪功能 (关闭可
 option(ERROR_SYSTEM_ENABLE_VALIDATION "是否编译严格的错误码验证器" ON)
 option(ERROR_SYSTEM_ENABLE_LOCATION "是否编译源位置宏" ON)
 
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
+set(ERROR_JSON_DIR "${CMAKE_SOURCE_DIR}/config/errors")
+set(ERROR_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated_errors/include")
+set(PYTHON_SCRIPT "${CMAKE_SOURCE_DIR}/script/script_py/generate_error_codes.py")
+file(GLOB ERROR_JSON_FILES "${ERROR_JSON_DIR}/*.json")
+set(ALL_GENERATED_HEADERS "")
+foreach(JSON_FILE ${ERROR_JSON_FILES})
+    get_filename_component(BASENAME ${JSON_FILE} NAME_WE)
+    set(GENERATED_HEADER "${ERROR_GENERATED_DIR}/${BASENAME}.h")
+    
+    add_custom_command(
+        OUTPUT ${GENERATED_HEADER}
+        COMMAND Python3::Interpreter ${PYTHON_SCRIPT} ${JSON_FILE} ${ERROR_GENERATED_DIR}
+        DEPENDS ${JSON_FILE} ${PYTHON_SCRIPT}
+        COMMENT "🔨 [Code Generation] 正在从 ${BASENAME}.json 生成 C++ 错误码头文件..."
+    )
+    list(APPEND ALL_GENERATED_HEADERS ${GENERATED_HEADER})
+endforeach()
+add_custom_target(GenerateErrorCodes DEPENDS ${ALL_GENERATED_HEADERS})
+include_directories(${ERROR_GENERATED_DIR})
+
 file(GLOB_RECURSE SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cc ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
 
 add_library(${PROJECT_NAME} ${SOURCE_FILES})
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
+
+add_dependencies(${PROJECT_NAME} GenerateErrorCodes)
 
 include(GNUInstallDirs)
 

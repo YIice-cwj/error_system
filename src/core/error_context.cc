@@ -1,5 +1,6 @@
 #include "error_system/core/error_context.h"
 #include "error_system/plugin/plugin_registry.h"
+using namespace error_system::config;
 
 namespace error_system::core {
     /**
@@ -30,9 +31,8 @@ namespace error_system::core {
         error_context_t* context_pointer = object_pool.acquire();
         if (context_pointer) {
             *context_pointer = underlying;
-            new_code_context.cause = std::shared_ptr<error_context_t>(
-                context_pointer,
-                [](error_context_t* context_pointer) -> void {
+            new_code_context.cause =
+                std::shared_ptr<error_context_t>(context_pointer, [](error_context_t* context_pointer) -> void {
                     *context_pointer = error_context_t{};
                     object_pool_t::instance_thread_local().release(context_pointer);
                 });
@@ -54,9 +54,8 @@ namespace error_system::core {
         error_context_t* context_pointer = object_pool.acquire();
         if (context_pointer) {
             *context_pointer = std::move(underlying);
-            new_code_context.cause = std::shared_ptr<error_context_t>(
-                context_pointer,
-                [](error_context_t* context_pointer) -> void {
+            new_code_context.cause =
+                std::shared_ptr<error_context_t>(context_pointer, [](error_context_t* context_pointer) -> void {
                     *context_pointer = error_context_t{};
                     object_pool_t::instance_thread_local().release(context_pointer);
                 });
@@ -92,12 +91,11 @@ namespace error_system::core {
      * @brief 转换为字符串
      * @details 优先使用传入的翻译器；未传入时自动尝试全局注册的翻译器；
      *          均无则降级输出可读英文名
-     * @param translator 可选的翻译器接口指针，默认为 nullptr
      * @return std::string 错误上下文的字符串表示
      */
-    std::string error_context_t::to_string(const i18n::i_translator_t* translator) const noexcept {
-        if (!translator) {
-            translator = i18n::translator_registry_t::instance().get();
+    std::string error_context_t::to_string() const noexcept {
+        if (auto formatter = error_config_t::get_custom_formatter()) {
+            return formatter(*this);
         }
 
         std::string result{};
@@ -107,7 +105,20 @@ namespace error_system::core {
             result += utils::string_utils_t::format(" [Location: {}:{} @ {}]", file_name, line_number, function_name);
         }
 #endif
-        result += utils::string_utils_t::format("{} - {}", translator->translate(code), message);
+        auto info = error_registry_t::instance().get_info(code);
+        std::string desc = info ? info->description : "未注册的未知错误";
+        std::string name = info ? info->name : "UNKNOWN_ERR_CODE";
+
+        result +=
+            utils::string_utils_t::format("[Level: {}, System: {}, SubSys: {}, Module: {}] Code: {} ({}) - {}: {}",
+                                          core::to_string(code.get_level()),
+                                          domain::to_string(code.get_system()),
+                                          code.get_subsys(),
+                                          code.get_module(),
+                                          code.get_number(),
+                                          name,
+                                          message,
+                                          desc);
 
         if (!payload.empty()) {
             result += " {";
@@ -132,7 +143,7 @@ namespace error_system::core {
 #endif
 
         if (cause) {
-            result += "\n  ↳ Caused by: " + cause->to_string(translator);
+            result += "\n  ↳ Caused by: " + cause->to_string();
         }
         return result;
     }
@@ -142,6 +153,10 @@ namespace error_system::core {
      * @return std::string 错误上下文的 JSON 字符串表示
      */
     std::string error_context_t::to_json() const noexcept {
+        if (auto formatter = error_config_t::get_custom_formatter()) {
+            return formatter(*this);
+        }
+
         std::string json{};
         json.reserve(256);
         json += "{";
