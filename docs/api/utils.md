@@ -99,6 +99,28 @@ std::string json = string_utils_t::escape_json("quote\"newline\n");
 // → "quote\\\"newline\\n"
 ```
 
+### 单元测试
+
+测试文件：`tests/utils/string_utils_test.cc`
+
+| 测试用例 | 描述 |
+|----------|------|
+| `hash_returns_expected_value` | hash 返回预期值 |
+| `hash_limit_truncates_long_strings` | hash_limit 截断长字符串 |
+| `format_replaces_placeholders` | format 替换占位符 |
+| `format_handles_no_args` | format 处理无参数 |
+| `starts_with_checks_prefix` | starts_with 检查前缀 |
+| `ends_with_checks_suffix` | ends_with 检查后缀 |
+| `parse_number_converts_integers` | parse_number 转换整数 |
+| `parse_number_handles_invalid` | parse_number 处理无效输入 |
+| `replace_all_substitutes_all_occurrences` | replace_all 替换所有出现 |
+| `split_divides_string` | split 分割字符串 |
+| `join_combines_strings` | join 合并字符串 |
+| `trim_removes_whitespace` | trim 去除空白 |
+| `to_lower_converts_case` | to_lower 转换大小写 |
+| `to_upper_converts_case` | to_upper 转换大小写 |
+| `escape_json_escapes_special_chars` | escape_json 转义特殊字符 |
+
 ---
 
 ## json_dict_t
@@ -135,6 +157,21 @@ auto dict = json_dict_t::from_file("zh_cn.json");
 std::string text = dict->get_value_or("domain.database", "database").value();
 ```
 
+### 单元测试
+
+测试文件：`tests/utils/json_utils_test.cc`
+
+| 测试用例 | 描述 |
+|----------|------|
+| `parse_valid_json` | 解析有效 JSON |
+| `parse_invalid_json_returns_nullopt` | 解析无效 JSON 返回 nullopt |
+| `get_value_finds_existing_key` | get_value 查找存在的键 |
+| `get_value_returns_nullopt_for_missing_key` | get_value 缺失键返回 nullopt |
+| `get_value_or_returns_default_for_missing_key` | get_value_or 缺失键返回默认值 |
+| `contains_checks_key_existence` | contains 检查键存在性 |
+| `empty_returns_true_for_empty_dict` | empty 对空字典返回 true |
+| `size_returns_correct_count` | size 返回正确计数 |
+
 ---
 
 ## file_utils
@@ -165,6 +202,19 @@ static bool file_exists(const std::filesystem::path& path) noexcept;
 // 检查文件路径是否存在
 static bool file_path_exists(const std::filesystem::path& path) noexcept;
 ```
+
+### 单元测试
+
+测试文件：`tests/utils/file_utils_test.cc`
+
+| 测试用例 | 描述 |
+|----------|------|
+| `create_file_creates_new_file` | create_file 创建新文件 |
+| `write_file_writes_content` | write_file 写入内容 |
+| `read_file_reads_content` | read_file 读取内容 |
+| `delete_file_removes_file` | delete_file 删除文件 |
+| `file_exists_checks_existence` | file_exists 检查存在性 |
+| `file_path_exists_checks_path` | file_path_exists 检查路径 |
 
 ---
 
@@ -223,6 +273,17 @@ auto code = error_builder_t::make_error_code(
     error_level_t::error, domain::system_domain_t::database, 0, 0, 500);
 error_context_t ctx(code, "数据库错误");  // ctx.stack_frames 自动填充
 ```
+
+### 单元测试
+
+测试文件：`tests/utils/stack_trace_utils_test.cc`
+
+| 测试用例 | 描述 |
+|----------|------|
+| `generate_returns_stack_frames` | generate 返回堆栈帧 |
+| `generate_with_skip_frames` | generate 跳过指定帧数 |
+| `generate_respects_max_frames` | generate 遵守最大帧数限制 |
+| `demangle_converts_mangled_names` | demangle 转换混淆名称 |
 
 ---
 
@@ -286,6 +347,17 @@ error_config_t::set_enable_source_location(false);
 error_config_t::set_enable_short_filename(true);
 ```
 
+### 单元测试
+
+测试文件：`tests/utils/source_location_test.cc`
+
+| 测试用例 | 描述 |
+|----------|------|
+| `current_captures_file_name` | current 捕获文件名 |
+| `current_captures_function_name` | current 捕获函数名 |
+| `current_captures_line_number` | current 捕获行号 |
+| `extract_short_filename_extracts_basename` | extract_short_filename 提取基本名 |
+
 ---
 
 ## operator<< (error_context_t)
@@ -305,4 +377,25 @@ inline std::ostream& operator<<(std::ostream& os, const error_system::core::erro
 
 error_context_t ctx(code, "操作失败");
 std::cout << ctx << "\n";  // 等价于 ctx.to_string()
+```
+
+---
+
+## 测试总结
+
+Utils 层共包含 **5 个测试文件**，**40+ 个测试用例**：
+
+| 模块 | 测试文件 | 测试数量 |
+|------|----------|----------|
+| string_utils | `tests/utils/string_utils_test.cc` | 15 |
+| json_utils | `tests/utils/json_utils_test.cc` | 8 |
+| file_utils | `tests/utils/file_utils_test.cc` | 6 |
+| stack_trace_utils | `tests/utils/stack_trace_utils_test.cc` | 4 |
+| source_location | `tests/utils/source_location_test.cc` | 4 |
+
+**运行测试**:
+
+```bash
+cd build
+ctest --output-on-failure
 ```

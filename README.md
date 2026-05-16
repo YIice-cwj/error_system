@@ -4,7 +4,7 @@
 [![CMake](https://img.shields.io/badge/CMake-3.15%2B-green.svg)](https://cmake.org)
 [![GoogleTest](https://img.shields.io/badge/Tests-GoogleTest-yellow.svg)](https://github.com/google/googletest)
 
-这是一个基于 C++17 标准开发的高性能、高可扩展的全局错误码管理系统。它通过位域（Bitfields）将丰富的错误上下文信息封装在一个 64 位的整数中，提供了零开销的错误码构建与解析能力，并内置了基于 JSON 的多语言（i18n）翻译支持。
+这是一个基于 C++17 标准开发的高性能、高可扩展的全局错误码管理系统。它通过位域（Bitfields）将丰富的错误上下文信息封装在一个 64 位的整数中，提供了零开销的错误码构建与解析能力。
 
 ---
 
@@ -29,12 +29,10 @@
 *   **结构化负载 (Payload)**: `error_context_t` 支持键值对形式的结构化负载，方便附加任意调试信息。
 *   **自动堆栈跟踪**: 可配置的错误等级阈值，当错误等级达到阈值时自动捕获当前调用栈，加速问题定位。
 *   **源位置追踪**: 自动记录错误发生的文件名、函数名和行号，支持完整路径或短文件名模式。
-*   **多语言支持 (i18n)**: 内置 `json_translator`，支持动态加载 JSON 字典，将冷冰冰的错误码转换为对用户友好的多语言文本。
 *   **插件系统 (Plugin)**: 提供可扩展的插件接口，支持日志、统计、告警等自定义错误处理能力的接入。
-*   **模块化预定义**: 已经内置了 18 大系统域（Kernel、Network、Database、Middleware、AI、Cloud 等），每个域下包含丰富的子系统和模块枚举，开箱即用。
-*   **Traits 类型萃取**: 为所有子系统和模块提供统一的 `traits` 接口，支持编译期枚举与字符串的双向转换。
+*   **代码生成工具**: 提供 Python 脚本从 JSON 配置自动生成错误码定义头文件。
 *   **对象池优化**: `error_context_t` 的因果链包装使用线程局部对象池，减少高频场景下的堆分配开销。
-*   **完备的测试**: 深度集成 GoogleTest，200+ 单元测试确保核心逻辑坚如磐石。
+*   **完备的测试**: 深度集成 GoogleTest，199 个单元测试覆盖所有核心模块，确保逻辑坚如磐石。
 *   **异常封装**: 提供 `error_exception_t` 继承 `std::exception`，在需要异常机制的场景中无缝传递错误上下文。
 
 ---
@@ -106,7 +104,7 @@ if (code.get_sign() == 1) { // 判断是否为错误
 using namespace error_system::core;
 
 // 设置堆栈捕获阈值（WARN 及以上自动捕获堆栈）
-error_config::set_stacktrace_level(error_level_t::warn);
+config::error_config_t::set_stacktrace_level(error_level_t::warn);
 
 // 创建错误上下文
 auto code = error_builder_t::make_error_code(
@@ -182,47 +180,73 @@ try {
 }
 ```
 
-### 6. 使用 Traits 进行枚举转换
+### 6. 使用 DEFINE_ERROR_CODE 宏定义错误码
 
-系统为所有子系统和模块提供了类型萃取，支持编译期枚举与字符串的双向转换：
+使用宏可以方便地定义错误码并自动注册到错误码注册表：
 
 ```cpp
-#include "error_system/traits/subsystem/database_subsystem_traits.h"
-#include "error_system/subsystem/database_subsystem.h"
+#include "error_system/core/error_registry.h"
 
-using namespace error_system::traits;
-using namespace error_system::subsystem;
+// 定义错误码（自动注册）
+DEFINE_ERROR_CODE(
+    ERR_DB_CONNECTION_TIMEOUT,
+    error_system::core::error_level_t::error,
+    error_system::domain::system_domain_t::database,
+    1, 1, 0x0001,
+    "数据库连接超时");
 
-// 枚举转字符串
-constexpr const char* name = subsystem_traits<database_subsystem_t>::to_string(database_subsystem_t::mysql);
-// 结果: "mysql"
-
-// 字符串转枚举
-constexpr auto subsys = subsystem_traits<database_subsystem_t>::from_string("redis");
-// 结果: database_subsystem_t::redis
-
-// 枚举转整数
-constexpr auto value = subsystem_traits<database_subsystem_t>::to_int(database_subsystem_t::mysql);
-// 结果: 0x0701
+// 使用
+if (registry.is_registered(ERR_DB_CONNECTION_TIMEOUT)) {
+    auto info = registry.get_info(ERR_DB_CONNECTION_TIMEOUT);
+    std::cout << info->description << "\n";
+}
 ```
 
-### 7. 多语言翻译 (i18n)
+### 7. 使用代码生成工具
 
-内置的 `json_translator_t` 支持将错误码映射为具体语言的字符串：
+系统提供了 Python 脚本从 JSON 配置自动生成错误码定义：
+
+**JSON 配置示例** (`config/errors/trade_service_errors.json`):
+
+```json
+{
+    "namespace": "biz::trade_errors",
+    "service_name": "trade",
+    "domain": "application",
+    "subsystem_id": 101,
+    "modules": {
+        "order": { "id": 1, "desc": "订单模块" },
+        "payment": { "id": 2, "desc": "支付模块" }
+    },
+    "errors": [
+        {
+            "name": "ERR_ORDER_NOT_FOUND",
+            "module": "order",
+            "level": "error",
+            "number": 1,
+            "desc": "订单不存在或已删除"
+        }
+    ]
+}
+```
+
+**生成命令**:
+
+```bash
+python script/script_py/generate_error_codes.py \
+    config/errors/trade_service_errors.json \
+    include/generated/
+```
+
+生成的头文件可以直接在业务代码中使用：
 
 ```cpp
-#include "error_system/i18n/json_translator.h"
-#include "error_system/i18n/translator_registry.h"
+#include "generated/trade_service_errors.h"
 
-using namespace error_system::i18n;
+using namespace biz::trade_errors;
 
-// 创建翻译器
-json_translator_t translator(language_t::zh_cn);
-std::string error_msg = translator.translate(db_err);
-
-// 或使用全局注册表
-translator_registry_t::instance().set(&translator);
-std::string msg = ctx.to_string(); // 自动使用全局翻译器
+// 使用自动生成的错误码
+error_context_t ctx(ERR_ORDER_NOT_FOUND);
 ```
 
 ### 8. 注册插件
@@ -286,31 +310,20 @@ error_context_t ctx{db_error_code, "连接超时"};  // 触发数据库域处理
 ┌─────────────────────────────────────────────────────────────┐
 │                        Error System                          │
 ├─────────────────────────────────────────────────────────────┤
+│  Config Layer                                                │
+│  └── error_config_t  (全局错误配置：堆栈阈值、源位置等)      │
+├─────────────────────────────────────────────────────────────┤
 │  Core Layer                                                  │
 │  ├── error_code_t    (64位错误码数据类)                      │
 │  ├── error_builder_t (编译期错误码构建器)                    │
 │  ├── error_level_t   (错误等级枚举)                          │
 │  ├── error_context_t (错误上下文：码+消息+因果链+负载+堆栈)  │
-│  ├── error_config_t  (全局错误配置：堆栈阈值、默认语言)      │
+│  ├── error_registry_t(错误码注册器)                          │
 │  ├── result_t<T>     (类Rust Result，替代异常传递错误)       │
-│  └── error_registry_t(错误码注册器)                          │
+│  └── error_exception_t (异常封装)                            │
 ├─────────────────────────────────────────────────────────────┤
 │  Domain Layer                                                │
 │  └── system_domain_t (18大系统域定义)                        │
-├─────────────────────────────────────────────────────────────┤
-│  Subsystem / Module Layer                                    │
-│  ├── 36+ 个子系统枚举 (kernel_cpu, database_sql, ai_llm...) │
-│  └── 17 个模块枚举   (kernel, network, database..., common) │
-├─────────────────────────────────────────────────────────────┤
-│  Traits Layer                                                │
-│  ├── subsystem_traits<> (枚举↔字符串↔整数 转换)             │
-│  └── module_traits<>    (枚举↔字符串↔整数 转换)             │
-├─────────────────────────────────────────────────────────────┤
-│  i18n Layer                                                  │
-│  ├── i_translator_t     (翻译器接口)                         │
-│  ├── json_translator_t  (JSON字典翻译实现)                   │
-│  ├── translator_registry_t(全局翻译器单例注册表)             │
-│  └── language_t         (支持语言枚举)                       │
 ├─────────────────────────────────────────────────────────────┤
 │  Plugin Layer                                                │
 │  ├── i_error_plugin_t   (插件抽象接口)                       │
@@ -325,6 +338,9 @@ error_context_t ctx{db_error_code, "连接超时"};  // 触发数据库域处理
 │  ├── json_utils_t       (JSON解析与字典)                     │
 │  ├── file_utils_t       (文件读写操作)                       │
 │  └── stack_trace_utils_t(跨平台堆栈跟踪)                     │
+├─────────────────────────────────────────────────────────────┤
+│  Generated Layer                                             │
+│  └── 从 JSON 配置自动生成的错误码定义                        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -431,6 +447,17 @@ cmake --build . -j$(nproc)
 ctest --output-on-failure
 ```
 
+### 测试覆盖
+
+| 模块 | 测试文件数 | 测试用例数 |
+|------|-----------|-----------|
+| Core 层 | 7 | 59+ |
+| Plugin 层 | 2 | 17 |
+| Memory 层 | 1 | 10 |
+| Utils 层 | 5 | 37+ |
+| Config 层 | 1 | 7 |
+| **总计** | **16** | **199** |
+
 ### 作为子项目使用
 
 ```cmake
@@ -448,36 +475,50 @@ target_link_libraries(my_business_app PRIVATE error_system::error_system)
 error_system/
 ├── CMakeLists.txt              # CMake 配置
 ├── README.md                   # 项目说明
+├── config/                     # 错误码配置文件
+│   └── errors/                 # JSON 格式的错误码定义
+│       └── trade_service_errors.json
 ├── include/error_system/       # 对外公开的头文件
-│   ├── core/                   # 核心定义 (error_code_t, error_builder_t, error_level_t, error_context_t, result_t, error_config_t, error_exception_t)
-│   ├── domain/                 # 系统域定义 (system_domain_t)
-│   ├── module/                 # 17 个模块枚举定义
-│   ├── subsystem/              # 36+ 个子系统枚举定义
-│   ├── traits/                 # 类型萃取
-│   │   ├── module/             # 模块 traits (枚举↔字符串↔整数)
-│   │   └── subsystem/          # 子系统 traits
-│   ├── i18n/                   # 多语言翻译接口与实现
-│   │   └── languages/          # JSON 翻译字典 (zh_cn.json, en_us.json)
+│   ├── config/                 # 配置层
+│   │   └── error_config.h      # 全局错误配置
+│   ├── core/                   # 核心定义
+│   │   ├── error_code_t        # 64位错误码数据类
+│   │   ├── error_builder_t     # 编译期错误码构建器
+│   │   ├── error_level_t       # 错误等级枚举
+│   │   ├── error_context_t     # 错误上下文
+│   │   ├── error_registry_t    # 错误码注册器
+│   │   ├── result_t            # 类Rust Result
+│   │   └── error_exception_t   # 异常封装
+│   ├── domain/                 # 系统域定义
+│   │   └── system_domain.h     # 18大系统域
 │   ├── plugin/                 # 插件系统接口
-│   ├── memory/                 # 内存管理 (对象池)
-│   └── utils/                  # 辅助工具 (string, json, file, stack_trace, source_location, error_formatter)
+│   │   ├── i_error_plugin.h
+│   │   ├── plugin_registry.h
+│   │   └── error_router_plugin.h
+│   ├── memory/                 # 内存管理
+│   │   └── object_pool.h       # 线程局部对象池
+│   └── utils/                  # 辅助工具
+│       ├── string_utils.h
+│       ├── json_utils.h
+│       ├── file_utils.h
+│       ├── stack_trace_utils.h
+│       └── error_formatter.h
+├── include/generated/          # 自动生成的错误码定义
+│   └── trade_service_errors.h
 ├── src/                        # 核心实现代码
-│   ├── core/                   # error_context 实现
-│   ├── i18n/                   # json_translator, translator_registry 实现
+│   ├── core/                   # error_context, error_registry 实现
 │   ├── plugin/                 # plugin_registry 实现
 │   └── utils/                  # 工具函数实现
 ├── tests/                      # GoogleTest 单元测试
 │   ├── core/                   # 核心层测试
-│   ├── i18n/                   # i18n 层测试
 │   ├── plugin/                 # 插件层测试
-│   ├── traits/                 # traits 测试
 │   └── utils/                  # 工具库测试
-├── examples/                   # 示例代码
-│   ├── demo_01.cc              # 基础功能演示
-│   └── demo_02.cc              # 高级功能演示
 ├── script/                     # 代码生成脚本
-│   ├── generate_i18n.sh        # 生成翻译字典
-│   └── generate_traits.sh      # 生成 traits 文件
+│   ├── generate_errors.sh      # 批量生成错误码脚本
+│   └── script_py/
+│       └── generate_error_codes.py  # Python 生成工具
+├── examples/                   # 示例代码
+│   └── demo01.cc               # 基础功能演示
 └── LICENSE                     # 许可证
 ```
 

@@ -79,6 +79,21 @@ bool empty() const noexcept;
 void clear() noexcept;
 ```
 
+### 单元测试
+
+测试文件：`tests/plugin/plugin_registry_test.cc`
+
+| 测试用例 | 描述 |
+|----------|------|
+| `register_and_retrieve_plugin` | 注册和查询插件 |
+| `register_duplicate_replaces_old` | 同名插件替换旧插件 |
+| `unregister_plugin_by_name` | 通过名称注销插件 |
+| `notify_error_calls_all_plugins` | 通知所有插件 |
+| `notify_error_handles_exceptions` | 通知时处理异常 |
+| `clear_removes_all_plugins` | 清空所有插件 |
+| `singleton_returns_same_instance` | 单例返回相同实例 |
+| `empty_returns_true_when_no_plugins` | 空时返回 true |
+
 ---
 
 ## 实现日志插件示例
@@ -246,6 +261,22 @@ plugin_registry_t::instance().register_plugin(&error_router_plugin_t::instance()
 error_context_t ctx{db_error_code, "连接超时"};  // 触发数据库域处理函数
 ```
 
+### 单元测试
+
+测试文件：`tests/plugin/error_router_plugin_test.cc`
+
+| 测试用例 | 描述 |
+|----------|------|
+| `register_handler_by_code` | 按错误码注册处理函数 |
+| `register_handler_by_module_group_id` | 按模块组 ID 注册处理函数 |
+| `register_handler_by_domain` | 按系统域注册处理函数 |
+| `handler_priority_code_over_module_group` | 处理优先级：错误码优先于模块组 |
+| `handler_priority_module_group_over_domain` | 处理优先级：模块组优先于系统域 |
+| `unregister_handler_by_code` | 注销错误码处理函数 |
+| `unregister_handler_by_module_group_id` | 注销模块组处理函数 |
+| `unregister_handler_by_domain` | 注销系统域处理函数 |
+| `singleton_returns_same_instance` | 单例返回相同实例 |
+
 ---
 
 ## 设计说明：循环依赖的打破
@@ -258,4 +289,22 @@ error_context_t ctx{db_error_code, "连接超时"};  // 触发数据库域处理
 error_context.h   ←  i_error_plugin.h  ←  error_context.h  ✗ 循环
      ↓ 声明 __notify_plugins()
 error_context.cc  →  plugin_registry.h  →  i_error_plugin.h  ✓ 无环
+```
+
+---
+
+## 测试总结
+
+Plugin 层共包含 **2 个测试文件**，**16 个测试用例**：
+
+| 模块 | 测试文件 | 测试数量 |
+|------|----------|----------|
+| plugin_registry | `tests/plugin/plugin_registry_test.cc` | 8 |
+| error_router_plugin | `tests/plugin/error_router_plugin_test.cc` | 9 |
+
+**运行测试**:
+
+```bash
+cd build
+ctest --output-on-failure
 ```
