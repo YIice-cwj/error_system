@@ -1,4 +1,5 @@
 #include "error_system/core/error_context.h"
+#include "error_dict.h"
 #include "error_system/plugin/plugin_registry.h"
 using namespace error_system::config;
 
@@ -113,8 +114,8 @@ namespace error_system::core {
             utils::string_utils_t::format("[Level: {}, System: {}, SubSys: {}, Module: {}] Code: {} ({}) - {}: {}",
                                           core::to_string(code.get_level()),
                                           domain::to_string(code.get_system()),
-                                          code.get_subsys(),
-                                          code.get_module(),
+                                          dict::get_subsys_name(code.get_subsys()),
+                                          dict::get_module_name(code.get_subsys(), code.get_module()),
                                           code.get_number(),
                                           name,
                                           message,

@@ -36,6 +36,7 @@ set(ERROR_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated_errors/include")
 set(PYTHON_SCRIPT "${CMAKE_SOURCE_DIR}/script/script_py/generate_error_codes.py")
 file(GLOB ERROR_JSON_FILES "${ERROR_JSON_DIR}/*.json")
 set(ALL_GENERATED_HEADERS "")
+
 foreach(JSON_FILE ${ERROR_JSON_FILES})
     get_filename_component(BASENAME ${JSON_FILE} NAME_WE)
     set(GENERATED_HEADER "${ERROR_GENERATED_DIR}/${BASENAME}.h")
@@ -48,7 +49,20 @@ foreach(JSON_FILE ${ERROR_JSON_FILES})
     )
     list(APPEND ALL_GENERATED_HEADERS ${GENERATED_HEADER})
 endforeach()
+
 add_custom_target(GenerateErrorCodes DEPENDS ${ALL_GENERATED_HEADERS})
+set(DICT_SCRIPT "${CMAKE_SOURCE_DIR}/script/script_py/generate_error_dict.py")
+set(DICT_HEADER "${ERROR_GENERATED_DIR}/error_dict.h")
+
+add_custom_command(
+    OUTPUT ${DICT_HEADER}
+    COMMAND Python3::Interpreter ${DICT_SCRIPT} ${ERROR_JSON_DIR} ${DICT_HEADER}
+    DEPENDS ${ERROR_JSON_FILES} ${DICT_SCRIPT}
+    COMMENT "🔨 [Code Generation] 正在生成 O(1) 极速错误字典 (error_dict.h)..."
+)
+
+add_custom_target(GenerateErrorDict DEPENDS ${DICT_HEADER})
+
 include_directories(${ERROR_GENERATED_DIR})
 
 file(GLOB_RECURSE SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cc ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
@@ -56,7 +70,7 @@ file(GLOB_RECURSE SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cc ${CMAKE_CURR
 add_library(${PROJECT_NAME} ${SOURCE_FILES})
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
-add_dependencies(${PROJECT_NAME} GenerateErrorCodes)
+add_dependencies(${PROJECT_NAME} GenerateErrorCodes GenerateErrorDict)
 
 include(GNUInstallDirs)
 

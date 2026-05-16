@@ -1,4 +1,7 @@
 #pragma once
+// IWYU pragma: begin_exports
+#include "error_dict.h"
+// IWYU pragma: end_exports
 #include "error_system/config/error_config.h"
 #include "error_system/core/error_builder.h"
 #include "error_system/core/error_code.h"
