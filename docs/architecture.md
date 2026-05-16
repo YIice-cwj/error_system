@@ -271,3 +271,74 @@ JSON 配置格式：
 | `ERROR_SYSTEM_ENABLE_LOCATION` | `ON` | 启用源位置追踪 |
 
 关闭后相关 API 将标记为 `[[deprecated]]` 并返回默认值，实现零开销的编译期裁剪。
+
+---
+
+## 测试架构
+
+### 测试框架
+
+- **测试框架**: GoogleTest
+- **测试总数**: 199 个测试用例
+- **测试文件**: 16 个测试文件
+
+### 测试覆盖
+
+| 模块 | 测试文件数 | 测试用例数 | 测试文件 |
+|------|-----------|-----------|----------|
+| Core 层 | 7 | 59+ | `tests/core/*_test.cc` |
+| Plugin 层 | 2 | 17 | `tests/plugin/*_test.cc` |
+| Memory 层 | 1 | 10 | `tests/memory/*_test.cc` |
+| Utils 层 | 5 | 37+ | `tests/utils/*_test.cc` |
+| Config 层 | 1 | 7 | `tests/config/*_test.cc` |
+| **总计** | **16** | **199** | - |
+
+### 测试目录结构
+
+```
+tests/
+├── CMakeLists.txt
+├── core/                          # Core 层测试
+│   ├── error_code_test.cc        # error_code_t 测试
+│   ├── error_level_test.cc       # error_level_t 测试
+│   ├── error_builder_test.cc     # error_builder_t 测试
+│   ├── result_test.cc            # result_t<T> 测试
+│   ├── error_exception_test.cc   # error_exception_t 测试
+│   ├── error_registry_test.cc    # error_registry_t 测试
+│   └── domain_test.cc            # system_domain_t 测试
+├── plugin/                        # Plugin 层测试
+│   ├── plugin_registry_test.cc   # plugin_registry_t 测试
+│   └── error_router_plugin_test.cc # error_router_plugin_t 测试
+├── memory/                        # Memory 层测试
+│   └── object_pool_test.cc       # object_pool_t 测试
+├── utils/                         # Utils 层测试
+│   ├── string_utils_test.cc      # string_utils_t 测试
+│   ├── json_utils_test.cc        # json_dict_t 测试
+│   ├── file_utils_test.cc        # file_utils 测试
+│   ├── stack_trace_utils_test.cc # stack_trace_utils_t 测试
+│   └── source_location_test.cc   # source_location_t 测试
+└── config/                        # Config 层测试
+    └── error_config_test.cc      # error_config_t 测试
+```
+
+### 运行测试
+
+```bash
+cd build
+ctest --output-on-failure
+```
+
+或运行特定测试：
+
+```bash
+./tests/core/error_code_test
+./tests/core/result_test
+```
+
+### 测试设计原则
+
+1. **全面覆盖**: 每个公共 API 都有对应的测试用例
+2. **边界测试**: 测试空值、极限值、非法输入等边界条件
+3. **constexpr 测试**: 验证编译期计算的正确性
+4. **异常安全**: 测试异常处理和错误恢复
+5. **线程安全**: 测试并发场景下的正确性

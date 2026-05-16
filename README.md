@@ -509,16 +509,21 @@ error_system/
 │   ├── core/                   # error_context, error_registry 实现
 │   ├── plugin/                 # plugin_registry 实现
 │   └── utils/                  # 工具函数实现
-├── tests/                      # GoogleTest 单元测试
-│   ├── core/                   # 核心层测试
-│   ├── plugin/                 # 插件层测试
-│   └── utils/                  # 工具库测试
+├── tests/                      # GoogleTest 单元测试 (199 个测试用例)
+│   ├── core/                   # 核心层测试 (7 个文件)
+│   ├── plugin/                 # 插件层测试 (2 个文件)
+│   ├── memory/                 # 内存层测试 (1 个文件)
+│   ├── utils/                  # 工具库测试 (5 个文件)
+│   └── config/                 # 配置层测试 (1 个文件)
 ├── script/                     # 代码生成脚本
 │   ├── generate_errors.sh      # 批量生成错误码脚本
 │   └── script_py/
 │       └── generate_error_codes.py  # Python 生成工具
 ├── examples/                   # 示例代码
-│   └── demo01.cc               # 基础功能演示
+│   ├── demo01.cc               # 基础用法：错误码、上下文、序列化
+│   ├── demo02.cc               # result_t 错误处理和链式操作
+│   ├── demo03.cc               # 插件系统：日志、统计、路由
+│   └── demo04.cc               # 异常处理：error_exception_t
 └── LICENSE                     # 许可证
 ```
 
