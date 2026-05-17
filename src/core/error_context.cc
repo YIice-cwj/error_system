@@ -2,6 +2,15 @@
 #include "error_system/plugin/plugin_registry.h"
 using namespace error_system::config;
 
+/**
+ * @file error_context.h
+ * @brief 错误上下文实现
+ * @details 定义错误上下文的实现，包括通知插件、检查有效性和包装错误上下文等功能
+ * @author yiice
+ * @version 1.0.0
+ * @date 2026-04-27
+ * @copyright Copyright (c) 2026
+ */
 namespace error_system::core {
     /**
      * @brief 通知所有已注册插件

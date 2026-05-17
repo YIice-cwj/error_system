@@ -22,22 +22,24 @@ def generate_dict(json_dir, out_file):
                 if mod_id is not None and subsys_id is not None:
                     modules[(subsys_id, mod_id)] = mod_desc
 
-    # 2. 开始生成 C++ 代码 (字典部分)
+    # 2. 开始生成大一统融合字典代码
     lines = [
         "#pragma once",
         "#include <cstdint>",
-        "#include \"error_system/config/error_config.h\"",  # 👈 新增引入 config
-        "#include <string>",
+        "#include <string_view>",
+        "#include \"error_system/config/error_config.h\"",
+        "#include \"error_system/translator/error_translator.h\"",
         "",
-        "// 🚀 自动生成的极速字典表，请勿手动修改",
-        "// 该文件利用 C++ 的 constexpr 和 Jump Table 实现了 O(1) 的无锁查询",
-        "namespace error_system::dict {",
+        "// 🚀 自动生成的极速静态数据源，请勿手动修改",
+        "// 该文件利用 C++ 开源特化桩函数，将 JSON 编译期数据无缝喂给 error_translator_t",
+        "namespace error_system::translator {", # 💡 核心修正：桩函数本身必须也定义在 translator 命名空间内
         "",
-        "    /** @brief 极速获取子系统名称 */",
-        "    constexpr const char* get_subsys_name(uint16_t subsys_id) noexcept {",
+        "    /** @brief 供大一统翻译器调用的静态子系统查询（第一轨） */",
+        "    std::string_view get_static_subsys_name(uint16_t subsys_id) noexcept {",
         "        switch(subsys_id) {"
     ]
     
+    # 填充子系统静态分支
     for sid, name in subsystems.items():
         lines.append(f"            case {sid}: return \"{name}\";")
     lines.append("            default: return \"未知子系统\";")
@@ -45,40 +47,38 @@ def generate_dict(json_dir, out_file):
     lines.append("    }")
     lines.append("")
     
-    lines.append("    /** @brief 极速获取模块名称 */")
-    lines.append("    constexpr const char* get_module_name(uint16_t subsys_id, uint16_t mod_id) noexcept {")
+    lines.append("    /** @brief 供大一统翻译器调用的静态模块查询（第一轨） */")
+    lines.append("    std::string_view get_static_module_name(uint16_t subsys_id, uint16_t mod_id) noexcept {")
     lines.append("        uint32_t combined = (static_cast<uint32_t>(subsys_id) << 16) | mod_id;")
     lines.append("        switch(combined) {")
+    
+    # 填充模块静态分支
     for (sid, mid), desc in modules.items():
         lines.append(f"            case ({sid}U << 16) | {mid}: return \"{desc}\";")
     lines.append("            default: return \"未知模块\";")
     lines.append("        }")
     lines.append("    }")
-    lines.append("} // namespace error_system::dict")
+    lines.append("} // namespace error_system::translator") # 💡 核心修正：对齐闭合
 
+    # 3. 核心桥梁：C++17 全局全自动绑定闭包
     lines.append("")
-    lines.append("namespace error_system::dict::detail {")
-    lines.append("    struct auto_registrar_t {")
-    lines.append("        auto_registrar_t() {")
-    lines.append("            config::error_config_t::set_translator([](uint16_t subsys_id, uint16_t module_id) -> std::string {")
-    lines.append("                const char* subsys = get_subsys_name(subsys_id);")
-    lines.append("                const char* module = get_module_name(subsys_id, module_id);")
-    lines.append("                std::string res;")
-    lines.append("                res.reserve(64);")
-    lines.append("                res += \"SubSys: \"; res += subsys;")
-    lines.append("                res += \", Module: \"; res += module;")
-    lines.append("                return res;")
+    lines.append("namespace error_system::translator::detail {") # 💡 保持高度一致统一
+    lines.append("    struct translator_binder_t {")
+    lines.append("        translator_binder_t() {")
+    lines.append("            // 💡 核心桥梁：自动把具有静动双轨合并能力的单例 translate() 路由挂载到全局配置上")
+    lines.append("            config::error_config_t::set_translator([](uint16_t sid, uint16_t mid) -> std::string {")
+    lines.append("                return error_translator_t::instance().translate(sid, mid);")
     lines.append("            });")
     lines.append("        }")
     lines.append("    };")
-    lines.append("    inline auto_registrar_t g_registrar_instance{};")
-    lines.append("} // namespace error_system::dict::detail")
+    lines.append("    inline translator_binder_t g_translator_binder_instance{};")
+    lines.append("} // namespace error_system::translator::detail")
 
     # 4. 写入文件
     os.makedirs(os.path.dirname(out_file), exist_ok=True)
     with open(out_file, 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines))
-    print(f"✅ 成功生成全局字典与 C++17 注册器: {out_file}")
+    print(f"✅ 成功生成大一统静动融合数据源与 C++17 绑定器: {out_file}")
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
