@@ -386,6 +386,9 @@ r1.value();      // int&
 // void 特化（无成功值）
 result_t<void> r3;                              // 成功（code == 0）
 result_t<void> r4 = error_context_t{some_code, "操作失败"};   // 错误
+
+// void 特化支持格式化构造
+result_t<void> r5(some_code, "操作失败: {}", "原因");  // 错误，带格式化消息
 ```
 
 ### 链式操作

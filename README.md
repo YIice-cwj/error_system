@@ -458,13 +458,56 @@ ctest --output-on-failure
 | Config 层 | 1 | 7 |
 | **总计** | **16** | **199** |
 
+### 安装到系统
+
+```bash
+cd build
+sudo cmake --install .
+```
+
+安装内容包括：
+- 头文件 → `${CMAKE_INSTALL_PREFIX}/include/error_system/`
+- 库文件 → `${CMAKE_INSTALL_PREFIX}/lib/`
+- CMake 配置 → `${CMAKE_INSTALL_PREFIX}/lib/cmake/error_system/`
+- 代码生成脚本 → `${CMAKE_INSTALL_PREFIX}/share/error_system/scripts/`
+
 ### 作为子项目使用
+
+#### 方式一：使用 find_package
 
 ```cmake
 find_package(error_system 1.0.0 REQUIRED)
 
 add_executable(my_business_app main.cpp)
 target_link_libraries(my_business_app PRIVATE error_system::error_system)
+```
+
+#### 方式二：使用 CMake 宏自动生成错误码（推荐）
+
+```cmake
+find_package(error_system 1.0.0 REQUIRED)
+
+add_executable(my_business_app main.cpp)
+target_link_libraries(my_business_app PRIVATE error_system::error_system)
+
+# 自动生成错误码头文件
+error_system_generate_codes(
+    TARGET my_business_app
+    JSON_DIR ${CMAKE_CURRENT_SOURCE_DIR}/config/errors
+)
+```
+
+`error_system_generate_codes` 宏会自动：
+1. 从 JSON 配置文件生成 C++ 错误码头文件
+2. 生成 O(1) 极速错误字典
+3. 生成错误码文档
+4. 自动配置头文件搜索路径
+
+### 卸载
+
+```bash
+cd build
+sudo cmake --build . --target uninstall
 ```
 
 ---

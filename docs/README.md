@@ -9,6 +9,7 @@
 | 文档 | 命名空间 | 描述 |
 |------|----------|------|
 | [Core 层](api/core.md) | `error_system::core` | 错误码、等级、上下文、Result、异常、注册表 |
+| [Config 层](api/config.md) | `error_system::config` | 全局配置、堆栈追踪、验证、自定义格式化 |
 | [Plugin 层](api/plugin.md) | `error_system::plugin` | 插件系统、日志/统计扩展 |
 | [Memory 层](api/memory.md) | `error_system::memory` | 对象池、内存管理优化 |
 | [Utils 层](api/utils.md) | `error_system::utils` | 字符串工具、JSON 解析、文件操作、堆栈跟踪 |
@@ -24,6 +25,7 @@
 - **构建错误码** → [Core API: error_builder_t](api/core.md#error_builder_t)
 - **使用错误上下文** → [Core API: error_context_t](api/core.md#error_context_t)
 - **错误码注册** → [Core API: error_registry_t](api/core.md#error_registry_t)
+- **全局配置** → [Config API](api/config.md)
 - **接入日志/统计** → [Plugin API](api/plugin.md)
 - **对象池优化** → [Memory API: object_pool_t](api/memory.md#object_pool_t)
 - **字符串格式化** → [Utils API: string_utils_t](api/utils.md#string_utils_t)
