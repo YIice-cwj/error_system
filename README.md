@@ -456,7 +456,8 @@ ctest --output-on-failure
 | Memory 层 | 1 | 10 |
 | Utils 层 | 5 | 37+ |
 | Config 层 | 1 | 7 |
-| **总计** | **16** | **199** |
+| Translator 层 | 1 | 9 |
+| **总计** | **17** | **210** |
 
 ### 安装到系统
 
