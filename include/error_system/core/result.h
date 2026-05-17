@@ -1,7 +1,8 @@
 #pragma once
-#include <variant>
-#include <functional>
 #include "error_system/core/error_context.h"
+#include <functional>
+#include <string_view>
+#include <variant>
 
 /**
  * @file result_t.h
@@ -19,7 +20,7 @@ namespace error_system::core {
      * @details 封装结果信息，提供字段解析和访问功能
      * @tparam T 结果类型
      */
-    template<typename T>
+    template <typename T>
     class result_t {
         public:
         using value_type = T;
@@ -45,22 +46,22 @@ namespace error_system::core {
          * @param error_context 错误上下文
          */
         result_t(const error_context_t& error_context) : value_or_error_(error_context) {}
-        
+
         /**
          * @brief 构造函数
          * @param code 错误码
          * @param message 错误信息
          */
-        result_t(error_code_t code, const std::string& message = "") 
+        result_t(error_code_t code, const std::string& message = "")
             : value_or_error_(error_context_t{code, message}) {}
 
-        public:        
+        public:
         /**
          * @brief 检查结果是否为错误
          * @return bool 如果结果为错误则返回true
          */
         bool is_error() const noexcept { return std::holds_alternative<error_context_t>(value_or_error_); }
-        
+
         /**
          * @brief 检查结果是否为成功
          * @return bool 如果结果为成功则返回true
@@ -72,13 +73,13 @@ namespace error_system::core {
          * @return const error_context_t& 错误上下文
          */
         const error_context_t& error() const noexcept { return std::get<error_context_t>(value_or_error_); }
-        
+
         /**
          * @brief 获取成功值
          * @return const value_type& 成功值
          */
         const value_type& value() const noexcept { return std::get<value_type>(value_or_error_); }
-        
+
         /**
          * @brief 获取成功值
          * @return value_type& 成功值
@@ -91,24 +92,24 @@ namespace error_system::core {
          * @return decltype(std::invoke(std::forward<Function>(function), std::move(value_))) 操作结果
          * @details 如果当前结果为成功，则调用 function 处理值并返回其结果；
          *          如果当前结果为错误，则返回包含当前错误的新结果（移动语义）
-        */
+         */
         template <typename Function>
-        auto and_then(Function&& function) && -> decltype(std::invoke(std::forward<Function>(function), std::move(value()))) {
+        auto and_then(Function&& function) && -> decltype(std::invoke(std::forward<Function>(function),
+                                                                      std::move(value()))) {
             using return_type = decltype(std::invoke(std::forward<Function>(function), std::move(value())));
             if (is_error()) {
-                return return_type(std::move(error())); 
+                return return_type(std::move(error()));
             }
             return std::invoke(std::forward<Function>(function), std::move(value()));
         }
 
-        
         /**
          * @brief 对结果进行链式操作（左值引用版本）
          * @param function 要执行的操作函数
          * @return decltype(std::invoke(std::forward<Function>(function), value())) 操作结果
          * @details 如果当前结果为成功，则调用 function 处理值并返回其结果；
          *          如果当前结果为错误，则返回包含当前错误的新结果
-        */
+         */
         template <typename Function>
         auto and_then(Function&& function) & -> decltype(std::invoke(std::forward<Function>(function), value())) {
             using return_type = decltype(std::invoke(std::forward<Function>(function), value()));
@@ -132,7 +133,7 @@ namespace error_system::core {
             }
             return std::move(*this);
         }
-        
+
         /**
          * @brief 对错误结果进行链式操作（左值引用版本）
          * @param function 要执行的操作函数
@@ -149,11 +150,11 @@ namespace error_system::core {
         }
     };
 
-    /** 
+    /**
      * @brief 模板特化：当 T 为 void 时，特化为不包含值的 result_t
      * @details 特化 result_t 类模板，当 T 为 void 时，不存储值，仅存储错误上下文
      */
-    template<>
+    template <>
     class result_t<void> {
         public:
         using value_type = void;
@@ -172,21 +173,22 @@ namespace error_system::core {
          * @param error_context 错误上下文
          */
         result_t(const error_context_t& error_context) : error_context_(error_context) {}
-        
+
         /**
          * @brief 构造函数
          * @param code 错误码
          * @param message 错误信息
          */
-        result_t(error_code_t code, const std::string& message = "") 
-            : error_context_(error_context_t{code, message}) {}
-        
+        template <typename... Args>
+        result_t(error_code_t code, const std::string_view format, Args... args)
+            : error_context_(code, format, args...) {}
+
         /**
          * @brief 检查结果是否为错误
          * @return bool 如果结果为错误则返回true
          */
         bool is_error() const noexcept { return static_cast<bool>(error_context_); }
-        
+
         /**
          * @brief 检查结果是否为成功
          * @return bool 如果结果为成功则返回true
@@ -210,7 +212,7 @@ namespace error_system::core {
         auto and_then(Function&& function) && -> decltype(std::invoke(std::forward<Function>(function))) {
             using return_type = decltype(std::invoke(std::forward<Function>(function)));
             if (is_error()) {
-                return return_type(std::move(error_context_)); 
+                return return_type(std::move(error_context_));
             }
             return std::invoke(std::forward<Function>(function));
         }
@@ -245,7 +247,7 @@ namespace error_system::core {
             }
             return std::move(*this);
         }
-        
+
         /**
          * @brief 对错误结果进行链式操作（左值引用版本）
          * @param function 要执行的操作函数
@@ -255,11 +257,11 @@ namespace error_system::core {
          */
         template <typename Function>
         result_t<void> or_else(Function&& function) & {
-            if (is_error()) {   
+            if (is_error()) {
                 return std::invoke(std::forward<Function>(function), error_context_);
             }
             return *this;
         }
     };
 
-}
+}  // namespace error_system::core

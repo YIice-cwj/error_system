@@ -1,5 +1,4 @@
 #include "error_system/core/error_context.h"
-#include "error_dict.h"
 #include "error_system/plugin/plugin_registry.h"
 using namespace error_system::config;
 
@@ -100,26 +99,32 @@ namespace error_system::core {
         }
 
         std::string result{};
+        std::string subsys_module_str{};
         result.reserve(256);
+        if (auto translator = error_config_t::get_translator()) {
+            subsys_module_str = translator(code.get_subsys(), code.get_module());
+        } else {
+            subsys_module_str =
+                utils::string_utils_t::format("SubSys: {}, Module: {}", code.get_subsys(), code.get_module());
+        }
 #ifdef ERROR_SYSTEM_ENABLE_LOCATION
         if (error_config_t::is_source_location_enabled() && file_name != nullptr) {
             result += utils::string_utils_t::format(" [Location: {}:{} @ {}]", file_name, line_number, function_name);
         }
 #endif
-        auto info = error_registry_t::instance().get_info(code);
+
+        auto info = error_system::core::error_registry_t::instance().get_info(this->code);
         std::string desc = info ? info->description : "未注册的未知错误";
         std::string name = info ? info->name : "UNKNOWN_ERR_CODE";
 
-        result +=
-            utils::string_utils_t::format("[Level: {}, System: {}, SubSys: {}, Module: {}] Code: {} ({}) - {}: {}",
-                                          core::to_string(code.get_level()),
-                                          domain::to_string(code.get_system()),
-                                          dict::get_subsys_name(code.get_subsys()),
-                                          dict::get_module_name(code.get_subsys(), code.get_module()),
-                                          code.get_number(),
-                                          name,
-                                          message,
-                                          desc);
+        result += utils::string_utils_t::format("[Level: {}, System: {}, {}] Code: {} ({}) - {}: {}",
+                                                core::to_string(code.get_level()),
+                                                domain::to_string(code.get_system()),
+                                                subsys_module_str,
+                                                code.get_number(),
+                                                name,
+                                                message,
+                                                desc);
 
         if (!payload.empty()) {
             result += " {";
@@ -154,10 +159,6 @@ namespace error_system::core {
      * @return std::string 错误上下文的 JSON 字符串表示
      */
     std::string error_context_t::to_json() const noexcept {
-        if (auto formatter = error_config_t::get_custom_formatter()) {
-            return formatter(*this);
-        }
-
         std::string json{};
         json.reserve(256);
         json += "{";

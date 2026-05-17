@@ -22,9 +22,13 @@ namespace error_system::config {
 
     using formatter_callback_t = std::function<std::string(const core::error_context_t&)>;
 
+    using translator_func_t = std::function<std::string(uint16_t subsys_id, uint16_t module_id)>;
+
     class error_config_t {
         private:
         static inline formatter_callback_t custom_formatter_{nullptr};
+
+        static inline translator_func_t custom_translator_{nullptr};
 
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
         static inline std::atomic<core::error_level_t> min_stacktrace_level_{core::error_level_t::error};
@@ -61,6 +65,24 @@ namespace error_system::config {
         static formatter_callback_t get_custom_formatter() noexcept {
             std::shared_lock<std::shared_mutex> lock(config_mutex_);
             return custom_formatter_;
+        }
+
+        /**
+         * @brief 设置自定义翻译函数
+         * @param translator 自定义翻译函数
+         */
+        static void set_translator(translator_func_t translator) noexcept {
+            std::unique_lock<std::shared_mutex> lock(config_mutex_);
+            custom_translator_ = translator;
+        }
+
+        /**
+         * @brief 获取自定义翻译函数
+         * @return translator_func_t 自定义翻译函数
+         */
+        static translator_func_t get_translator() noexcept {
+            std::shared_lock<std::shared_mutex> lock(config_mutex_);
+            return custom_translator_;
         }
 
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE

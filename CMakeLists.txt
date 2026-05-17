@@ -51,6 +51,7 @@ foreach(JSON_FILE ${ERROR_JSON_FILES})
 endforeach()
 
 add_custom_target(GenerateErrorCodes DEPENDS ${ALL_GENERATED_HEADERS})
+
 set(DICT_SCRIPT "${CMAKE_SOURCE_DIR}/script/script_py/generate_error_dict.py")
 set(DICT_HEADER "${ERROR_GENERATED_DIR}/error_dict.h")
 
@@ -58,7 +59,7 @@ add_custom_command(
     OUTPUT ${DICT_HEADER}
     COMMAND Python3::Interpreter ${DICT_SCRIPT} ${ERROR_JSON_DIR} ${DICT_HEADER}
     DEPENDS ${ERROR_JSON_FILES} ${DICT_SCRIPT}
-    COMMENT "🔨 [Code Generation] 正在生成 O(1) 极速错误字典 (error_dict.h)..."
+    COMMENT "🔨 [Code Generation] 正在生成 O(1) 极速错误字典..."
 )
 
 add_custom_target(GenerateErrorDict DEPENDS ${DICT_HEADER})
@@ -106,6 +107,9 @@ if(ERROR_SYSTEM_BUILD_TESTS)
       GIT_TAG        v1.14.0
     )
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    
     FetchContent_MakeAvailable(googletest)
 
     enable_testing()
@@ -131,6 +135,15 @@ install(DIRECTORY include/
 
 include(CMakePackageConfigHelpers)
 
+install(DIRECTORY script/script_py/
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/scripts
+    FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+)
+
+install(FILES cmake/ErrorSystemHelpers.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
+)
+
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
     VERSION ${VERSION_STRING}
@@ -138,7 +151,8 @@ write_basic_package_version_file(
 )
 
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
-    "include(\"\${CMAKE_CURRENT_LIST_DIR}/${PROJECT_NAME}Targets.cmake\")\n"
+    "include(\"\${CMAKE_CURRENT_LIST_DIR}/${PROJECT_NAME}Targets.cmake\")
+    include(\"\${CMAKE_CURRENT_LIST_DIR}/ErrorSystemHelpers.cmake\")"
 )
 
 install(FILES
@@ -155,9 +169,14 @@ install(EXPORT ${PROJECT_NAME}Targets
 
 if(NOT TARGET uninstall)
     add_custom_target(uninstall
-        COMMAND ${CMAKE_COMMAND} -E echo "开始卸载..."
-        COMMAND xargs rm -vf < install_manifest.txt || echo "卸载完成或部分文件已不存在"
+        COMMAND ${CMAKE_COMMAND} -E echo "开始强制卸载文件..."
+        COMMAND sh -c "[ -f install_manifest.txt ] && xargs rm -vf < install_manifest.txt || echo '⚠️ 未找到 install_manifest.txt，跳过文件逐一删除。'"
+        COMMAND ${CMAKE_COMMAND} -E echo "清理残留的空目录..."
+        COMMAND rm -rf ${CMAKE_INSTALL_PREFIX}/include/${PROJECT_NAME}
+        COMMAND rm -rf ${CMAKE_INSTALL_PREFIX}/lib/cmake/${PROJECT_NAME}
+        COMMAND rm -rf ${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-        COMMENT "Uninstalling the project..."
+        COMMENT "Uninstalling the project and cleaning up directories..."
+        VERBATIM
     )
 endif()
