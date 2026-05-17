@@ -25,7 +25,7 @@ namespace error_system::utils {
     TEST_F(json_dict_test, parse_valid_flat_json) {
         auto result = json_dict_t::parse(R"({"key1": "value1", "key2": "value2"})");
         ASSERT_TRUE(result.has_value());
-        EXPECT_EQ(result->size(), 2);
+        EXPECT_EQ(result->size(), 2UL);
         EXPECT_EQ(result->get_value("key1"), "value1");
         EXPECT_EQ(result->get_value("key2"), "value2");
     }
@@ -33,7 +33,7 @@ namespace error_system::utils {
     TEST_F(json_dict_test, parse_valid_nested_json) {
         auto result = json_dict_t::parse(R"({"outer": {"inner": "nested_value"}})");
         ASSERT_TRUE(result.has_value());
-        EXPECT_EQ(result->size(), 1);
+        EXPECT_EQ(result->size(), 1UL);
         EXPECT_EQ(result->get_value("outer.inner"), "nested_value");
     }
 
@@ -83,13 +83,13 @@ namespace error_system::utils {
 
     TEST_F(json_dict_test, size_returns_zero_for_empty_dict) {
         json_dict_t dict{};
-        EXPECT_EQ(dict.size(), 0);
+        EXPECT_EQ(dict.size(), 0UL);
     }
 
     TEST_F(json_dict_test, size_returns_correct_count) {
         auto result = json_dict_t::parse(R"({"a": "1", "b": "2", "c": "3"})");
         ASSERT_TRUE(result.has_value());
-        EXPECT_EQ(result->size(), 3);
+        EXPECT_EQ(result->size(), 3UL);
     }
 
     TEST_F(json_dict_test, operator_bracket_returns_value) {
@@ -134,7 +134,7 @@ namespace error_system::utils {
     TEST_F(json_dict_test, parse_multiple_nested_keys) {
         auto result = json_dict_t::parse(R"({"level1": {"key1": "val1"}, "level2": {"key2": "val2"}})");
         ASSERT_TRUE(result.has_value());
-        EXPECT_EQ(result->size(), 2);
+        EXPECT_EQ(result->size(), 2UL);
         EXPECT_EQ(result->get_value("level1.key1"), "val1");
         EXPECT_EQ(result->get_value("level2.key2"), "val2");
     }

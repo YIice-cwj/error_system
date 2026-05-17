@@ -71,7 +71,7 @@ namespace error_system::plugin {
         ctx.message = "test";
         error_router_plugin_t::instance().on_error(ctx);
 
-        EXPECT_EQ(received_code, 99999);
+        EXPECT_EQ(received_code, 99999ULL);
     }
 
     TEST_F(error_router_plugin_test, unregister_handler_by_code_removes_it) {

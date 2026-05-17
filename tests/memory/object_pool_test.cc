@@ -20,15 +20,15 @@ namespace error_system::memory {
     TEST_F(object_pool_test, initial_state_is_empty) {
         auto& pool = object_pool_t<test_object_t, 10>::instance();
         EXPECT_TRUE(pool.empty());
-        EXPECT_EQ(pool.size(), 0);
-        EXPECT_EQ(pool.capacity(), 10);
+        EXPECT_EQ(pool.size(), 0UL);
+        EXPECT_EQ(pool.capacity(), 10UL);
     }
 
     TEST_F(object_pool_test, acquire_returns_valid_object) {
         auto& pool = object_pool_t<test_object_t, 10>::instance();
         auto* obj = pool.acquire();
         ASSERT_NE(obj, nullptr);
-        EXPECT_EQ(pool.size(), 1);
+        EXPECT_EQ(pool.size(), 1UL);
         EXPECT_FALSE(pool.empty());
     }
 
@@ -38,7 +38,7 @@ namespace error_system::memory {
         ASSERT_NE(obj, nullptr);
 
         pool.release(obj);
-        EXPECT_EQ(pool.size(), 0);
+        EXPECT_EQ(pool.size(), 0UL);
         EXPECT_TRUE(pool.empty());
         EXPECT_EQ(obj, nullptr);
     }
@@ -80,7 +80,7 @@ namespace error_system::memory {
             pool.release(obj);
         }
 
-        EXPECT_EQ(pool.size(), 0);
+        EXPECT_EQ(pool.size(), 0UL);
     }
 
     TEST_F(object_pool_test, instance_thread_local_returns_different_instance) {
@@ -102,7 +102,7 @@ namespace error_system::memory {
 
     TEST_F(object_pool_test, capacity_matches_template_parameter) {
         auto& pool = object_pool_t<test_object_t, 42>::instance();
-        EXPECT_EQ(pool.capacity(), 42);
+        EXPECT_EQ(pool.capacity(), 42UL);
     }
 
 }  // namespace error_system::memory
