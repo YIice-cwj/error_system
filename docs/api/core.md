@@ -511,6 +511,16 @@ struct error_metadata_t {
 };
 ```
 
+### 重复处理策略
+
+```cpp
+enum class duplicate_policy_t : uint8_t {
+    skip,       // 静默跳过（默认）
+    overwrite,  // 覆盖已有定义
+    warn,       // 跳过但记录警告
+};
+```
+
 ### 方法
 
 ```cpp
@@ -519,9 +529,9 @@ static error_registry_t& instance() noexcept;
 
 // 注册/注销错误码
 void register_error(error_code_t code, std::string_view name, std::string_view description) noexcept;
-void register_errors(const std::vector<error_code_t>& codes,
-                     const std::vector<std::string_view>& names,
-                     const std::vector<std::string_view>& descriptions) noexcept;
+size_t register_errors(const std::vector<error_code_t>& codes,
+                       const std::vector<std::string_view>& names,
+                       const std::vector<std::string_view>& descriptions) noexcept;
 void unregister_error(error_code_t code) noexcept;
 void unregister_error(std::string_view name) noexcept;
 void unregister_module(module_group_id_t module_group_id) noexcept;
@@ -537,6 +547,10 @@ template <typename SystemEnum, typename SubSystemEnum, typename ModuleEnum>
 std::vector<error_metadata_t> get_errors_by_module(SystemEnum system,
                                                     SubSystemEnum subsystem,
                                                     ModuleEnum module) const noexcept;
+
+// 重复处理策略配置
+void set_duplicate_policy(duplicate_policy_t policy) noexcept;
+duplicate_policy_t get_duplicate_policy() const noexcept;
 ```
 
 ### 使用示例
@@ -546,9 +560,10 @@ std::vector<error_metadata_t> get_errors_by_module(SystemEnum system,
 error_registry_t::instance().register_error(
     db_conn_err, "DB_CONNECTION_TIMEOUT", "数据库连接超时");
 
-// 批量注册
-error_registry_t::instance().register_errors(
+// 批量注册（返回实际注册成功的数量）
+size_t count = error_registry_t::instance().register_errors(
     {code1, code2}, {"NAME1", "NAME2"}, {"DESC1", "DESC2"});
+// count = 2（如果数组长度不一致，返回 0 且不执行任何注册）
 
 // 查询错误码信息
 auto info = error_registry_t::instance().get_info(db_conn_err);
@@ -574,6 +589,13 @@ error_registry_t::instance().unregister_module(module_group_id);
 
 // 注销所有错误码
 error_registry_t::instance().unregister_all();
+
+// 配置重复处理策略
+error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::overwrite);
+// 现在重复注册会覆盖已有定义
+
+// 获取当前重复处理策略
+auto policy = error_registry_t::instance().get_duplicate_policy();
 ```
 
 ### 单元测试
@@ -591,6 +613,12 @@ error_registry_t::instance().unregister_all();
 | `get_errors_by_module` | 按模块查询错误 |
 | `singleton_returns_same_instance` | 单例返回相同实例 |
 | `register_duplicate_keeps_first_metadata` | 重复注册保留首次元数据 |
+| `duplicate_policy_skip` | skip 策略静默跳过重复 |
+| `duplicate_policy_overwrite` | overwrite 策略覆盖已有定义 |
+| `duplicate_policy_get_set` | 获取和设置重复处理策略 |
+| `register_errors_returns_count` | 批量注册返回成功数量 |
+| `register_errors_returns_zero_for_mismatched_arrays` | 数组长度不一致返回 0 |
+| `register_errors_with_overwrite_policy` | 批量注册使用 overwrite 策略 |
 
 ### 宏注册（推荐）
 
