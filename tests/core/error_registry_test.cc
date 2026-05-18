@@ -5,9 +5,15 @@ namespace error_system::core {
 
     class error_registry_test : public ::testing::Test {
         protected:
-        void SetUp() override { error_registry_t::instance().unregister_all(); }
+        void SetUp() override {
+            error_registry_t::instance().unregister_all();
+            error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::skip);
+        }
 
-        void TearDown() override { error_registry_t::instance().unregister_all(); }
+        void TearDown() override {
+            error_registry_t::instance().unregister_all();
+            error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::skip);
+        }
     };
 
     TEST_F(error_registry_test, register_and_retrieve_error) {
@@ -113,6 +119,84 @@ namespace error_system::core {
         // Duplicate registration should keep the first registered metadata
         EXPECT_EQ(info->name, "OLD_NAME");
         EXPECT_EQ(info->description, "Old description");
+    }
+
+    TEST_F(error_registry_test, duplicate_policy_skip) {
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+
+        error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::skip);
+        error_registry_t::instance().register_error(code, "FIRST", "First description");
+        error_registry_t::instance().register_error(code, "SECOND", "Second description");
+
+        auto info = error_registry_t::instance().get_info(code);
+        ASSERT_TRUE(info.has_value());
+        EXPECT_EQ(info->name, "FIRST");
+    }
+
+    TEST_F(error_registry_test, duplicate_policy_overwrite) {
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+
+        error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::overwrite);
+        error_registry_t::instance().register_error(code, "FIRST", "First description");
+        error_registry_t::instance().register_error(code, "SECOND", "Second description");
+
+        auto info = error_registry_t::instance().get_info(code);
+        ASSERT_TRUE(info.has_value());
+        EXPECT_EQ(info->name, "SECOND");
+        EXPECT_EQ(info->description, "Second description");
+    }
+
+    TEST_F(error_registry_test, duplicate_policy_get_set) {
+        error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::skip);
+        EXPECT_EQ(error_registry_t::instance().get_duplicate_policy(), duplicate_policy_t::skip);
+
+        error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::overwrite);
+        EXPECT_EQ(error_registry_t::instance().get_duplicate_policy(), duplicate_policy_t::overwrite);
+
+        error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::warn);
+        EXPECT_EQ(error_registry_t::instance().get_duplicate_policy(), duplicate_policy_t::warn);
+    }
+
+    TEST_F(error_registry_test, register_errors_returns_count) {
+        auto code1 = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code2 =
+            error_builder_t::make_error_code(error_level_t::warn, domain::system_domain_t::application, 2, 2, 2);
+
+        std::vector<error_code_t> codes = {code1, code2};
+        std::vector<std::string_view> names = {"ERR_1", "ERR_2"};
+        std::vector<std::string_view> descs = {"Desc 1", "Desc 2"};
+
+        size_t count = error_registry_t::instance().register_errors(codes, names, descs);
+        EXPECT_EQ(count, 2);
+    }
+
+    TEST_F(error_registry_test, register_errors_returns_zero_for_mismatched_arrays) {
+        auto code1 = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+
+        std::vector<error_code_t> codes = {code1};
+        std::vector<std::string_view> names = {"ERR_1", "ERR_2"};
+        std::vector<std::string_view> descs = {"Desc 1"};
+
+        size_t count = error_registry_t::instance().register_errors(codes, names, descs);
+        EXPECT_EQ(count, 0);
+    }
+
+    TEST_F(error_registry_test, register_errors_with_overwrite_policy) {
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+
+        error_registry_t::instance().register_error(code, "ORIGINAL", "Original desc");
+
+        std::vector<error_code_t> codes = {code};
+        std::vector<std::string_view> names = {"UPDATED"};
+        std::vector<std::string_view> descs = {"Updated desc"};
+
+        error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::overwrite);
+        size_t count = error_registry_t::instance().register_errors(codes, names, descs);
+
+        EXPECT_EQ(count, 1);
+        auto info = error_registry_t::instance().get_info(code);
+        ASSERT_TRUE(info.has_value());
+        EXPECT_EQ(info->name, "UPDATED");
     }
 
 }  // namespace error_system::core

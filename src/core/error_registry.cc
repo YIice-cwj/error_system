@@ -14,8 +14,26 @@ namespace error_system::core {
         std::unique_lock<std::shared_mutex> lock(index_mutex_);
 
         code_t raw_code = code.get_code();
-        if (primary_index_.find(raw_code) != primary_index_.end()) {
-            return;
+        auto it = primary_index_.find(raw_code);
+        if (it != primary_index_.end()) {
+            switch (duplicate_policy_) {
+                case duplicate_policy_t::skip:
+                    return;
+                case duplicate_policy_t::overwrite: {
+                    uint64_t old_group_id = error_code_t(raw_code).get_module_group_id();
+                    auto mod_it = module_index_.find(old_group_id);
+                    if (mod_it != module_index_.end()) {
+                        auto& vec = mod_it->second;
+                        vec.erase(std::remove(vec.begin(), vec.end(), raw_code), vec.end());
+                        if (vec.empty()) {
+                            module_index_.erase(mod_it);
+                        }
+                    }
+                    primary_index_.erase(it);
+                } break;
+                case duplicate_policy_t::warn:
+                    return;
+            }
         }
 
         error_metadata_t meta{
@@ -29,19 +47,37 @@ namespace error_system::core {
      * @param codes 错误码数组
      * @param names 错误码宏名称数组
      * @param descriptions 错误码中文描述数组
+     * @return size_t 实际注册成功的错误码数量
      */
-    void error_registry_t::register_errors(const std::vector<error_code_t>& codes,
-                                           const std::vector<std::string_view>& names,
-                                           const std::vector<std::string_view>& descriptions) noexcept {
+    size_t error_registry_t::register_errors(const std::vector<error_code_t>& codes,
+                                             const std::vector<std::string_view>& names,
+                                             const std::vector<std::string_view>& descriptions) noexcept {
         if (codes.size() != names.size() || codes.size() != descriptions.size()) {
-            return;
+            return 0;
         }
         std::unique_lock<std::shared_mutex> lock(index_mutex_);
 
+        size_t registered_count = 0;
         for (size_t i = 0; i < codes.size(); ++i) {
             code_t raw_code = codes[i].get_code();
-            if (primary_index_.find(raw_code) != primary_index_.end()) {
-                continue;
+            auto it = primary_index_.find(raw_code);
+            if (it != primary_index_.end()) {
+                if (duplicate_policy_ == duplicate_policy_t::overwrite) {
+                    uint64_t old_group_id = error_code_t(raw_code).get_module_group_id();
+                    auto mod_it = module_index_.find(old_group_id);
+                    if (mod_it != module_index_.end()) {
+                        auto& vec = mod_it->second;
+                        vec.erase(std::remove(vec.begin(), vec.end(), raw_code), vec.end());
+                        if (vec.empty()) {
+                            module_index_.erase(mod_it);
+                        }
+                    }
+                    primary_index_.erase(it);
+                } else {
+                    if (duplicate_policy_ == duplicate_policy_t::warn) {
+                    }
+                    continue;
+                }
             }
 
             error_metadata_t meta{std::string(names[i]),
@@ -52,7 +88,9 @@ namespace error_system::core {
 
             primary_index_.emplace(raw_code, meta);
             module_index_[codes[i].get_module_group_id()].push_back(raw_code);
+            ++registered_count;
         }
+        return registered_count;
     }
 
     /**

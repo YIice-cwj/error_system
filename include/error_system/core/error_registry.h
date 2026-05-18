@@ -33,6 +33,16 @@ namespace error_system::core {
     };
 
     /**
+     * @brief 重复处理策略
+     * @details 定义当错误码已存在时的处理行为
+     */
+    enum class duplicate_policy_t : uint8_t {
+        skip,       // 静默跳过（默认）
+        overwrite,  // 覆盖已有定义
+        warn,       // 跳过但记录警告
+    };
+
+    /**
      * @brief 错误码注册器
      * @details 用于注册和查找错误码
      */
@@ -52,6 +62,11 @@ namespace error_system::core {
          * @brief 索引互斥锁，保护索引的并发访问
          */
         mutable std::shared_mutex index_mutex_;
+
+        /**
+         * @brief 重复处理策略
+         */
+        duplicate_policy_t duplicate_policy_{duplicate_policy_t::skip};
 
         private:
         error_registry_t() = default;
@@ -83,10 +98,12 @@ namespace error_system::core {
          * @param codes 错误码数组
          * @param names 错误码宏名称数组
          * @param descriptions 错误码中文描述数组
+         * @return size_t 实际注册成功的错误码数量
+         * @note 如果数组长度不一致，返回0且不执行任何注册
          */
-        void register_errors(const std::vector<error_code_t>& codes,
-                             const std::vector<std::string_view>& names,
-                             const std::vector<std::string_view>& descriptions) noexcept;
+        size_t register_errors(const std::vector<error_code_t>& codes,
+                               const std::vector<std::string_view>& names,
+                               const std::vector<std::string_view>& descriptions) noexcept;
 
         /**
          * @brief 注销错误码
@@ -134,6 +151,24 @@ namespace error_system::core {
         std::vector<error_metadata_t> get_errors_by_module(const module_group_id_t module_group_id) const noexcept;
 
         public:
+        /**
+         * @brief 设置重复处理策略
+         * @param policy 重复处理策略
+         */
+        void set_duplicate_policy(duplicate_policy_t policy) noexcept {
+            std::unique_lock<std::shared_mutex> lock(index_mutex_);
+            duplicate_policy_ = policy;
+        }
+
+        /**
+         * @brief 获取当前重复处理策略
+         * @return duplicate_policy_t 当前重复处理策略
+         */
+        duplicate_policy_t get_duplicate_policy() const noexcept {
+            std::shared_lock<std::shared_mutex> lock(index_mutex_);
+            return duplicate_policy_;
+        }
+
         /**
          * @brief 获取错误码注册器实例
          * @return error_registry_t& 错误码注册器实例
