@@ -5,6 +5,8 @@
 #include "error_system/core/error_builder.h"
 #include <mutex>
 // IWYU pragma: end_exports
+#include <functional>
+#include <iostream>
 #include <shared_mutex>
 #include <string_view>
 #include <unordered_map>
@@ -68,8 +70,21 @@ namespace error_system::core {
          */
         duplicate_policy_t duplicate_policy_{duplicate_policy_t::skip};
 
+        /**
+         * @brief 重复注册警告回调函数
+         * @details 当策略为 warn 时调用，参数为 (错误码原始值, 已存在的元数据)。
+         *          默认输出到 std::cerr，可通过 set_duplicate_warn_callback 覆盖。
+         */
+        std::function<void(code_t, const error_metadata_t&)> duplicate_warn_callback_{nullptr};
+
         private:
-        error_registry_t() = default;
+        error_registry_t() {
+            duplicate_warn_callback_ = [](code_t raw_code, const error_metadata_t& meta) {
+                std::cerr << "[error_system::warn] 重复注册错误码: " << meta.name << " (0x" << std::hex << raw_code
+                          << std::dec << ")"
+                          << ", 已有描述: " << meta.description << "\n";
+            };
+        }
 
         ~error_registry_t() = default;
 
@@ -81,6 +96,35 @@ namespace error_system::core {
         error_registry_t(error_registry_t&&) = delete;
 
         error_registry_t& operator=(error_registry_t&&) = delete;
+
+        private:
+        /**
+         * @brief 处理 skip 策略
+         * @param raw_code 错误码原始值
+         * @return bool 是否继续注册流程（skip 返回 false）
+         */
+        bool __handle_duplicate_skip(code_t raw_code) noexcept;
+
+        /**
+         * @brief 处理 overwrite 策略
+         * @param raw_code 错误码原始值
+         * @return bool 是否继续注册流程（overwrite 返回 true）
+         */
+        bool __handle_duplicate_overwrite(code_t raw_code) noexcept;
+
+        /**
+         * @brief 处理 warn 策略
+         * @param raw_code 错误码原始值
+         * @return bool 是否继续注册流程（warn 返回 false）
+         */
+        bool __handle_duplicate_warn(code_t raw_code) noexcept;
+
+        /**
+         * @brief 根据当前策略处理重复错误码
+         * @param raw_code 错误码原始值
+         * @return bool 是否继续注册流程
+         */
+        bool __apply_duplicate_policy(code_t raw_code) noexcept;
 
         public:
         /**
@@ -167,6 +211,25 @@ namespace error_system::core {
         duplicate_policy_t get_duplicate_policy() const noexcept {
             std::shared_lock<std::shared_mutex> lock(index_mutex_);
             return duplicate_policy_;
+        }
+
+        /**
+         * @brief 设置重复注册警告回调
+         * @param callback 回调函数，签名为 void(code_t, const error_metadata_t&)
+         * @note 传入 nullptr 可清除回调
+         */
+        void set_duplicate_warn_callback(std::function<void(code_t, const error_metadata_t&)> callback) noexcept {
+            std::unique_lock<std::shared_mutex> lock(index_mutex_);
+            duplicate_warn_callback_ = std::move(callback);
+        }
+
+        /**
+         * @brief 获取当前重复注册警告回调
+         * @return const std::function<void(code_t, const error_metadata_t&)>& 当前回调
+         */
+        const std::function<void(code_t, const error_metadata_t&)>& get_duplicate_warn_callback() const noexcept {
+            std::shared_lock<std::shared_mutex> lock(index_mutex_);
+            return duplicate_warn_callback_;
         }
 
         /**

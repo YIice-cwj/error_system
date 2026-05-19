@@ -3,6 +3,67 @@
 namespace error_system::core {
 
     /**
+     * @brief 处理 skip 策略
+     * @param raw_code 错误码原始值
+     * @return bool 是否继续注册流程
+     */
+    bool error_registry_t::__handle_duplicate_skip(code_t /*raw_code*/) noexcept {
+        return false;
+    }
+
+    /**
+     * @brief 处理 overwrite 策略
+     * @param raw_code 错误码原始值
+     * @return bool 是否继续注册流程
+     */
+    bool error_registry_t::__handle_duplicate_overwrite(code_t raw_code) noexcept {
+        uint64_t old_group_id = error_code_t(raw_code).get_module_group_id();
+        auto mod_it = module_index_.find(old_group_id);
+        if (mod_it != module_index_.end()) {
+            auto& vec = mod_it->second;
+            vec.erase(std::remove(vec.begin(), vec.end(), raw_code), vec.end());
+            if (vec.empty()) {
+                module_index_.erase(mod_it);
+            }
+        }
+        primary_index_.erase(raw_code);
+        return true;
+    }
+
+    /**
+     * @brief 处理 warn 策略
+     * @param raw_code 错误码原始值
+     * @return bool 是否继续注册流程
+     */
+    bool error_registry_t::__handle_duplicate_warn(code_t raw_code) noexcept {
+        auto it = primary_index_.find(raw_code);
+        if (it == primary_index_.end()) {
+            return false;
+        }
+        if (duplicate_warn_callback_) {
+            duplicate_warn_callback_(raw_code, it->second);
+        }
+        return false;
+    }
+
+    /**
+     * @brief 根据当前策略处理重复错误码
+     * @param raw_code 错误码原始值
+     * @return bool 是否继续注册流程
+     */
+    bool error_registry_t::__apply_duplicate_policy(code_t raw_code) noexcept {
+        switch (duplicate_policy_) {
+            case duplicate_policy_t::skip:
+                return __handle_duplicate_skip(raw_code);
+            case duplicate_policy_t::overwrite:
+                return __handle_duplicate_overwrite(raw_code);
+            case duplicate_policy_t::warn:
+                return __handle_duplicate_warn(raw_code);
+        }
+        return false;
+    }
+
+    /**
      * @brief 注册错误码
      * @param code 错误码
      * @param name 错误码宏名称
@@ -16,23 +77,8 @@ namespace error_system::core {
         code_t raw_code = code.get_code();
         auto it = primary_index_.find(raw_code);
         if (it != primary_index_.end()) {
-            switch (duplicate_policy_) {
-                case duplicate_policy_t::skip:
-                    return;
-                case duplicate_policy_t::overwrite: {
-                    uint64_t old_group_id = error_code_t(raw_code).get_module_group_id();
-                    auto mod_it = module_index_.find(old_group_id);
-                    if (mod_it != module_index_.end()) {
-                        auto& vec = mod_it->second;
-                        vec.erase(std::remove(vec.begin(), vec.end(), raw_code), vec.end());
-                        if (vec.empty()) {
-                            module_index_.erase(mod_it);
-                        }
-                    }
-                    primary_index_.erase(it);
-                } break;
-                case duplicate_policy_t::warn:
-                    return;
+            if (!__apply_duplicate_policy(raw_code)) {
+                return;
             }
         }
 
@@ -62,20 +108,7 @@ namespace error_system::core {
             code_t raw_code = codes[i].get_code();
             auto it = primary_index_.find(raw_code);
             if (it != primary_index_.end()) {
-                if (duplicate_policy_ == duplicate_policy_t::overwrite) {
-                    uint64_t old_group_id = error_code_t(raw_code).get_module_group_id();
-                    auto mod_it = module_index_.find(old_group_id);
-                    if (mod_it != module_index_.end()) {
-                        auto& vec = mod_it->second;
-                        vec.erase(std::remove(vec.begin(), vec.end(), raw_code), vec.end());
-                        if (vec.empty()) {
-                            module_index_.erase(mod_it);
-                        }
-                    }
-                    primary_index_.erase(it);
-                } else {
-                    if (duplicate_policy_ == duplicate_policy_t::warn) {
-                    }
+                if (!__apply_duplicate_policy(raw_code)) {
                     continue;
                 }
             }

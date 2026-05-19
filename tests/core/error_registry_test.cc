@@ -199,4 +199,74 @@ namespace error_system::core {
         EXPECT_EQ(info->name, "UPDATED");
     }
 
+    TEST_F(error_registry_test, duplicate_policy_warn_triggers_callback) {
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+
+        bool callback_called = false;
+        code_t captured_code = 0;
+        std::string captured_name;
+
+        error_registry_t::instance().set_duplicate_warn_callback(
+            [&callback_called, &captured_code, &captured_name](code_t raw_code, const error_metadata_t& meta) {
+                callback_called = true;
+                captured_code = raw_code;
+                captured_name = meta.name;
+            });
+
+        error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::warn);
+        error_registry_t::instance().register_error(code, "FIRST", "First description");
+        error_registry_t::instance().register_error(code, "SECOND", "Second description");
+
+        EXPECT_TRUE(callback_called);
+        EXPECT_EQ(captured_code, code.get_code());
+        EXPECT_EQ(captured_name, "FIRST");
+
+        // 恢复默认回调
+        error_registry_t::instance().set_duplicate_warn_callback(nullptr);
+    }
+
+    TEST_F(error_registry_test, duplicate_warn_callback_can_be_set_and_get) {
+        auto& registry = error_registry_t::instance();
+
+        // 默认应该有回调
+        EXPECT_TRUE(registry.get_duplicate_warn_callback());
+
+        // 设置为 nullptr
+        registry.set_duplicate_warn_callback(nullptr);
+        EXPECT_FALSE(registry.get_duplicate_warn_callback());
+
+        // 设置自定义回调
+        bool called = false;
+        registry.set_duplicate_warn_callback([&called](code_t, const error_metadata_t&) { called = true; });
+        EXPECT_TRUE(registry.get_duplicate_warn_callback());
+    }
+
+    TEST_F(error_registry_test, duplicate_warn_callback_not_called_on_first_registration) {
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+
+        bool callback_called = false;
+        error_registry_t::instance().set_duplicate_warn_callback(
+            [&callback_called](code_t, const error_metadata_t&) { callback_called = true; });
+        error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::warn);
+
+        // 首次注册不应触发回调
+        error_registry_t::instance().register_error(code, "FIRST", "First description");
+        EXPECT_FALSE(callback_called);
+
+        error_registry_t::instance().set_duplicate_warn_callback(nullptr);
+    }
+
+    TEST_F(error_registry_test, duplicate_warn_keeps_original_metadata) {
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+
+        error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::warn);
+        error_registry_t::instance().register_error(code, "ORIGINAL", "Original description");
+        error_registry_t::instance().register_error(code, "NEW", "New description");
+
+        auto info = error_registry_t::instance().get_info(code);
+        ASSERT_TRUE(info.has_value());
+        EXPECT_EQ(info->name, "ORIGINAL");
+        EXPECT_EQ(info->description, "Original description");
+    }
+
 }  // namespace error_system::core
