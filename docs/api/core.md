@@ -551,6 +551,10 @@ std::vector<error_metadata_t> get_errors_by_module(SystemEnum system,
 // 重复处理策略配置
 void set_duplicate_policy(duplicate_policy_t policy) noexcept;
 duplicate_policy_t get_duplicate_policy() const noexcept;
+
+// 重复注册警告回调配置
+void set_duplicate_warn_callback(std::function<void(code_t, const error_metadata_t&)> callback) noexcept;
+const std::function<void(code_t, const error_metadata_t&)>& get_duplicate_warn_callback() const noexcept;
 ```
 
 ### 使用示例
@@ -596,6 +600,15 @@ error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::overwrite)
 
 // 获取当前重复处理策略
 auto policy = error_registry_t::instance().get_duplicate_policy();
+
+// 设置重复注册警告回调
+error_registry_t::instance().set_duplicate_warn_callback(
+    [](code_t raw_code, const error_metadata_t& meta) {
+        std::cout << "警告: 重复注册错误码 " << meta.name << " (0x" << std::hex << raw_code << ")\n";
+    });
+
+// 清除回调
+error_registry_t::instance().set_duplicate_warn_callback(nullptr);
 ```
 
 ### 单元测试
@@ -619,6 +632,10 @@ auto policy = error_registry_t::instance().get_duplicate_policy();
 | `register_errors_returns_count` | 批量注册返回成功数量 |
 | `register_errors_returns_zero_for_mismatched_arrays` | 数组长度不一致返回 0 |
 | `register_errors_with_overwrite_policy` | 批量注册使用 overwrite 策略 |
+| `duplicate_policy_warn_triggers_callback` | warn 策略触发回调函数 |
+| `duplicate_warn_callback_can_be_set_and_get` | 设置和获取警告回调 |
+| `duplicate_warn_callback_not_called_on_first_registration` | 首次注册不触发回调 |
+| `duplicate_warn_keeps_original_metadata` | warn 策略保留原始元数据 |
 
 ### 宏注册（推荐）
 
