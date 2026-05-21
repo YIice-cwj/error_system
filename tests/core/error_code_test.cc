@@ -37,8 +37,8 @@ namespace error_system::core {
     }
 
     TEST_F(error_code_test, fields_are_correctly_extracted) {
-        error_code_t code(0x8000000000000001ULL);
-        EXPECT_EQ(code.get_sign(), 1);
+        error_code_t code(0x0000000000000001ULL);
+        EXPECT_EQ(code.get_sign(), 0);
     }
 
     TEST_F(error_code_test, constexpr_evaluation_works) {

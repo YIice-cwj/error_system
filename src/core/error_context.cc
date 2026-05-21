@@ -25,7 +25,7 @@ namespace error_system::core {
      * @return bool 有效则返回true
      */
     error_context_t::operator bool() const noexcept {
-        return code.get_code() != 0;
+        return code.get_code();
     }
 
     /**

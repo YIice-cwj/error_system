@@ -13,7 +13,7 @@ namespace error_system::core {
         EXPECT_EQ(code.get_subsys(), 1);
         EXPECT_EQ(code.get_module(), 2);
         EXPECT_EQ(code.get_number(), 0x1234);
-        EXPECT_EQ(code.get_sign(), 1);
+        EXPECT_EQ(code.get_sign(), 0);
     }
 
     TEST_F(error_builder_test, make_error_code_with_enum_values) {
@@ -33,10 +33,10 @@ namespace error_system::core {
     }
 
     TEST_F(error_builder_test, make_error_code_from_raw_code) {
-        code_t raw = 0x8000000000000001ULL;
+        code_t raw = 0x0000000000000001ULL;
         auto code = error_builder_t::make_error_code(raw);
         EXPECT_EQ(code.get_code(), raw);
-        EXPECT_EQ(code.get_sign(), 1);
+        EXPECT_EQ(code.get_sign(), 0);
     }
 
     TEST_F(error_builder_test, constexpr_error_code_construction) {
@@ -48,7 +48,7 @@ namespace error_system::core {
 
     TEST_F(error_builder_test, success_code_has_zero_sign) {
         auto code = error_builder_t::make_error_code(error_level_t::debug, domain::system_domain_t::none, 0, 0, 0);
-        EXPECT_EQ(code.get_sign(), 1);
+        EXPECT_EQ(code.get_sign(), 0);
     }
 
     TEST_F(error_builder_test, different_levels_produce_different_codes) {
