@@ -1,8 +1,9 @@
 #pragma once
 #include <filesystem>
+// IWYU pragma: begin_exports
 #include <fstream>
+// IWYU pragma: end_exports
 #include <optional>
-#include <system_error>
 
 /**
  * @file file_util.h

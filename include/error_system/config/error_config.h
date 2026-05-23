@@ -2,10 +2,11 @@
 #include "error_system/core/error_level.h"
 #include <atomic>
 // IWYU pragma: begin_exports
+#include <functional>
 #include <mutex>
+#include <string>
 // IWYU pragma: end_exports
 #include <shared_mutex>
-#include <string>
 /**
  * @brief 错误配置类
  * @details 封装错误配置信息

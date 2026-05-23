@@ -3,9 +3,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 // IWYU pragma: begin_exports
 #include <algorithm>
@@ -21,12 +21,136 @@
  * @copyright Copyright (c) 2026
  */
 namespace error_system::utils {
+    namespace {
+        /**
+         * @brief 检查类型 T 是否具有成员函数 to_string()
+         * @tparam T 待检查类型
+         * @details 基于 SFINAE 检测 T::to_string() 是否存在
+         *          默认模板（无匹配时）继承 std::false_type
+         * @return bool 是否有成员函数 to_string()
+         */
+        template <typename T, typename = std::void_t<>>
+        struct is_member_to_string_t : std::false_type {};
 
+        /**
+         * @brief 检查类型 T 是否具有成员函数 to_string()
+         * @tparam T 待检查类型
+         * @details 基于 SFINAE 检测 T::to_string() 是否存在
+         *          默认模板（无匹配时）继承 std::false_type
+         * @return bool 是否有成员函数 to_string()
+         */
+        template <typename T>
+        struct is_member_to_string_t<T, std::void_t<decltype(std::declval<const T&>().to_string())>>
+            : std::is_convertible<decltype(std::declval<const T&>().to_string()), std::string_view> {};
+        /**
+         * @brief 检查类型 T 是否具有全局函数 to_string()
+         * @tparam T 待检查类型
+         * @details 基于 SFINAE 检测 to_string(T) 是否存在
+         *          默认模板（无匹配时）继承 std::false_type
+         * @return bool 是否有全局函数 to_string()
+         */
+        template <typename T, typename = std::void_t<>>
+        struct is_global_to_string_t : std::false_type {};
+
+        /**
+         * @brief 检查类型 T 是否具有全局函数 to_string()
+         * @tparam T 待检查类型
+         * @details 基于 SFINAE 检测 to_string(T) 是否存在
+         *          默认模板（无匹配时）继承 std::false_type
+         * @return bool 是否有全局函数 to_string()
+         */
+        template <typename T>
+        struct is_global_to_string_t<T, std::void_t<decltype(to_string(std::declval<const T&>()))>>
+            : std::is_convertible<decltype(to_string(std::declval<const T&>())), std::string_view> {};
+
+        /**
+         * @brief 检查类型 T 是否具有成员函数 to_string()
+         * @tparam T 待检查类型
+         * @details 基于 SFINAE 检测 T::to_string() 是否存在
+         *          默认模板（无匹配时）继承 std::false_type
+         * @return bool 是否有成员函数 to_string()
+         */
+        template <typename T>
+        constexpr bool is_member_to_string_v = is_member_to_string_t<T>::value;
+
+        /**
+         * @brief 检查类型 T 是否具有全局函数 to_string()
+         * @tparam T 待检查类型
+         * @details 基于 SFINAE 检测 to_string(T) 是否存在
+         *          默认模板（无匹配时）继承 std::false_type
+         * @return bool 是否有全局函数 to_string()
+         */
+        template <typename T>
+        constexpr bool is_global_to_string_v = is_global_to_string_t<T>::value;
+
+    }  // namespace
     /**
      * @brief 字符串工具函数
      * @details 定义字符串相关的工具函数，用于处理字符串
      */
     class string_utils_t {
+        private:
+        struct format_appender {
+            std::string& result;
+            std::string_view format;
+            size_t cursor = 0;
+
+            template <typename T>
+            void append_value(const T& value) noexcept {
+                size_t pos = format.find("{}", cursor);
+                if (pos == std::string_view::npos) {
+                    return;
+                }
+                result.append(format.data() + cursor, pos - cursor);
+                cursor = pos + 2;
+
+                if constexpr (std::is_convertible_v<T, std::string_view>) {
+                    result.append(std::string_view(value));
+                } else if constexpr (std::is_same_v<T, char>) {
+                    result.push_back(value);
+                } else if constexpr (std::is_pointer_v<std::decay_t<T>>) {
+                    if (value == nullptr) {
+                        result.append("nullptr");
+                    } else {
+                        result.append("0x");
+                        uintptr_t addr = reinterpret_cast<uintptr_t>(value);
+                        std::array<char, 32> buffer;
+                        auto [pointer, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), addr, 16);
+                        if (error == std::errc{}) {
+                            result.append(buffer.data(), pointer - buffer.data());
+                        }
+                    }
+                } else if constexpr (std::is_convertible_v<T, std::string_view>) {
+                    result.append(std::string_view(value));
+                } else if constexpr (std::is_same_v<T, char>) {
+                    result.push_back(value);
+                } else if constexpr (std::is_arithmetic_v<T>) {
+                    if constexpr (std::is_same_v<std::decay_t<T>, bool>) {
+                        result.append(value ? "true" : "false");
+                    } else {
+                        std::array<char, 64> buffer;
+                        auto [pointer, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
+                        if (error == std::errc{}) {
+                            result.append(buffer.data(), pointer - buffer.data());
+                        }
+                    }
+                } else if constexpr (is_member_to_string_v<T>) {
+                    result.append(value.to_string());
+                } else if constexpr (is_global_to_string_v<T>) {
+                    using namespace std;
+                    result.append(to_string(value));
+                } else {
+                    result.append("[unsupported type]");
+                }
+            }
+
+            void finish() noexcept {
+                if (cursor < format.size()) {
+                    result.append(format.data() + cursor, format.size() - cursor);
+                }
+            }
+        };
+
         private:
         string_utils_t() = delete;
 
@@ -39,29 +163,6 @@ namespace error_system::utils {
         string_utils_t(string_utils_t&&) = delete;
 
         string_utils_t& operator=(string_utils_t&&) = delete;
-
-        private:
-        /**
-         * @brief 格式化字符串(结束函数)
-         * @details 格式化字符串，将字符串中的占位符替换为实际值
-         */
-        static inline void __format(std::string&, size_t) {}
-
-        /**
-         * @brief 格式化字符串(递归函数)
-         * @details 格式化字符串，将字符串中的占位符替换为实际值
-         */
-        template <typename T, typename... Args>
-        static inline void __format(std::string& string, size_t start_pos, const T& value, const Args&... args) {
-            size_t pos = string.find("{}", start_pos);
-            if (pos != std::string::npos) {
-                std::ostringstream oss;
-                oss << value;
-                std::string value_str = oss.str();
-                string.replace(pos, 2, value_str);
-                __format(string, pos + value_str.length(), args...);
-            }
-        }
 
         public:
         /**
@@ -145,9 +246,17 @@ namespace error_system::utils {
          * @return std::string 格式化后的字符串
          */
         template <typename... Args>
-        static inline std::string format(std::string_view format, Args&&... args) {
-            std::string result(format);
-            __format(result, 0, std::forward<Args>(args)...);
+        static inline std::string format(std::string_view format, Args&&... args) noexcept {
+            std::string result{};
+
+            result.reserve(format.size() + (sizeof...(args) * 16));
+
+            format_appender appender{result, format, 0};
+
+            (appender.append_value(std::forward<Args>(args)), ...);
+
+            appender.finish();
+
             return result;
         }
 
