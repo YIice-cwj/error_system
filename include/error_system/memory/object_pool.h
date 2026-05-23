@@ -106,8 +106,8 @@ namespace error_system::memory {
          * @return object_pool_t<value_type, Capacity>& 线程局部对象池引用
          */
         static object_pool_t<value_type, Capacity>& instance_thread_local() noexcept {
-            static thread_local object_pool_t<value_type, Capacity> instance;
-            return instance;
+            static thread_local object_pool_t<value_type, Capacity> instance_threads;
+            return instance_threads;
         }
     };
 

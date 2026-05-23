@@ -74,46 +74,51 @@ namespace error_system::core {
         template <typename... Args>
         error_context_t(code_with_location_t code_with, std::string format = "", Args&&... args) noexcept
             : code(code_with.code), message(utils::string_utils_t::format(format, std::forward<Args>(args)...)) {
-            if (code.get_code() != 0) {
-                if (config::error_config_t::is_validation_enabled()) {
-                    if (!error_registry_t::instance().is_registered(code)) {
-                        payload["illegal_raw_code"] = std::to_string(code.get_code());
-                        message = "[UNREGISTERED CODE] " + message;
-                        this->code = error_builder_t::make_error_code(
-                            error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFF);
-                    }
+            if (is_success()) {
+                return;
+            }
+
+            if (config::error_config_t::is_validation_enabled()) {
+                if (!error_registry_t::instance().is_registered(code)) {
+                    payload["illegal_raw_code"] = std::to_string(code.get_code());
+                    message = "[UNREGISTERED CODE] " + message;
+                    this->code = error_builder_t::make_error_code(
+                        error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFF);
                 }
+            }
 
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
-                if (config::error_config_t::is_stacktrace_enabled() &&
-                    code.get_level() >= config::error_config_t::get_stacktrace_level()) {
-                    stack_frames = utils::stack_trace_utils_t::generate(1);
-                }
+            if (config::error_config_t::is_stacktrace_enabled() &&
+                code.get_level() >= config::error_config_t::get_stacktrace_level()) {
+                stack_frames = utils::stack_trace_utils_t::generate(1);
+            }
 #endif
 
 #ifdef ERROR_SYSTEM_ENABLE_LOCATION
-                if (config::error_config_t::is_source_location_enabled()) {
-                    if (config::error_config_t::is_short_filename_enabled()) {
-                        file_name = utils::extract_short_filename(code_with.source_location.file_name());
-                    } else {
-                        file_name = code_with.source_location.file_name();
-                    }
-                    function_name = code_with.source_location.function_name();
-                    line_number = code_with.source_location.line();
+            if (config::error_config_t::is_source_location_enabled()) {
+                if (config::error_config_t::is_short_filename_enabled()) {
+                    file_name = utils::extract_short_filename(code_with.source_location.file_name());
+                } else {
+                    file_name = code_with.source_location.file_name();
                 }
-#endif
-
-                if (code.get_code() != 0) {
-                    notify_plugins(*this);
-                }
+                function_name = code_with.source_location.function_name();
+                line_number = code_with.source_location.line();
             }
+#endif
+            notify_plugins(*this);
         }
 
         /**
-         * @brief 检查错误上下文是否有效
-         * @return bool 有效则返回true
+         * @brief 检查错误上下文是否成功
+         * @return bool 成功则返回true
          */
-        explicit operator bool() const noexcept;
+        bool is_success() const noexcept;
+
+        /**
+         * @brief 检查错误上下文是否包含错误
+         * @return bool 包含错误则返回true
+         */
+        bool is_error() const noexcept;
 
         /**
          * @brief 包装底层错误上下文

@@ -74,18 +74,18 @@ namespace error_system::core {
                                           const std::string_view description) noexcept {
         std::unique_lock<std::shared_mutex> lock(index_mutex_);
 
-        code_t raw_code = code.get_code();
-        auto it = primary_index_.find(raw_code);
+        code_t identity_code = code.get_identity_code();
+        auto it = primary_index_.find(identity_code);
         if (it != primary_index_.end()) {
-            if (!__apply_duplicate_policy(raw_code)) {
+            if (!__apply_duplicate_policy(identity_code)) {
                 return;
             }
         }
 
         error_metadata_t meta{
             std::string(name), std::string(description), code.get_module(), code.get_number(), code.get_level()};
-        primary_index_.emplace(raw_code, meta);
-        module_index_[code.get_module_group_id()].push_back(raw_code);
+        primary_index_.emplace(identity_code, meta);
+        module_index_[code.get_module_group_id()].push_back(identity_code);
     }
 
     /**
@@ -105,10 +105,10 @@ namespace error_system::core {
 
         size_t registered_count = 0;
         for (size_t i = 0; i < codes.size(); ++i) {
-            code_t raw_code = codes[i].get_code();
-            auto it = primary_index_.find(raw_code);
+            code_t identity_code = codes[i].get_identity_code();
+            auto it = primary_index_.find(identity_code);
             if (it != primary_index_.end()) {
-                if (!__apply_duplicate_policy(raw_code)) {
+                if (!__apply_duplicate_policy(identity_code)) {
                     continue;
                 }
             }
@@ -119,8 +119,8 @@ namespace error_system::core {
                                   codes[i].get_number(),
                                   codes[i].get_level()};
 
-            primary_index_.emplace(raw_code, meta);
-            module_index_[codes[i].get_module_group_id()].push_back(raw_code);
+            primary_index_.emplace(identity_code, meta);
+            module_index_[codes[i].get_module_group_id()].push_back(identity_code);
             ++registered_count;
         }
         return registered_count;
@@ -133,8 +133,8 @@ namespace error_system::core {
     void error_registry_t::unregister_error(const error_code_t code) noexcept {
         std::unique_lock<std::shared_mutex> lock(index_mutex_);
 
-        code_t raw_code = code.get_code();
-        auto it = primary_index_.find(raw_code);
+        code_t identity_code = code.get_identity_code();
+        auto it = primary_index_.find(identity_code);
         if (it == primary_index_.end()) {
             return;
         }
@@ -142,7 +142,7 @@ namespace error_system::core {
         auto mod_it = module_index_.find(group_id);
         if (mod_it != module_index_.end()) {
             auto& vec = mod_it->second;
-            vec.erase(std::remove(vec.begin(), vec.end(), raw_code), vec.end());
+            vec.erase(std::remove(vec.begin(), vec.end(), identity_code), vec.end());
             if (vec.empty()) {
                 module_index_.erase(mod_it);
             }
@@ -158,12 +158,12 @@ namespace error_system::core {
         std::unique_lock<std::shared_mutex> lock(index_mutex_);
         for (auto it = primary_index_.begin(); it != primary_index_.end(); ++it) {
             if (it->second.name == name) {
-                code_t raw_code = it->first;
-                uint64_t group_id = error_code_t(raw_code).get_module_group_id();
+                code_t identity_code = it->first;
+                uint64_t group_id = error_code_t(identity_code).get_module_group_id();
                 auto mod_it = module_index_.find(group_id);
                 if (mod_it != module_index_.end()) {
                     auto& vec = mod_it->second;
-                    vec.erase(std::remove(vec.begin(), vec.end(), raw_code), vec.end());
+                    vec.erase(std::remove(vec.begin(), vec.end(), identity_code), vec.end());
                     if (vec.empty()) {
                         module_index_.erase(mod_it);
                     }
@@ -206,7 +206,7 @@ namespace error_system::core {
      */
     bool error_registry_t::is_registered(const error_code_t code) const noexcept {
         std::shared_lock<std::shared_mutex> lock(index_mutex_);
-        return primary_index_.find(code.get_code()) != primary_index_.end();
+        return primary_index_.find(code.get_identity_code()) != primary_index_.end();
     }
 
     /**
@@ -216,7 +216,7 @@ namespace error_system::core {
      */
     std::optional<error_metadata_t> error_registry_t::get_info(const error_code_t code) const noexcept {
         std::shared_lock<std::shared_mutex> lock(index_mutex_);
-        auto it = primary_index_.find(code.get_code());
+        auto it = primary_index_.find(code.get_identity_code());
         if (it != primary_index_.end()) {
             return it->second;
         }

@@ -21,11 +21,21 @@ namespace error_system::core {
     }
 
     /**
-     * @brief 检查错误上下文是否有效
-     * @return bool 有效则返回true
+     * @brief 检查错误上下文是否包含错误
+     * @details sign位为1表示有错误，0表示成功
+     * @return bool 包含错误则返回true
      */
-    error_context_t::operator bool() const noexcept {
-        return code.get_code();
+    bool error_context_t::is_error() const noexcept {
+        return code.get_sign();
+    }
+
+    /**
+     * @brief 检查错误上下文是否成功（无错误）
+     * @details sign位为0表示成功，1表示错误
+     * @return bool 成功则返回true
+     */
+    bool error_context_t::is_success() const noexcept {
+        return !code.get_sign();
     }
 
     /**
@@ -36,7 +46,7 @@ namespace error_system::core {
     error_context_t error_context_t::wrap(const error_context_t& underlying) const noexcept {
         error_context_t new_code_context = *this;
 
-        object_pool_t& object_pool = object_pool_t::instance_thread_local();
+        object_pool_t& object_pool = object_pool_t::instance();
         error_context_t* context_pointer = object_pool.acquire();
         if (context_pointer) {
             *context_pointer = underlying;
@@ -59,14 +69,14 @@ namespace error_system::core {
     error_context_t error_context_t::wrap(error_context_t&& underlying) const noexcept {
         error_context_t new_code_context = *this;
 
-        object_pool_t& object_pool = object_pool_t::instance_thread_local();
+        object_pool_t& object_pool = object_pool_t::instance();
         error_context_t* context_pointer = object_pool.acquire();
         if (context_pointer) {
             *context_pointer = std::move(underlying);
             new_code_context.cause =
                 std::shared_ptr<error_context_t>(context_pointer, [](error_context_t* context_pointer) -> void {
                     *context_pointer = error_context_t{};
-                    object_pool_t::instance_thread_local().release(context_pointer);
+                    object_pool_t::instance().release(context_pointer);
                 });
         } else {
             new_code_context.cause = std::make_shared<error_context_t>(std::move(underlying));

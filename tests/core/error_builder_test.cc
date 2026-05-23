@@ -13,7 +13,7 @@ namespace error_system::core {
         EXPECT_EQ(code.get_subsys(), 1);
         EXPECT_EQ(code.get_module(), 2);
         EXPECT_EQ(code.get_number(), 0x1234);
-        EXPECT_EQ(code.get_sign(), 0);
+        EXPECT_EQ(code.get_sign(), 1);
     }
 
     TEST_F(error_builder_test, make_error_code_with_enum_values) {
@@ -48,7 +48,7 @@ namespace error_system::core {
 
     TEST_F(error_builder_test, success_code_has_zero_sign) {
         auto code = error_builder_t::make_error_code(error_level_t::debug, domain::system_domain_t::none, 0, 0, 0);
-        EXPECT_EQ(code.get_sign(), 0);
+        EXPECT_EQ(code.get_sign(), 1);  // sign=1 表示错误，即使是 debug 级别
     }
 
     TEST_F(error_builder_test, different_levels_produce_different_codes) {

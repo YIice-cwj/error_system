@@ -75,16 +75,39 @@ namespace error_system::core {
         const error_context_t& error() const noexcept { return std::get<error_context_t>(value_or_error_); }
 
         /**
-         * @brief 获取成功值
+         * @brief 获取成功值（不安全，仅在 is_success() 时调用）
          * @return const value_type& 成功值
          */
         const value_type& value() const noexcept { return std::get<value_type>(value_or_error_); }
 
         /**
-         * @brief 获取成功值
+         * @brief 获取成功值（不安全，仅在 is_success() 时调用）
          * @return value_type& 成功值
          */
         value_type& value() noexcept { return std::get<value_type>(value_or_error_); }
+
+        /**
+         * @brief 安全获取成功值指针
+         * @return const value_type* 成功值指针，如果为错误则返回 nullptr
+         */
+        const value_type* value_pointer() const noexcept {
+            return is_success() ? &std::get<value_type>(value_or_error_) : nullptr;
+        }
+
+        /**
+         * @brief 安全获取成功值指针
+         * @return value_type* 成功值指针，如果为错误则返回 nullptr
+         */
+        value_type* value_pointer() noexcept { return is_success() ? &std::get<value_type>(value_or_error_) : nullptr; }
+
+        /**
+         * @brief 安全获取成功值，失败时返回默认值
+         * @param default_value 默认值
+         * @return value_type 成功值或默认值
+         */
+        value_type value_or(value_type default_value) const noexcept {
+            return is_success() ? std::get<value_type>(value_or_error_) : std::move(default_value);
+        }
 
         /**
          * @brief 对结果进行链式操作（右值引用版本）
@@ -187,7 +210,7 @@ namespace error_system::core {
          * @brief 检查结果是否为错误
          * @return bool 如果结果为错误则返回true
          */
-        bool is_error() const noexcept { return static_cast<bool>(error_context_); }
+        bool is_error() const noexcept { return error_context_.is_error(); }
 
         /**
          * @brief 检查结果是否为成功

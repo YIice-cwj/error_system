@@ -120,10 +120,7 @@ namespace error_system::utils {
                             result.append(buffer.data(), pointer - buffer.data());
                         }
                     }
-                } else if constexpr (std::is_convertible_v<T, std::string_view>) {
-                    result.append(std::string_view(value));
-                } else if constexpr (std::is_same_v<T, char>) {
-                    result.push_back(value);
+
                 } else if constexpr (std::is_arithmetic_v<T>) {
                     if constexpr (std::is_same_v<std::decay_t<T>, bool>) {
                         result.append(value ? "true" : "false");

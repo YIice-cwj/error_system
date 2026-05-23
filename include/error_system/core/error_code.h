@@ -42,7 +42,7 @@ namespace error_system::core {
         static constexpr uint32_t MODULE_SHIFT = 16;    // 模块位移
         static constexpr uint32_t NUMBER_SHIFT = 0;     // 错误编号位移
 
-        static constexpr uint64_t SIGN_MASK = 0x0ULL;       // 1 bit
+        static constexpr uint64_t SIGN_MASK = 0x1ULL;       // 1 bit
         static constexpr uint64_t RESERVED_MASK = 0x7ULL;   // 3 bits
         static constexpr uint64_t LEVEL_MASK = 0xFULL;      // 4 bits
         static constexpr uint64_t SYSTEM_MASK = 0xFFULL;    // 8 bits
@@ -75,11 +75,27 @@ namespace error_system::core {
         constexpr uint8_t get_sign() const noexcept { return static_cast<uint8_t>((code_ >> SIGN_SHIFT) & SIGN_MASK); }
 
         /**
+         * @brief 设置符号位
+         * @param sign 符号位值 (0 表示成功，1 表示错误)
+         */
+        constexpr void set_sign(uint8_t sign) noexcept {
+            code_ = (code_ & ~SIGN_MASK) | (static_cast<code_t>(sign) << SIGN_SHIFT);
+        }
+
+        /**
          * @brief 获取预留位
          * @return uint8_t 预留位 (bits 62-60)
          */
         constexpr uint8_t get_reserved() const noexcept {
             return static_cast<uint8_t>((code_ >> RESERVED_SHIFT) & RESERVED_MASK);
+        }
+
+        /**
+         * @brief 设置预留位
+         * @param reserved 预留位值 (0-7)
+         */
+        constexpr void set_reserved(uint8_t reserved) noexcept {
+            code_ = (code_ & ~RESERVED_MASK) | (static_cast<code_t>(reserved) << RESERVED_SHIFT);
         }
 
         /**
@@ -128,6 +144,15 @@ namespace error_system::core {
          * @return uint64_t 模块的聚合隔离 ID
          */
         constexpr module_group_id_t get_module_group_id() const noexcept { return code_ & 0x0000FFFFFFFF0000ULL; }
+
+        /**
+         * @brief 获取清除符号位和预留位后的错误码
+         * @details 返回符号位(bit63)和预留位(bits62-60)被置0后的错误码值，用于注册和查询时统一忽略这些差异
+         * @return code_t 清除符号位和预留位后的64位错误码值
+         */
+        constexpr code_t get_identity_code() const noexcept {
+            return code_ & ~((SIGN_MASK << SIGN_SHIFT) | (RESERVED_MASK << RESERVED_SHIFT));
+        }
 
         /**
          * @brief 类型转换运算符

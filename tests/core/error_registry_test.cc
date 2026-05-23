@@ -218,7 +218,7 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "SECOND", "Second description");
 
         EXPECT_TRUE(callback_called);
-        EXPECT_EQ(captured_code, code.get_code());
+        EXPECT_EQ(captured_code, code.get_identity_code());
         EXPECT_EQ(captured_name, "FIRST");
 
         // 恢复默认回调
