@@ -288,11 +288,14 @@ error_context_t(code_with_location_t code_with, std::string format = "", Args&&.
 ### 方法
 
 ```cpp
-// 判断是否为有效错误（code != 0）
-explicit operator bool() const noexcept;
+// 检查是否成功（无错误）
+bool is_success() const noexcept;
+
+// 检查是否包含错误
+bool is_error() const noexcept;
 
 // 包装因果链：将 underlying 作为 this 的 cause
-// 优先使用线程局部对象池分配，池满时回退到堆分配
+// 优先使用对象池分配，池满时回退到堆分配
 error_context_t wrap(const error_context_t& underlying) const noexcept;
 error_context_t wrap(error_context_t&& underlying) const noexcept;
 
@@ -389,6 +392,28 @@ result_t<void> r4 = error_context_t{some_code, "操作失败"};   // 错误
 
 // void 特化支持格式化构造
 result_t<void> r5(some_code, "操作失败: {}", "原因");  // 错误，带格式化消息
+```
+
+### 方法
+
+```cpp
+// 检查状态
+bool is_success() const noexcept;
+bool is_error() const noexcept;
+
+// 获取错误上下文（不安全，仅在 is_error() 时调用）
+const error_context_t& error() const noexcept;
+
+// 获取成功值（不安全，仅在 is_success() 时调用）
+const value_type& value() const noexcept;
+value_type& value() noexcept;
+
+// 安全获取成功值指针
+const value_type* value_pointer() const noexcept;
+value_type* value_pointer() noexcept;
+
+// 安全获取成功值，失败时返回默认值
+value_type value_or(value_type default_value) const noexcept;
 ```
 
 ### 链式操作
