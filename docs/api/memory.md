@@ -1,175 +1,157 @@
-# Memory 层 API 文档
+# Memory 层 API 参考
 
-> 命名空间：`error_system::memory`
-
-Memory 层提供高性能的内存管理组件，主要用于优化高频错误上下文创建场景下的内存分配。
+> 命名空间: `error_system::memory`
 
 ---
 
-## object_pool_t
+## object_pool_t\<T, Capacity\>
 
-**头文件**：`error_system/memory/object_pool.h`
+线程局部对象池，用于减少高频场景下的堆内存分配开销。特别适用于 `error_context_t` 因果链节点的分配。
 
-线程安全的对象池模板类，预先分配固定大小的内存，避免频繁的动态内存分配。适用于高频创建/销毁 `error_context_t` 等对象的场景。
+### 核心 API
+
+```cpp
+template<typename T, size_t Capacity = 64>
+class object_pool_t {
+public:
+    static object_pool_t& instance_thread_local() noexcept;
+
+    T* acquire() noexcept;
+    void release(T* ptr) noexcept;
+    void clear() noexcept;
+
+    size_t size() const noexcept;
+    size_t capacity() const noexcept;
+    bool empty() const noexcept;
+    bool full() const noexcept;
+};
+```
 
 ### 模板参数
 
-| 参数 | 说明 |
-|------|------|
-| `T` | 对象类型 |
-| `Capacity` | 对象池容量，编译期确定 |
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `T` | - | 池化对象类型 |
+| `Capacity` | `64` | 对象池容量 |
 
-### 类型定义
+### 线程安全
 
-```cpp
-using value_type = T;
-using size_type = size_t;
-using difference_type = std::ptrdiff_t;
-using pointer = T*;
-using const_pointer = const T*;
-using reference = T&;
-using const_reference = const T&;
-```
-
-### 方法
+`object_pool_t` 使用线程局部存储（TLS），每个线程拥有独立的池实例，无需加锁：
 
 ```cpp
-// 构造函数
-object_pool_t() noexcept;
+// 线程 A
+auto& pool_a = object_pool_t<error_context_t>::instance_thread_local();
+auto* ptr = pool_a.acquire();  // 无锁操作
 
-// 析构函数
-~object_pool_t();
-
-// 从对象池获取对象
-pointer acquire() noexcept;
-
-// 归还对象到对象池
-void release(pointer& object) noexcept;
-
-// 获取对象池容量
-size_type capacity() const noexcept;
-
-// 获取对象池当前对象数量
-size_type size() const noexcept;
-
-// 检查对象池是否为空
-bool empty() const noexcept;
-
-// 检查对象池是否已满
-bool full() const noexcept;
-
-// 获取单例对象池（全局唯一）
-static object_pool_t<value_type, Capacity>& instance() noexcept;
-
-// 获取线程局部对象池（每个线程独立）
-static object_pool_t<value_type, Capacity>& instance_thread_local() noexcept;
-```
-
-### 工作原理
-
-对象池使用**空闲链表**算法管理内存：
-
-1. **初始化**：预先分配 `Capacity` 个对象和索引数组
-2. **获取对象** (`acquire`)：从空闲链表头部取出一个对象
-3. **归还对象** (`release`)：将对象放回空闲链表头部
-4. **池满处理**：当池满时 `acquire()` 返回 `nullptr`
-
-```
-对象池内存布局：
-┌─────────────────────────────────────────────────────┐
-│  objects_ [Capacity]                                │
-│  ┌─────┬─────┬─────┬─────┬─────┬─────┐             │
-│  │ T[0]│ T[1]│ T[2]│ T[3]│ ... │T[N-1]│             │
-│  └─────┴─────┴─────┴─────┴─────┴─────┘             │
-├─────────────────────────────────────────────────────┤
-│  next_indexs_ [Capacity]                            │
-│  ┌─────┬─────┬─────┬─────┬─────┬─────┐             │
-│  │  0  │  1  │  2  │  3  │ ... │ N-1 │  ← 空闲索引 │
-│  └─────┴─────┴─────┴─────┴─────┴─────┘             │
-├─────────────────────────────────────────────────────┤
-│  next_index_ = 0                                    │
-│  count_ = 0                                         │
-└─────────────────────────────────────────────────────┘
+// 线程 B
+auto& pool_b = object_pool_t<error_context_t>::instance_thread_local();
+auto* ptr2 = pool_b.acquire();  // 无锁操作，与线程 A 互不干扰
 ```
 
 ### 使用示例
 
 ```cpp
-#include "error_system/memory/object_pool.h"
-
 using namespace error_system::memory;
 
-// 定义对象池类型
-using context_pool_t = object_pool_t<error_context_t, 100>;
+// 获取线程局部对象池
+auto& pool = object_pool_t<error_context_t>::instance_thread_local();
 
-// 获取全局单例对象池
-auto& pool = context_pool_t::instance();
-
-// 获取对象
-error_context_t* ctx = pool.acquire();
-if (ctx != nullptr) {
+// 从池中获取对象
+error_context_t* ptr = pool.acquire();
+if (ptr) {
     // 使用对象
-    new (ctx) error_context_t(code, "错误信息");
-    
-    // ... 使用 ctx ...
-    
-    // 销毁对象（调用析构函数）
-    ctx->~error_context_t();
-    
-    // 归还对象池
-    pool.release(ctx);
-}
+    *ptr = error_context_t(code, "错误信息");
 
-// 获取线程局部对象池（无锁，更高性能）
-auto& thread_pool = context_pool_t::instance_thread_local();
+    // 使用完后归还到池中
+    pool.release(ptr);
+}
 ```
 
-### 性能特点
+### 与 error_context_t 集成
 
-| 特性 | 说明 |
-|------|------|
-| O(1) 获取/归还 | 空闲链表实现，常数时间复杂度 |
-| 无锁线程局部 | `instance_thread_local()` 提供无锁访问 |
-| 零动态分配 | 构造时一次性分配，运行时无堆分配 |
-| 内存连续性 | 对象数组连续存储，缓存友好 |
+`error_context_t::wrap()` 内部使用对象池优化因果链节点分配：
 
-### 注意事项
+```cpp
+error_context_t error_context_t::wrap(error_code_t new_code, std::string new_message) const {
+    error_context_t new_code_context;
+    new_code_context.code = new_code;
+    new_code_context.message = std::move(new_message);
 
-1. **对象生命周期管理**：获取的对象需要手动调用构造函数和析构函数
-2. **容量限制**：池满时 `acquire()` 返回 `nullptr`，需要处理回退逻辑
-3. **线程安全**：全局单例使用内部同步机制，线程局部实例无锁
-4. **对象重置**：归还前确保对象状态已清理，避免数据泄漏
+    // 尝试从对象池获取 cause 节点
+    object_pool_t& pool = object_pool_t::instance_thread_local();
+    error_context_t* ptr = pool.acquire();
+    if (ptr) {
+        *ptr = *this;
+        new_code_context.cause = std::shared_ptr<error_context_t>(
+            ptr,
+            [&pool](auto* p) { pool.release(p); }
+        );
+    } else {
+        // 池已满，回退到堆分配
+        new_code_context.cause = std::make_shared<error_context_t>(*this);
+    }
 
-### 单元测试
+    return new_code_context;
+}
+```
 
-测试文件：`tests/memory/object_pool_test.cc`
+### 性能优势
 
-| 测试用例 | 描述 |
-|----------|------|
-| `instance_returns_singleton` | 单例返回相同实例 |
-| `initial_state_is_empty` | 初始状态为空 |
-| `acquire_returns_valid_object` | 获取返回有效对象 |
-| `release_returns_object_to_pool` | 归还对象到对象池 |
-| `full_pool_returns_nullptr` | 池满返回 nullptr |
-| `acquire_after_release_works` | 释放后重新获取 |
-| `multiple_acquire_release_cycles` | 多次获取释放循环 |
-| `instance_thread_local_returns_different_instance` | 线程局部返回不同实例 |
-| `release_invalid_pointer_does_nothing` | 释放无效指针无操作 |
-| `capacity_matches_template_parameter` | 容量匹配模板参数 |
+| 场景 | 无对象池 | 有对象池 |
+|------|----------|----------|
+| 单次分配 | `new`/`delete` 系统调用 | 栈/预分配数组操作 |
+| 高频错误链（1000 次/秒） | 高 CPU、内存碎片 | 接近零分配开销 |
+| 线程竞争 | 需要锁或无锁算法 | 无需同步（TLS） |
+
+### 测试覆盖
+
+| 测试文件 | 用例数 | 覆盖内容 |
+|----------|--------|----------|
+| `tests/memory/object_pool_test.cc` | 10 | 获取/释放、容量限制、清空、线程安全 |
 
 ---
 
-## 测试总结
+## 使用建议
 
-Memory 层共包含 **1 个测试文件**，**10 个测试用例**：
+### 1. 适用场景
 
-| 模块 | 测试文件 | 测试数量 |
-|------|----------|----------|
-| object_pool | `tests/memory/object_pool_test.cc` | 10 |
+- **高频错误链构造**：如 RPC 调用链中的逐层错误包装
+- **短生命周期对象**：如临时 `error_context_t` 节点
+- **性能敏感路径**：如交易核心路径中的错误处理
 
-**运行测试**:
+### 2. 不适用场景
 
-```bash
-cd build
-ctest --output-on-failure
+- **长生命周期对象**：对象池中的对象不应长期持有
+- **大对象**：对象池适用于小型对象（如 `error_context_t`）
+- **跨线程共享**：每个线程有独立池，不适合跨线程传递
+
+### 3. 容量调优
+
+```cpp
+// 高频场景：增大容量
+using high_freq_pool = object_pool_t<error_context_t, 256>;
+
+// 低频场景：减小容量以节省内存
+using low_freq_pool = object_pool_t<error_context_t, 16>;
+```
+
+### 4. 自定义类型支持
+
+对象池支持任何可默认构造、可复制的类型：
+
+```cpp
+struct my_error_node_t {
+    int error_id{0};
+    std::string message;
+    std::chrono::system_clock::time_point timestamp;
+};
+
+auto& pool = object_pool_t<my_error_node_t, 128>::instance_thread_local();
+auto* node = pool.acquire();
+if (node) {
+    node->error_id = 404;
+    node->message = "Not Found";
+    node->timestamp = std::chrono::system_clock::now();
+    pool.release(node);
+}
 ```

@@ -33,36 +33,41 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 set(ERROR_JSON_DIR "${CMAKE_SOURCE_DIR}/config/errors")
 set(ERROR_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated_errors/include")
-set(PYTHON_SCRIPT "${CMAKE_SOURCE_DIR}/script/script_py/generate_error_codes.py")
+set(ERROR_DOCS_OUT_DIR "${CMAKE_BINARY_DIR}/generated_errors/docs")
+
 file(GLOB ERROR_JSON_FILES "${ERROR_JSON_DIR}/*.json")
 set(ALL_GENERATED_HEADERS "")
 
 foreach(JSON_FILE ${ERROR_JSON_FILES})
     get_filename_component(BASENAME ${JSON_FILE} NAME_WE)
     set(GENERATED_HEADER "${ERROR_GENERATED_DIR}/${BASENAME}.h")
-    
+
     add_custom_command(
         OUTPUT ${GENERATED_HEADER}
-        COMMAND Python3::Interpreter ${PYTHON_SCRIPT} ${JSON_FILE} ${ERROR_GENERATED_DIR}
-        DEPENDS ${JSON_FILE} ${PYTHON_SCRIPT}
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/script/script_py/generate_error_codes.py ${JSON_FILE} ${ERROR_GENERATED_DIR}
+        DEPENDS ${JSON_FILE} ${CMAKE_SOURCE_DIR}/script/script_py/generate_error_codes.py
         COMMENT "🔨 [Code Generation] 正在从 ${BASENAME}.json 生成 C++ 错误码头文件..."
     )
     list(APPEND ALL_GENERATED_HEADERS ${GENERATED_HEADER})
 endforeach()
 
-add_custom_target(GenerateErrorCodes DEPENDS ${ALL_GENERATED_HEADERS})
-
-set(DICT_SCRIPT "${CMAKE_SOURCE_DIR}/script/script_py/generate_error_dict.py")
 set(DICT_HEADER "${ERROR_GENERATED_DIR}/error_dict.h")
-
 add_custom_command(
     OUTPUT ${DICT_HEADER}
-    COMMAND Python3::Interpreter ${DICT_SCRIPT} ${ERROR_JSON_DIR} ${DICT_HEADER}
-    DEPENDS ${ERROR_JSON_FILES} ${DICT_SCRIPT}
+    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/script/script_py/generate_error_dict.py ${ERROR_JSON_DIR} ${DICT_HEADER}
+    DEPENDS ${ERROR_JSON_FILES} ${CMAKE_SOURCE_DIR}/script/script_py/generate_error_dict.py
     COMMENT "🔨 [Code Generation] 正在生成 O(1) 极速错误字典..."
 )
 
-add_custom_target(GenerateErrorDict DEPENDS ${DICT_HEADER})
+set(DOCS_MD_OUT "${ERROR_DOCS_OUT_DIR}/error_dictionary.md")
+add_custom_command(
+    OUTPUT ${DOCS_MD_OUT}
+    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/script/script_py/generate_error_docs.py ${ERROR_JSON_DIR} ${DOCS_MD_OUT}
+    DEPENDS ${ERROR_JSON_FILES} ${CMAKE_SOURCE_DIR}/script/script_py/generate_error_docs.py
+    COMMENT "📝 [Code Generation] 正在生成研发协作错误码字典文档..."
+)
+
+add_custom_target(GenerateErrorAssets DEPENDS ${ALL_GENERATED_HEADERS} ${DICT_HEADER} ${DOCS_MD_OUT})
 
 include_directories(${ERROR_GENERATED_DIR})
 
@@ -71,7 +76,7 @@ file(GLOB_RECURSE SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cc ${CMAKE_CURR
 add_library(${PROJECT_NAME} ${SOURCE_FILES})
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
-add_dependencies(${PROJECT_NAME} GenerateErrorCodes GenerateErrorDict)
+add_dependencies(${PROJECT_NAME} GenerateErrorAssets)
 
 include(GNUInstallDirs)
 

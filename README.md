@@ -4,7 +4,7 @@
 [![CMake](https://img.shields.io/badge/CMake-3.15%2B-green.svg)](https://cmake.org)
 [![GoogleTest](https://img.shields.io/badge/Tests-GoogleTest-yellow.svg)](https://github.com/google/googletest)
 
-这是一个基于 C++17 标准开发的高性能、高可扩展的全局错误码管理系统。它通过位域（Bitfields）将丰富的错误上下文信息封装在一个 64 位的整数中，提供了零开销的错误码构建与解析能力。
+这是一个基于 C++17 标准开发的高性能、高可扩展的全局错误码管理系统。它通过位移操作将丰富的错误上下文信息封装在一个 64 位的整数中，提供了零开销的错误码构建与解析能力。
 
 ---
 
@@ -24,7 +24,7 @@
 ## 核心特性 (Core Features)
 
 *   **现代 C++17**: 大量使用 `constexpr`，支持编译期错误码构建，提供极致性能。
-*   **零开销位域封装**: 采用 `union` 与位域结合的设计，直接在寄存器层面完成 64 位整数与各错误字段的转换。
+*   **零开销位移封装**: 采用明确的位移和掩码操作实现 64 位错误码字段拆解，100% 避免严格别名规则与位域排布未定义行为。
 *   **丰富的错误上下文**: 统一的 64 位错误码结构，包含了等级（Level）、系统域（Domain）、子系统（Subsystem）、模块（Module）和错误编号（Number），轻松实现问题的快速定位。
 *   **结构化负载 (Payload)**: `error_context_t` 支持键值对形式的结构化负载，方便附加任意调试信息。
 *   **自动堆栈跟踪**: 可配置的错误等级阈值，当错误等级达到阈值时自动捕获当前调用栈，加速问题定位。
@@ -32,7 +32,7 @@
 *   **插件系统 (Plugin)**: 提供可扩展的插件接口，支持日志、统计、告警等自定义错误处理能力的接入。
 *   **代码生成工具**: 提供 Python 脚本从 JSON 配置自动生成错误码定义头文件。
 *   **对象池优化**: `error_context_t` 的因果链包装使用线程局部对象池，减少高频场景下的堆分配开销。
-*   **完备的测试**: 深度集成 GoogleTest，199 个单元测试覆盖所有核心模块，确保逻辑坚如磐石。
+*   **完备的测试**: 深度集成 GoogleTest，16 个测试文件覆盖所有核心模块，确保逻辑坚如磐石。
 *   **异常封装**: 提供 `error_exception_t` 继承 `std::exception`，在需要异常机制的场景中无缝传递错误上下文。
 
 ---
@@ -45,8 +45,8 @@
 | :--- | :--- | :--- | :--- |
 | `63` | 1 | `sign` | 符号位（0=成功，1=错误） |
 | `60-62` | 3 | `reserved` | 预留位，供未来扩展使用 |
-| `56-59` | 4 | `level` | 错误等级（如 DEBUG, INFO, WARN, ERROR, FATAL） |
-| `48-55` | 8 | `system` | 系统域（区分 Database, Network, App 等） |
+| `56-59` | 4 | `level` | 错误等级（如 debug, info, warn, error, fatal） |
+| `48-55` | 8 | `system` | 系统域（区分 none, system, middleware, database, application, third_party 等） |
 | `32-47` | 16 | `subsys` | 子系统编号（最大 65535） |
 | `16-31` | 16 | `module` | 模块编号（最大 65535） |
 | `0-15` | 16 | `number` | 具体错误编号（最大 65535） |
@@ -196,9 +196,10 @@ DEFINE_ERROR_CODE(
     "数据库连接超时");
 
 // 使用
+auto& registry = error_registry_t::instance();
 if (registry.is_registered(ERR_DB_CONNECTION_TIMEOUT)) {
     auto info = registry.get_info(ERR_DB_CONNECTION_TIMEOUT);
-    std::cout << info->description << "\n";
+    std::cout << info->get().description << "\n";
 }
 ```
 
@@ -323,7 +324,7 @@ error_context_t ctx{db_error_code, "连接超时"};  // 触发数据库域处理
 │  └── error_exception_t (异常封装)                            │
 ├─────────────────────────────────────────────────────────────┤
 │  Domain Layer                                                │
-│  └── system_domain_t (18大系统域定义)                        │
+│  └── system_domain_t (6大系统域定义)                         │
 ├─────────────────────────────────────────────────────────────┤
 │  Plugin Layer                                                │
 │  ├── i_error_plugin_t   (插件抽象接口)                       │
@@ -336,8 +337,9 @@ error_context_t ctx{db_error_code, "连接超时"};  // 触发数据库域处理
 │  Utils Layer                                                 │
 │  ├── string_utils_t     (字符串处理: hash, trim, format...) │
 │  ├── json_utils_t       (JSON解析与字典)                     │
-│  ├── file_utils_t       (文件读写操作)                       │
-│  └── stack_trace_utils_t(跨平台堆栈跟踪)                     │
+│  ├── file_utils         (文件读写操作)                       │
+│  ├── stack_trace_utils_t(跨平台堆栈跟踪)                     │
+│  └── source_location_t  (源文件位置追踪)                     │
 ├─────────────────────────────────────────────────────────────┤
 │  Generated Layer                                             │
 │  └── 从 JSON 配置自动生成的错误码定义                        │
@@ -348,24 +350,12 @@ error_context_t ctx{db_error_code, "连接超时"};  // 触发数据库域处理
 
 | 系统域 | 枚举值 | 说明 |
 |--------|--------|------|
-| `system` | 0x00 | 系统基础 |
-| `kernel` | 0x01 | 内核/操作系统 |
-| `middleware` | 0x02 | 中间件 |
-| `application` | 0x03 | 应用程序 |
-| `service` | 0x04 | 服务层 |
-| `network` | 0x05 | 网络 |
-| `storage` | 0x06 | 存储 |
-| `database` | 0x07 | 数据库 |
-| `security` | 0x08 | 安全 |
-| `ai` | 0x09 | 人工智能 |
-| `cloud` | 0x0A | 云计算 |
-| `edge` | 0x0B | 边缘计算 |
-| `iot` | 0x0C | 物联网 |
-| `blockchain` | 0x0D | 区块链 |
-| `bigdata` | 0x0E | 大数据 |
-| `devops` | 0x0F | DevOps |
-| `distributed` | 0x10 | 分布式系统 |
-| `monitoring` | 0x11 | 监控告警 |
+| `none` | 0x00 | 无分类 / 未知 |
+| `system` | 0x01 | 系统与底层基础设施层 |
+| `middleware` | 0x02 | 中间件层 |
+| `database` | 0x03 | 数据库层 |
+| `application` | 0x04 | 内部业务应用/微服务层 |
+| `third_party` | 0x05 | 外部/第三方依赖层 |
 
 ---
 
@@ -398,7 +388,7 @@ auto dict = utils::json_dict_t::parse(R"({"user": {"name": "Alice"}})");
 std::string name = dict->get_value_or("user.name", "Unknown").value();
 ```
 
-### file_utils_t
+### file_utils
 
 跨平台文件读写工具：
 
@@ -451,13 +441,13 @@ ctest --output-on-failure
 
 | 模块 | 测试文件数 | 测试用例数 |
 |------|-----------|-----------|
-| Core 层 | 7 | 69+ |
+| Core 层 | 7 | 59+ |
 | Plugin 层 | 2 | 17 |
 | Memory 层 | 1 | 10 |
 | Utils 层 | 5 | 37+ |
 | Config 层 | 1 | 7 |
 | Translator 层 | 1 | 9 |
-| **总计** | **17** | **220** |
+| **总计** | **17** | **149+** |
 
 ### 安装到系统
 
@@ -521,53 +511,70 @@ error_system/
 ├── README.md                   # 项目说明
 ├── config/                     # 错误码配置文件
 │   └── errors/                 # JSON 格式的错误码定义
-│       └── trade_service_errors.json
+│       ├── payment_service_errors.json
+│       ├── redis_component_errors.json
+│       ├── trade_service_errors.json
+│       └── user_service_errors.json
 ├── include/error_system/       # 对外公开的头文件
 │   ├── config/                 # 配置层
 │   │   └── error_config.h      # 全局错误配置
 │   ├── core/                   # 核心定义
-│   │   ├── error_code_t        # 64位错误码数据类
-│   │   ├── error_builder_t     # 编译期错误码构建器
-│   │   ├── error_level_t       # 错误等级枚举
-│   │   ├── error_context_t     # 错误上下文
-│   │   ├── error_registry_t    # 错误码注册器
-│   │   ├── result_t            # 类Rust Result
-│   │   └── error_exception_t   # 异常封装
+│   │   ├── error_builder.h     # 编译期错误码构建器
+│   │   ├── error_code.h        # 64位错误码数据类
+│   │   ├── error_context.h     # 错误上下文
+│   │   ├── error_exception.h   # 异常封装
+│   │   ├── error_level.h       # 错误等级枚举
+│   │   ├── error_registry.h    # 错误码注册器
+│   │   └── result.h            # 类Rust Result
 │   ├── domain/                 # 系统域定义
-│   │   └── system_domain.h     # 18大系统域
-│   ├── plugin/                 # 插件系统接口
-│   │   ├── i_error_plugin.h
-│   │   ├── plugin_registry.h
-│   │   └── error_router_plugin.h
+│   │   └── system_domain.h     # 6大系统域
 │   ├── memory/                 # 内存管理
 │   │   └── object_pool.h       # 线程局部对象池
+│   ├── plugin/                 # 插件系统接口
+│   │   ├── error_router_plugin.h
+│   │   ├── i_error_plugin.h
+│   │   └── plugin_registry.h
+│   ├── translator/             # 翻译器
+│   │   └── error_translator.h
 │   └── utils/                  # 辅助工具
-│       ├── string_utils.h
-│       ├── json_utils.h
+│       ├── error_formatter.h
 │       ├── file_utils.h
+│       ├── json_lexer.h
+│       ├── json_utils.h
+│       ├── source_location.h
 │       ├── stack_trace_utils.h
-│       └── error_formatter.h
+│       └── string_utils.h
 ├── include/generated/          # 自动生成的错误码定义
-│   └── trade_service_errors.h
 ├── src/                        # 核心实现代码
 │   ├── core/                   # error_context, error_registry 实现
-│   ├── plugin/                 # plugin_registry 实现
+│   ├── plugin/                 # plugin_registry, error_router_plugin 实现
+│   ├── translator/             # error_translator 实现
 │   └── utils/                  # 工具函数实现
-├── tests/                      # GoogleTest 单元测试 (199 个测试用例)
-│   ├── core/                   # 核心层测试 (7 个文件)
-│   ├── plugin/                 # 插件层测试 (2 个文件)
-│   ├── memory/                 # 内存层测试 (1 个文件)
-│   ├── utils/                  # 工具库测试 (5 个文件)
-│   └── config/                 # 配置层测试 (1 个文件)
+├── tests/                      # GoogleTest 单元测试
+│   ├── config/                 # 配置层测试
+│   ├── core/                   # 核心层测试
+│   ├── domain/                 # 系统域测试
+│   ├── memory/                 # 内存层测试
+│   ├── plugin/                 # 插件层测试
+│   ├── translator/             # 翻译器测试
+│   └── utils/                  # 工具库测试
 ├── script/                     # 代码生成脚本
 │   ├── generate_errors.sh      # 批量生成错误码脚本
 │   └── script_py/
-│       └── generate_error_codes.py  # Python 生成工具
+│       ├── generate_error_codes.py
+│       ├── generate_error_dict.py
+│       └── generate_error_docs.py
 ├── examples/                   # 示例代码
 │   ├── demo01.cc               # 基础用法：错误码、上下文、序列化
 │   ├── demo02.cc               # result_t 错误处理和链式操作
 │   ├── demo03.cc               # 插件系统：日志、统计、路由
-│   └── demo04.cc               # 异常处理：error_exception_t
+│   ├── demo04.cc               # 异常处理：error_exception_t
+│   └── demo05.cc               # 更多示例
+├── docs/                       # 文档
+│   ├── api/                    # API 文档
+│   ├── architecture.md         # 架构设计
+│   ├── error_dictionary.md     # 错误码字典
+│   └── README.md               # 文档索引
 └── LICENSE                     # 许可证
 ```
 

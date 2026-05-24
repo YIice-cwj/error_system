@@ -14,13 +14,13 @@
 │  全局配置    │  核心数据结构  │  可扩展插件                      │
 ├──────────────┴────────────────┴──────────────────────────────────┤
 │  Domain 层                                                       │
-│  预定义的 18 大系统域                                            │
+│  预定义的 6 大系统域                                             │
 ├──────────────────────────────────────────────────────────────────┤
 │  Memory 层                                                       │
 │  线程局部对象池 (object_pool_t)，优化高频内存分配                │
 ├──────────────────────────────────────────────────────────────────┤
 │  Utils 层                                                        │
-│  通用工具 (字符串、JSON、文件、堆栈跟踪等)                       │
+│  通用工具 (字符串、JSON、文件、堆栈跟踪、源位置等)               │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -46,23 +46,23 @@ Domain             Plugin 层监听
 
 | 文件 | 类/结构 | 职责 |
 |------|---------|------|
-| `error_config.h` | `error_config_t` | 全局错误配置（堆栈阈值、验证开关、源位置追踪开关） |
+| `error_config.h` | `error_config_t` | 全局错误配置（堆栈阈值、验证开关、源位置追踪开关、自定义格式化器、自定义翻译器） |
 
 ### Core 层 (`include/error_system/core/`)
 
 | 文件 | 类/结构 | 职责 |
 |------|---------|------|
-| `error_code.h` | `error_code_t` | 64 位错误码的存储与字段解析 |
+| `error_code.h` | `error_code_t` | 64 位错误码的存储与字段解析（基于位移操作，避免位域 UB） |
 | `error_level.h` | `error_level_t` | 错误等级枚举及转换函数 |
 | `error_builder.h` | `error_builder_t` | 编译期错误码构建工厂 |
-| `error_context.h` | `error_context_t` | 错误上下文（码+消息+因果链+结构化负载+堆栈跟踪） |
+| `error_context.h` | `error_context_t` | 错误上下文（码+消息+因果链+结构化负载+堆栈跟踪+源位置） |
 | `error_registry.h` | `error_registry_t` | 错误码注册表，支持按模块组索引 |
 | `result.h` | `result_t<T>` | 类 Rust Result，替代异常传递错误 |
 | `error_exception.h` | `error_exception_t` | 基于 `std::exception` 的异常封装 |
 
 ### Domain 层 (`include/error_system/domain/`)
 
-预定义 18 大系统域，用于错误码的系统域字段。
+预定义 6 大系统域：`none`, `system`, `middleware`, `database`, `application`, `third_party`。
 
 ### Plugin 层 (`include/error_system/plugin/`)
 
@@ -70,7 +70,13 @@ Domain             Plugin 层监听
 |------|----|------|
 | `i_error_plugin.h` | `i_error_plugin_t` | 插件抽象接口 |
 | `plugin_registry.h` | `plugin_registry_t` | 插件单例注册表，负责广播 |
-| `error_router_plugin.h` | `error_router_plugin_t` | 错误路由插件，按码/域分发 |
+| `error_router_plugin.h` | `error_router_plugin_t` | 错误路由插件，按码/域/模块组分发 |
+
+### Translator 层 (`include/error_system/translator/`)
+
+| 文件 | 类 | 职责 |
+|------|----|------|
+| `error_translator.h` | `error_translator_t` | 错误翻译器，子系统/模块名称映射 |
 
 ### Memory 层 (`include/error_system/memory/`)
 
@@ -86,22 +92,29 @@ Domain             Plugin 层监听
 | `json_utils.h` | `json_dict_t` | JSON 字典加载与点路径访问 |
 | `file_utils.h` | `file_utils` | 文件读写、创建、删除、存在性检查 |
 | `stack_trace_utils.h` | `stack_trace_utils_t` | 跨平台堆栈跟踪（Linux/macOS/Windows） |
+| `source_location.h` | `source_location_t` | 源文件位置信息封装 |
 | `error_formatter.h` | `operator<<` | `error_context_t` 输出流运算符重载 |
 
 ---
 
 ## 关键设计决策
 
-### 1. 64 位 union + 位域实现零开销
+### 1. 64 位位移 + 掩码实现零开销
 
 ```cpp
-union error_code_union_t {
-    uint64_t code;
-    fields_t fields;  // 位域结构体
+class error_code_t {
+    code_t code_{0};
+
+    static constexpr uint32_t LEVEL_SHIFT = 56;
+    static constexpr uint64_t LEVEL_MASK = 0xFULL;
+
+    constexpr error_level_t get_level() const noexcept {
+        return static_cast<error_level_t>((code_ >> LEVEL_SHIFT) & LEVEL_MASK);
+    }
 };
 ```
 
-直接 `reinterpret` 整数与位域，字段读取等价于位运算，编译器可优化到单条指令。
+直接通过位移和掩码操作读取字段，编译器可优化到单条指令，100% 避免严格别名规则与位域排布未定义行为。
 
 ### 2. `constexpr` 全链路
 
@@ -111,10 +124,10 @@ union error_code_union_t {
 
 `plugin_registry.h` → `i_error_plugin.h` → `error_context.h`，若 `error_context.h` 直接 include `plugin_registry.h` 则循环。
 
-**解法**：在 `error_context.h` 内仅声明自由函数 `__notify_plugins()`（无需完整定义 `plugin_registry_t`），其实现放在 `src/core/error_context.cc` 中，该 `.cc` 可安全 include `plugin_registry.h`。
+**解法**：在 `error_context.h` 内仅声明自由函数 `notify_plugins()`（无需完整定义 `plugin_registry_t`），其实现放在 `src/core/error_context.cc` 中，该 `.cc` 可安全 include `plugin_registry.h`。
 
 ```
-error_context.h      ── 声明 __notify_plugins() ──→  头文件层无环
+error_context.h      ── 声明 notify_plugins() ──→  头文件层无环
 error_context.cc     ── include plugin_registry.h ──→ 仅在 .cc 连接
 ```
 
@@ -209,6 +222,8 @@ error_context_t ctx(code, "错误信息");  // 若 code.level >= warn，ctx.stac
 | `enable_validation_` | `true` | 错误码验证开关 |
 | `enable_source_location_` | `true` | 源位置追踪开关 |
 | `enable_short_filename_` | `true` | 短文件名模式 |
+| `custom_formatter_` | `nullptr` | 自定义格式化回调 |
+| `custom_translator_` | `nullptr` | 自定义翻译函数 |
 
 ### 12. DEFINE_ERROR_CODE 宏
 
@@ -279,8 +294,8 @@ JSON 配置格式：
 ### 测试框架
 
 - **测试框架**: GoogleTest
-- **测试总数**: 199 个测试用例
-- **测试文件**: 16 个测试文件
+- **测试文件数**: 16 个
+- **测试覆盖模块**: Core, Plugin, Memory, Utils, Config, Translator, Domain
 
 ### 测试覆盖
 
@@ -291,7 +306,9 @@ JSON 配置格式：
 | Memory 层 | 1 | 10 | `tests/memory/*_test.cc` |
 | Utils 层 | 5 | 37+ | `tests/utils/*_test.cc` |
 | Config 层 | 1 | 7 | `tests/config/*_test.cc` |
-| **总计** | **16** | **199** | - |
+| Translator 层 | 1 | 9 | `tests/translator/*_test.cc` |
+| Domain 层 | 1 | - | `tests/domain/*_test.cc` |
+| **总计** | **17** | **149+** | - |
 
 ### 测试目录结构
 
@@ -317,8 +334,10 @@ tests/
 │   ├── file_utils_test.cc        # file_utils 测试
 │   ├── stack_trace_utils_test.cc # stack_trace_utils_t 测试
 │   └── source_location_test.cc   # source_location_t 测试
-└── config/                        # Config 层测试
-    └── error_config_test.cc      # error_config_t 测试
+├── config/                        # Config 层测试
+│   └── error_config_test.cc      # error_config_t 测试
+└── translator/                    # Translator 层测试
+    └── error_translator_test.cc  # error_translator_t 测试
 ```
 
 ### 运行测试

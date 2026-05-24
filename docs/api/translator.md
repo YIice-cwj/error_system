@@ -1,110 +1,197 @@
-# Translator 层 API 文档
+# Translator 层 API 参考
 
-> 命名空间：`error_system::translator`
-
-Translator 层提供错误码翻译功能，将子系统ID和模块ID转换为可读的字符串描述，支持静态和动态两种注册方式。
+> 命名空间: `error_system::translator`
 
 ---
 
 ## error_translator_t
 
-**头文件**：`error_system/translator/error_translator.h`
+错误翻译器，用于将子系统 ID 和模块 ID 翻译为人类可读的字符串。
 
-错误翻译器单例类，用于管理和查询子系统、模块的名称映射。
-
-### 方法
-
-| 方法 | 返回值 | 描述 |
-|------|--------|------|
-| `instance()` | `error_translator_t&` | 获取单例实例 |
-| `register_subsystem(uint16_t id, std::string name)` | `void` | 动态注册子系统名称 |
-| `register_module(uint16_t subsys_id, uint16_t module_id, std::string name)` | `void` | 动态注册模块名称 |
-| `translate(uint16_t subsys_id, uint16_t module_id)` | `std::string` | 翻译为可读字符串 |
-
-### 静态注册宏
+### 核心 API
 
 ```cpp
-REGISTER_LEGACY_MODULE(SUBSYS_ID, MODULE_ID, SUBSYS_NAME, MODULE_NAME)
+class error_translator_t {
+public:
+    static error_translator_t& instance() noexcept;
+
+    void register_subsystem(uint16_t subsys_id, std::string name) noexcept;
+    void register_module(uint16_t subsys_id, uint16_t module_id, std::string name) noexcept;
+
+    std::string translate(uint16_t subsys_id, uint16_t module_id) const noexcept;
+};
 ```
 
-在静态初始化阶段自动注册子系统和模块描述。
+### 方法说明
 
-### 示例
+| 方法 | 说明 |
+|------|------|
+| `register_subsystem()` | 注册子系统 ID 与名称的映射 |
+| `register_module()` | 注册模块 ID（含所属子系统）与名称的映射 |
+| `translate()` | 根据子系统 ID 和模块 ID 翻译为可读字符串 |
+
+### 使用示例
 
 ```cpp
-#include "error_system/translator/error_translator.h"
 using namespace error_system::translator;
 
-// 方式1：使用宏静态注册（推荐用于已知模块）
-REGISTER_LEGACY_MODULE(101, 1, "交易服务", "订单模块");
-REGISTER_LEGACY_MODULE(102, 1, "支付服务", "支付网关");
-
-// 方式2：动态注册（用于运行时配置）
 auto& translator = error_translator_t::instance();
-translator.register_subsystem(201, "用户服务");
-translator.register_module(201, 1, "认证模块");
 
-// 使用翻译器
-std::string desc = translator.translate(101, 1);
-// 输出: SubSys: 交易服务, Module: 订单模块
+// 注册子系统名称
+translator.register_subsystem(101, "交易服务");
+translator.register_subsystem(102, "用户服务");
+
+// 注册模块名称（需指定所属子系统）
+translator.register_module(101, 1, "订单模块");
+translator.register_module(101, 2, "持仓模块");
+translator.register_module(102, 1, "认证模块");
+
+// 翻译
+std::string name = translator.translate(101, 1);
+// 输出: "交易服务/订单模块"
+
+std::string name2 = translator.translate(102, 1);
+// 输出: "用户服务/认证模块"
 ```
+
+### 线程安全
+
+`error_translator_t` 使用 `std::shared_mutex` 保护内部映射表：
+- `register_subsystem()` / `register_module()`：写锁
+- `translate()`：读锁
+
+### 测试覆盖
+
+| 测试文件 | 用例数 | 覆盖内容 |
+|----------|--------|----------|
+| `tests/translator/error_translator_test.cc` | 9 | 注册、翻译、静态名称查询、线程安全 |
 
 ---
 
-## 辅助函数
+## 静态名称查询
 
-### get_static_subsys_name
+系统预定义了静态的子系统和模块名称查询函数，用于无需注册即可获取常见系统的名称。
 
 ```cpp
+// 获取静态子系统名称
 std::string_view get_static_subsys_name(uint16_t subsys_id) noexcept;
-```
 
-获取静态注册的子系统名称。
-
-### get_static_module_name
-
-```cpp
+// 获取静态模块名称
 std::string_view get_static_module_name(uint16_t subsys_id, uint16_t module_id) noexcept;
 ```
 
-获取静态注册的模块名称。
-
-### 示例
+### 使用示例
 
 ```cpp
-auto subsys_name = get_static_subsys_name(101);  // "交易服务"
-auto module_name = get_static_module_name(101, 1);  // "订单模块"
+using namespace error_system::translator;
+
+// 查询静态定义的名称
+auto subsys_name = get_static_subsys_name(101);  // 可能返回 "交易服务"
+auto module_name = get_static_module_name(101, 1); // 可能返回 "订单模块"
 ```
 
 ---
 
-## 名称查找优先级
+## 宏定义
 
-1. **静态注册表** - 编译期确定的名称（通过 `get_static_*_name`）
-2. **动态注册表** - 运行时注册的名称（通过 `register_*`）
-3. **数字ID** - 未注册时返回数字ID字符串
+### REGISTER_LEGACY_MODULE
+
+在静态初始化阶段自动注册子系统和模块描述。
+
+```cpp
+REGISTER_LEGACY_MODULE(
+    101,          // 子系统 ID
+    1,            // 模块 ID
+    "交易服务",   // 子系统名称
+    "订单模块"    // 模块名称
+);
+```
+
+宏展开后等价于：
+
+```cpp
+static struct legacy_module_registrar_101_1 {
+    legacy_module_registrar_101_1() {
+        error_translator_t::instance().register_subsystem(101, "交易服务");
+        error_translator_t::instance().register_module(101, 1, "订单模块");
+    }
+} legacy_module_registrar_101_1_instance;
+```
+
+### REGISTER_LEGACY_ERROR
+
+在静态初始化阶段自动注册错误码描述到 `error_registry_t`。
+
+```cpp
+REGISTER_LEGACY_ERROR(
+    ERR_ORDER_NOT_FOUND,
+    "订单不存在或已删除"
+);
+```
 
 ---
 
-## 单元测试
+## 最佳实践
 
-测试文件：`tests/translator/error_translator_test.cc`
+### 1. 集中注册翻译
 
-| 测试用例 | 描述 |
-|----------|------|
-| `instance_returns_singleton` | 单例模式正确 |
-| `register_subsystem_stores_name` | 子系统注册生效 |
-| `register_module_stores_name` | 模块注册生效 |
-| `translate_unknown_subsystem_returns_id` | 未知子系统返回ID |
-| `translate_unknown_module_returns_id` | 未知模块返回ID |
-| `get_static_subsys_name_returns_known_name` | 静态子系统名称查询 |
-| `get_static_module_name_returns_known_name` | 静态模块名称查询 |
-| `translate_uses_static_names_when_available` | 优先使用静态名称 |
-| `register_overrides_existing` | 重复注册覆盖 |
+建议在服务初始化时集中注册所有子系统和模块名称：
 
----
+```cpp
+void init_translations() {
+    auto& translator = error_translator_t::instance();
 
-## 相关文档
+    // 交易服务 (101)
+    translator.register_subsystem(101, "交易服务");
+    translator.register_module(101, 1, "订单模块");
+    translator.register_module(101, 2, "持仓模块");
+    translator.register_module(101, 3, "行情模块");
+    translator.register_module(101, 4, "风控模块");
 
-- [Core 层 API](./core.md) - 错误上下文和错误码
-- [Config 层 API](./config.md) - 全局配置
+    // 用户服务 (102)
+    translator.register_subsystem(102, "用户服务");
+    translator.register_module(102, 1, "认证模块");
+    translator.register_module(102, 2, "资料模块");
+    translator.register_module(102, 3, "钱包模块");
+
+    // Redis 组件 (51)
+    translator.register_subsystem(51, "Redis组件");
+    translator.register_module(51, 1, "连接模块");
+    translator.register_module(51, 2, "操作模块");
+    translator.register_module(51, 3, "集群模块");
+}
+```
+
+### 2. 与代码生成工具配合
+
+使用 `generate_error_codes.py` 生成的头文件自动包含翻译注册：
+
+```cpp
+// generated/trade_errors.h
+namespace biz::trade_errors {
+    inline constexpr error_code_t ERR_ORDER_NOT_FOUND = ...;
+
+    inline void register_translations() {
+        auto& t = error_translator_t::instance();
+        t.register_subsystem(101, "交易服务");
+        t.register_module(101, 1, "订单模块");
+        // ...
+    }
+}
+```
+
+### 3. 在错误输出中使用翻译
+
+```cpp
+error_code_t code = ERR_ORDER_NOT_FOUND;
+
+// 获取翻译后的名称
+auto& translator = error_translator_t::instance();
+std::string translated = translator.translate(code.get_subsystem(), code.get_module());
+// 输出: "交易服务/订单模块"
+
+// 结合 error_context_t 输出完整信息
+error_context_t ctx(code, "订单不存在");
+std::cout << "[" << translated << "] " << ctx.message << std::endl;
+// 输出: [交易服务/订单模块] 订单不存在
+```

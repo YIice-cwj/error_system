@@ -1,46 +1,60 @@
-# Plugin 层 API 文档
+# Plugin 层 API 参考
 
-> 命名空间：`error_system::plugin`
-
-Plugin 层提供可扩展的插件系统，允许在不修改核心代码的前提下接入日志、统计、告警等外部能力。
-
----
-
-## 工作原理
-
-每当 `error_context_t` 以非零错误码构造时，核心层会自动调用 `plugin_registry_t::instance().notify_error()`，将错误上下文广播给所有已注册的插件。
-
-```
-error_context_t 构造（code != 0）
-        ↓
- __notify_plugins()          ← 打破循环依赖的桥接函数
-        ↓
- plugin_registry_t::notify_error()
-        ↓
- i_error_plugin_t::on_error()  × N  ← 依次通知每个插件
-```
-
-> **注意**：插件收到的 `error_context_t` 可能包含 `stack_frames`（如果错误等级满足 `error_config::get_stacktrace_level()` 阈值且堆栈追踪功能已开启），插件可以利用堆栈信息进行更详细的日志记录或监控。
+> 命名空间: `error_system::plugin`
 
 ---
 
 ## i_error_plugin_t
 
-**头文件**：`error_system/plugin/i_error_plugin.h`
-
-所有插件必须继承的抽象接口。
+插件抽象接口，所有自定义插件必须继承此接口。
 
 ```cpp
 class i_error_plugin_t {
 public:
     virtual ~i_error_plugin_t() = default;
 
-    // 插件唯一标识，同名插件注册时会替换旧插件
-    virtual std::string_view name() const noexcept = 0;
+    virtual void on_error(const error_context_t& context) = 0;
+    virtual std::string get_plugin_name() const = 0;
+};
+```
 
-    // 错误事件回调，error_context_t 创建时触发
-    // context 包含完整的错误信息：code, message, payload, stack_frames, cause chain
-    virtual void on_error(const core::error_context_t& context) noexcept = 0;
+### 方法说明
+
+| 方法 | 说明 |
+|------|------|
+| `on_error()` | 错误事件回调，每当 `error_context_t` 构造时触发 |
+| `get_plugin_name()` | 返回插件名称，用于标识和调试 |
+
+### 自定义插件示例
+
+```cpp
+class logging_plugin_t : public i_error_plugin_t {
+public:
+    void on_error(const error_context_t& context) override {
+        std::cerr << "[LOG] " << context.to_string() << std::endl;
+    }
+
+    std::string get_plugin_name() const override {
+        return "logging_plugin";
+    }
+};
+
+class metrics_plugin_t : public i_error_plugin_t {
+public:
+    void on_error(const error_context_t& context) override {
+        auto level = context.code.get_level();
+        if (level == error_level_t::error || level == error_level_t::fatal) {
+            // 上报监控指标
+            metrics_collector::increment("error_count", {
+                {"level", to_string(level)},
+                {"domain", std::to_string(context.code.get_domain())}
+            });
+        }
+    }
+
+    std::string get_plugin_name() const override {
+        return "metrics_plugin";
+    }
 };
 ```
 
@@ -48,263 +62,208 @@ public:
 
 ## plugin_registry_t
 
-**头文件**：`error_system/plugin/plugin_registry.h`
+插件单例注册表，负责管理所有插件的生命周期和错误事件广播。
 
-插件单例注册表，管理多个插件的生命周期绑定与事件广播。使用 `std::shared_mutex` 保证线程安全的并发访问。
-
-> **注意**：不持有插件所有权，调用方需保证插件对象在使用期间始终有效。
-
-### 方法
+### 核心 API
 
 ```cpp
-// 获取单例
-static plugin_registry_t& instance() noexcept;
-
-// 注册插件（同名则替换，nullptr 无效）
-void register_plugin(i_error_plugin_t* plugin) noexcept;
-
-// 注销插件（按名称查找，未找到则无操作）
-void unregister_plugin(std::string_view name) noexcept;
-
-// 通知所有插件（内部调用，每个插件的异常不会向外传播）
-void notify_error(const core::error_context_t& context) noexcept;
-
-// 获取插件数量
-size_t size() const noexcept;
-
-// 是否没有插件
-bool empty() const noexcept;
-
-// 清空所有已注册插件
-void clear() noexcept;
-```
-
-### 单元测试
-
-测试文件：`tests/plugin/plugin_registry_test.cc`
-
-| 测试用例 | 描述 |
-|----------|------|
-| `register_and_retrieve_plugin` | 注册和查询插件 |
-| `register_duplicate_replaces_old` | 同名插件替换旧插件 |
-| `unregister_plugin_by_name` | 通过名称注销插件 |
-| `notify_error_calls_all_plugins` | 通知所有插件 |
-| `notify_error_handles_exceptions` | 通知时处理异常 |
-| `clear_removes_all_plugins` | 清空所有插件 |
-| `singleton_returns_same_instance` | 单例返回相同实例 |
-| `empty_returns_true_when_no_plugins` | 空时返回 true |
-
----
-
-## 实现日志插件示例
-
-```cpp
-#include "error_system/plugin/i_error_plugin.h"
-#include "error_system/plugin/plugin_registry.h"
-#include <iostream>
-
-class log_plugin_t : public error_system::plugin::i_error_plugin_t {
+class plugin_registry_t {
 public:
-    std::string_view name() const noexcept override {
-        return "logger";
-    }
+    static plugin_registry_t& instance() noexcept;
 
-    void on_error(const error_system::core::error_context_t& ctx) noexcept override {
-        std::cerr << "[LOG] " << ctx.to_string() << "\n";
-    }
+    void register_plugin(i_error_plugin_t* plugin);
+    void unregister_plugin(i_error_plugin_t* plugin);
+
+    void notify_all(const error_context_t& context) const;
+
+    size_t size() const noexcept;
+    bool empty() const noexcept;
+    void clear() noexcept;
 };
 ```
 
-## 实现统计插件示例
+### 线程安全
+
+`plugin_registry_t` 使用 `std::shared_mutex` 保护插件列表：
+- `register_plugin()` / `unregister_plugin()`：写锁
+- `notify_all()`：读锁
+
+### 使用示例
 
 ```cpp
-#include "error_system/plugin/i_error_plugin.h"
-#include <unordered_map>
-#include <atomic>
+using namespace error_system::plugin;
 
-class stats_plugin_t : public error_system::plugin::i_error_plugin_t {
-    std::unordered_map<uint64_t, std::atomic<int>> counters_;
+// 创建插件实例
+auto logger = std::make_unique<logging_plugin_t>();
+auto metrics = std::make_unique<metrics_plugin_t>();
 
-public:
-    std::string_view name() const noexcept override {
-        return "stats";
-    }
+// 注册到全局注册表
+auto& registry = plugin_registry_t::instance();
+registry.register_plugin(logger.get());
+registry.register_plugin(metrics.get());
 
-    void on_error(const error_system::core::error_context_t& ctx) noexcept override {
-        ++counters_[ctx.code.get_code()];
-    }
+// 构造 error_context_t 时会自动通知所有插件
+error_context_t ctx(code, "错误信息");
+// logger->on_error(ctx) 和 metrics->on_error(ctx) 被自动调用
 
-    int count(uint64_t code) const noexcept {
-        auto it = counters_.find(code);
-        return it != counters_.end() ? it->second.load() : 0;
-    }
-};
-```
-
-## 实现带堆栈分析的监控插件示例
-
-```cpp
-#include "error_system/plugin/i_error_plugin.h"
-#include <iostream>
-
-class stacktrace_plugin_t : public error_system::plugin::i_error_plugin_t {
-public:
-    std::string_view name() const noexcept override {
-        return "stacktrace_analyzer";
-    }
-
-    void on_error(const error_system::core::error_context_t& ctx) noexcept override {
-        // 只处理包含堆栈的严重错误
-        if (ctx.code.get_level() >= error_system::core::error_level_t::error &&
-            !ctx.stack_frames.empty()) {
-            std::cerr << "[ALERT] 严重错误: " << ctx.message << "\n";
-            std::cerr << "[STACK] 调用栈:\n";
-            for (const auto& frame : ctx.stack_frames) {
-                std::cerr << "  " << frame << "\n";
-            }
-        }
-    }
-};
-```
-
-## 注册与使用
-
-```cpp
-// 程序启动时初始化（保证对象生命周期覆盖整个运行期）
-log_plugin_t  logger;
-stats_plugin_t stats;
-stacktrace_plugin_t analyzer;
-
-auto& reg = plugin_registry_t::instance();
-reg.register_plugin(&logger);
-reg.register_plugin(&stats);
-reg.register_plugin(&analyzer);
-
-// 之后任何 error_context_t 创建都会自动触发
-error_context_t ctx{some_error_code, "操作失败"};
-// → logger 打印日志
-// → stats 计数 +1
-// → analyzer 分析堆栈（如果包含）
-
-// 动态注销
-reg.unregister_plugin("logger");
+// 注销插件
+registry.unregister_plugin(logger.get());
 
 // 清空所有插件
-reg.clear();
+registry.clear();
 ```
+
+### 生命周期管理
+
+`plugin_registry_t` **不持有插件所有权**，调用方负责对象生命周期：
+
+```cpp
+// 正确：插件生命周期由调用方管理
+auto plugin = std::make_unique<my_plugin_t>();
+registry.register_plugin(plugin.get());
+// ... 使用 ...
+registry.unregister_plugin(plugin.get());
+// plugin 在此处安全销毁
+
+// 错误：注册临时对象地址
+registry.register_plugin(&temporary_plugin);  // 危险！临时对象销毁后悬空指针
+```
+
+### 测试覆盖
+
+| 测试文件 | 用例数 | 覆盖内容 |
+|----------|--------|----------|
+| `tests/plugin/plugin_registry_test.cc` | 10 | 注册、注销、通知、清空、线程安全 |
 
 ---
 
 ## error_router_plugin_t
 
-**头文件**：`error_system/plugin/error_router_plugin.h`
-
-错误路由插件，提供按错误码、模块组 ID 或系统域路由错误事件的能力。继承自 `i_error_plugin_t`，使用单例模式管理。
-
-### 处理优先级
-
-当错误事件发生时，按以下优先级匹配处理函数：
-1. **特定错误码处理函数** - 精确匹配错误码
-2. **模块组处理函数** - 匹配错误码所属的模块组
-3. **系统域处理函数** - 匹配错误码所属的系统域
-
-### 方法
+错误路由插件，按错误码、系统域或模块组将错误分发到不同的处理函数。
 
 ```cpp
-// 获取单例
-static error_router_plugin_t& instance() noexcept;
+class error_router_plugin_t : public i_error_plugin_t {
+public:
+    using handler_t = std::function<void(const error_context_t&)>;
 
-// 按错误码注册处理函数
-void register_handler_by_code(core::code_t code, error_handler_t handler) noexcept;
+    void add_route_by_code(error_code_t code, handler_t handler);
+    void add_route_by_domain(uint8_t domain, handler_t handler);
+    void add_route_by_module_group(std::string_view group, handler_t handler);
 
-// 按模块组 ID 注册处理函数
-void register_handler_by_module_group_id(core::module_group_id_t module_group_id,
-                                         error_handler_t handler) noexcept;
-
-// 按系统域注册处理函数
-void register_handler_by_domain(domain::system_domain_t domain, error_handler_t handler) noexcept;
-
-// 注销处理函数
-void unregister_handler_by_code(core::code_t code) noexcept;
-void unregister_handler_by_module_group_id(core::module_group_id_t module_group_id) noexcept;
-void unregister_handler_by_domain(domain::system_domain_t domain) noexcept;
+    void on_error(const error_context_t& context) override;
+    std::string get_plugin_name() const override;
+};
 ```
 
 ### 使用示例
 
 ```cpp
-#include "error_system/plugin/error_router_plugin.h"
-#include <iostream>
-
 using namespace error_system::plugin;
 
-// 注册特定错误码的处理函数
-error_router_plugin_t::instance().register_handler_by_code(
-    some_error_code,
-    [](const core::error_context_t& ctx) {
-        std::cerr << "特定错误: " << ctx.message << "\n";
+auto router = std::make_unique<error_router_plugin_t>();
+
+// 按错误码路由
+router->add_route_by_code(ERR_DB_CONNECTION_TIMEOUT, [](const error_context_t& ctx) {
+    // 发送数据库告警
+    alert_system::send("db_alert", ctx.to_string());
+});
+
+// 按系统域路由
+router->add_route_by_domain(
+    static_cast<uint8_t>(system_domain_t::database),
+    [](const error_context_t& ctx) {
+        // 记录数据库错误日志
+        db_logger::error(ctx.to_json());
     }
 );
 
-// 按系统域注册处理函数
-error_router_plugin_t::instance().register_handler_by_domain(
-    domain::system_domain_t::database,
-    [](const core::error_context_t& ctx) {
-        std::cerr << "数据库错误: " << ctx.to_string() << "\n";
+// 按模块组路由
+router->add_route_by_module_group("payment", [](const error_context_t& ctx) {
+    // 上报支付模块错误
+    payment_metrics::record_error(ctx);
+});
+
+// 注册到全局注册表
+plugin_registry_t::instance().register_plugin(router.get());
+```
+
+### 路由优先级
+
+当多个路由规则匹配时，按以下优先级处理：
+1. 错误码精确匹配（最高优先级）
+2. 模块组匹配
+3. 系统域匹配（最低优先级）
+
+### 测试覆盖
+
+| 测试文件 | 用例数 | 覆盖内容 |
+|----------|--------|----------|
+| `tests/plugin/error_router_plugin_test.cc` | 7 | 按码路由、按域路由、按模块组路由、优先级 |
+
+---
+
+## 插件开发指南
+
+### 1. 最小插件实现
+
+```cpp
+class minimal_plugin_t : public i_error_plugin_t {
+public:
+    void on_error(const error_context_t& context) override {
+        // 处理错误
     }
-);
 
-// 将路由插件注册到全局插件注册表
-plugin_registry_t::instance().register_plugin(&error_router_plugin_t::instance());
-
-// 之后创建的错误上下文会自动路由到对应的处理函数
-error_context_t ctx{db_error_code, "连接超时"};  // 触发数据库域处理函数
+    std::string get_plugin_name() const override {
+        return "minimal_plugin";
+    }
+};
 ```
 
-### 单元测试
+### 2. 线程安全注意事项
 
-测试文件：`tests/plugin/error_router_plugin_test.cc`
+`on_error()` 可能在多线程环境下被调用，插件实现必须保证线程安全：
 
-| 测试用例 | 描述 |
-|----------|------|
-| `register_handler_by_code` | 按错误码注册处理函数 |
-| `register_handler_by_module_group_id` | 按模块组 ID 注册处理函数 |
-| `register_handler_by_domain` | 按系统域注册处理函数 |
-| `handler_priority_code_over_module_group` | 处理优先级：错误码优先于模块组 |
-| `handler_priority_module_group_over_domain` | 处理优先级：模块组优先于系统域 |
-| `unregister_handler_by_code` | 注销错误码处理函数 |
-| `unregister_handler_by_module_group_id` | 注销模块组处理函数 |
-| `unregister_handler_by_domain` | 注销系统域处理函数 |
-| `singleton_returns_same_instance` | 单例返回相同实例 |
+```cpp
+class thread_safe_plugin_t : public i_error_plugin_t {
+    mutable std::mutex mutex_;
+    std::atomic<size_t> error_count_{0};
 
----
+public:
+    void on_error(const error_context_t& context) override {
+        ++error_count_;
 
-## 设计说明：循环依赖的打破
+        std::lock_guard<std::mutex> lock(mutex_);
+        // 访问共享数据
+        shared_data_.push_back(context.code.get_raw_code());
+    }
 
-`plugin_registry.h` 依赖 `i_error_plugin.h`，后者依赖 `error_context.h`。若 `error_context.h` 直接 include `plugin_registry.h` 则产生循环。
-
-解决方案：在 `error_context.h` 内仅声明自由函数 `__notify_plugins()`，其实现放在 `src/core/error_context.cc` 中，该 `.cc` 文件可以安全地 include `plugin_registry.h`：
-
-```
-error_context.h   ←  i_error_plugin.h  ←  error_context.h  ✗ 循环
-     ↓ 声明 __notify_plugins()
-error_context.cc  →  plugin_registry.h  →  i_error_plugin.h  ✓ 无环
+    std::string get_plugin_name() const override {
+        return "thread_safe_plugin";
+    }
+};
 ```
 
----
+### 3. 性能优化建议
 
-## 测试总结
+- **避免在 on_error() 中执行耗时操作**：插件回调不应阻塞错误处理流程
+- **使用异步处理**：将耗时操作（如网络请求）放入异步队列
+- **过滤不感兴趣的错误**：在 `on_error()` 开头快速返回，减少不必要的处理
 
-Plugin 层共包含 **2 个测试文件**，**16 个测试用例**：
+```cpp
+class efficient_plugin_t : public i_error_plugin_t {
+public:
+    void on_error(const error_context_t& context) override {
+        // 快速过滤
+        if (context.code.get_level() < error_level_t::error) {
+            return;
+        }
 
-| 模块 | 测试文件 | 测试数量 |
-|------|----------|----------|
-| plugin_registry | `tests/plugin/plugin_registry_test.cc` | 8 |
-| error_router_plugin | `tests/plugin/error_router_plugin_test.cc` | 9 |
+        // 异步处理
+        async_queue_.enqueue(context.to_json());
+    }
 
-**运行测试**:
-
-```bash
-cd build
-ctest --output-on-failure
+    std::string get_plugin_name() const override {
+        return "efficient_plugin";
+    }
+};
 ```
