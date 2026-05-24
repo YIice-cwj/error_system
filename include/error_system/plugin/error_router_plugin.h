@@ -2,7 +2,9 @@
 #include "error_system/core/error_code.h"
 #include "error_system/plugin/i_error_plugin.h"
 #include <functional>
+// IWYU pragma: begin_exports
 #include <mutex>
+// IWYU pragma: end_exports
 #include <shared_mutex>
 #include <unordered_map>
 

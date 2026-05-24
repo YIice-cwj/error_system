@@ -134,7 +134,6 @@ namespace error_system::utils {
                 } else if constexpr (is_member_to_string_v<T>) {
                     result.append(value.to_string());
                 } else if constexpr (is_global_to_string_v<T>) {
-                    using namespace std;
                     result.append(to_string(value));
                 } else {
                     result.append("[unsupported type]");
@@ -268,51 +267,51 @@ namespace error_system::utils {
         static std::string replace_all(std::string string, std::string_view from, std::string_view to) noexcept;
 
         /**
-         * @brief 分割字符串
-         * @details 将字符串根据指定分隔符分割为多个字符串视图
-         * @param string 输入字符串
-         * @param delimiter 分隔符
+         * @brief 分割字符串视图
+         * @details 将字符串视图根据指定分隔符分割为多个字符串视图
+         * @param string 输入字符串视图
+         * @param delimiter 分隔符视图
          * @return std::vector<std::string_view> 分割后的字符串视图向量
          */
         static std::vector<std::string_view> split(std::string_view string, std::string_view delimiter) noexcept;
 
         /**
          * @brief 合并字符串视图向量
-         * @details 将字符串视图向量中的字符串用指定分隔符连接起来
+         * @details 将字符串视图向量中的字符串用指定分隔符视图连接起来
          * @param tokens 输入字符串视图向量
-         * @param delimiter 分隔符
+         * @param delimiter 分隔符视图
          * @return std::string 合并后的字符串
          */
         static std::string join(const std::vector<std::string_view>& tokens, std::string_view delimiter) noexcept;
 
         /**
-         * @brief 移除字符串首尾的空白符
-         * @details 移除字符串首尾的空白符，包括空格、制表符、换行符、回页符和换页符
-         * @param string 输入字符串
+         * @brief 移除字符串视图首尾的空白符
+         * @details 移除字符串视图首尾的空白符，包括空格、制表符、换行符、回页符和换页符
+         * @param string 输入字符串视图
          * @return std::string_view 移除空白符后的字符串视图
          */
         static std::string_view trim(std::string_view string) noexcept;
 
         /**
-         * @brief 将字符串转换为小写
-         * @details 将字符串中的所有字符转换为小写
-         * @param string 输入字符串
+         * @brief 将字符串视图转换为小写
+         * @details 将字符串视图中的所有字符转换为小写
+         * @param string 输入字符串视图
          * @return std::string 转换后的字符串
          */
         static std::string to_lower(std::string_view string) noexcept;
 
         /**
-         * @brief 将字符串转换为大写
-         * @details 将字符串中的所有字符转换为大写
-         * @param string 输入字符串
+         * @brief 将字符串视图转换为大写
+         * @details 将字符串视图中的所有字符转换为大写
+         * @param string 输入字符串视图
          * @return std::string 转换后的字符串
          */
         static std::string to_upper(std::string_view string) noexcept;
 
         /**
          * @brief 安全转义 JSON 字符串
-         * @details 将包含控制字符的字符串转义为合法的 JSON 字符串格式
-         * @param string 输入字符串
+         * @details 将包含控制字符的字符串视图转义为合法的 JSON 字符串格式
+         * @param string 输入字符串视图
          * @return std::string 转义后的字符串
          */
         static std::string escape_json(std::string_view string) noexcept;

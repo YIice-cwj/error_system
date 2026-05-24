@@ -1,41 +1,57 @@
 #include "error_system/utils/string_utils.h"
+#include <array>
+#include <charconv>
 
 namespace error_system::utils {
 
     /**
      * @brief 替换字符串中所有的指定子串
-     * @details 注意：因为要生成新字符串，所以返回 std::string
-     * @param string 输入字符串
-     * @param from 要替换的子串
-     * @param to 替换后的子串
-     * @return std::string 替换后的字符串
+     * @details 改造为单次扫描追加模式，将复杂度从原先的 O(N^2) 降为 O(N)
      */
     std::string string_utils_t::replace_all(std::string string, std::string_view from, std::string_view to) noexcept {
-        if (from.empty()) {
+        if (from.empty() || string.empty()) {
             return string;
         }
 
-        size_t start_pos = 0;
-        while ((start_pos = string.find(from, start_pos)) != std::string::npos) {
-            string.replace(start_pos, from.length(), to);
-            start_pos += to.length();
+        size_t start_pos = string.find(from);
+        if (start_pos == std::string::npos) {
+            return string;
         }
-        return string;
+
+        std::string result{};
+        if (to.size() > from.size()) {
+            result.reserve(string.size() + (to.size() - from.size()) * 2);
+        } else {
+            result.reserve(string.size());
+        }
+
+        size_t current_pos = 0;
+        while (start_pos != std::string::npos) {
+            result.append(string.data() + current_pos, start_pos - current_pos);
+            result.append(to);
+            current_pos = start_pos + from.length();
+            start_pos = string.find(from, current_pos);
+        }
+
+        if (current_pos < string.size()) {
+            result.append(string.data() + current_pos, string.size() - current_pos);
+        }
+
+        return result;
     }
 
     /**
-     * @brief 分割字符串
-     * @details 将字符串根据指定分隔符分割为多个字符串视图
-     * @param string 输入字符串
-     * @param delimiter 分隔符
-     * @return std::vector<std::string_view> 分割后的字符串视图向量
+     * @brief 分割字符串视图，返回视图向量
+     * @details 该函数不修改原始字符串，仅返回分割后的视图向量
+     * @param string 输入字符串视图
+     * @param delimiter 分隔符视图
+     * @return std::vector<std::string_view> 分割后的视图向量
      */
     std::vector<std::string_view> string_utils_t::split(std::string_view string, std::string_view delimiter) noexcept {
         if (string.empty()) {
             return {};
         }
-
-        std::vector<std::string_view> result;
+        std::vector<std::string_view> result{};
         size_t start = 0;
         size_t end = string.find(delimiter);
         while (end != std::string_view::npos) {
@@ -53,27 +69,34 @@ namespace error_system::utils {
 
     /**
      * @brief 合并字符串视图向量
-     * @details 将字符串视图向量中的字符串用指定分隔符连接起来
+     * @details 该函数不修改原始视图向量，仅返回合并后的字符串视图
      * @param tokens 输入字符串视图向量
-     * @param delimiter 分隔符
+     * @param delimiter 分隔符视图
      * @return std::string 合并后的字符串
      */
     std::string string_utils_t::join(const std::vector<std::string_view>& tokens, std::string_view delimiter) noexcept {
         if (tokens.empty()) {
             return {};
         }
-        std::string result{tokens[0]};
+        size_t total_length = 0;
+        for (const auto& token : tokens) {
+            total_length += token.size();
+        }
+        total_length += delimiter.size() * (tokens.size() - 1);
+        std::string result{};
+        result.reserve(total_length);
+        result.append(tokens[0]);
         for (size_t i = 1; i < tokens.size(); ++i) {
-            result += delimiter;
-            result += tokens[i];
+            result.append(delimiter);
+            result.append(tokens[i]);
         }
         return result;
     }
 
     /**
-     * @brief 移除字符串首尾的空白符
-     * @details 移除字符串首尾的空白符，包括空格、制表符、换行符、回页符和换页符
-     * @param string 输入字符串
+     * @brief 移除字符串视图首尾的空白符
+     * @details 该函数不修改原始字符串视图，仅返回移除空白符后的视图
+     * @param string 输入字符串视图
      * @return std::string_view 移除空白符后的字符串视图
      */
     std::string_view string_utils_t::trim(std::string_view string) noexcept {
@@ -87,69 +110,85 @@ namespace error_system::utils {
     }
 
     /**
-     * @brief 将字符串转换为小写
-     * @details 将字符串中的所有字符转换为小写
-     * @param string 输入字符串
-     * @return std::string 小写后的字符串
+     * @brief 将字符串视图转换为小写
+     * @details 该函数不修改原始字符串视图，仅返回转换后的字符串视图
+     * @param string 输入字符串视图
+     * @return std::string 小写的字符串
      */
     std::string string_utils_t::to_lower(std::string_view string) noexcept {
-        std::string result(string);
-        std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c) { return std::tolower(c); });
+        std::string result{};
+        result.resize(string.size());
+        std::transform(string.begin(), string.end(), result.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
         return result;
     }
 
     /**
-     * @brief 将字符串转换为大写
-     * @details 将字符串中的所有字符转换为大写
-     * @param string 输入字符串
-     * @return std::string 大写后的字符串
+     * @brief 将字符串视图转换为大写
+     * @details 该函数不修改原始字符串视图，仅返回转换后的字符串视图
+     * @param string 输入字符串视图
+     * @return std::string 大写的字符串
      */
     std::string string_utils_t::to_upper(std::string_view string) noexcept {
-        std::string result(string);
-        std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c) { return std::toupper(c); });
+        std::string result{};
+        result.resize(string.size());
+
+        std::transform(string.begin(), string.end(), result.begin(), [](unsigned char c) {
+            return static_cast<char>(std::toupper(c));
+        });
         return result;
     }
 
     /**
-     * @brief 安全转义 JSON 字符串
-     * @details 将包含控制字符的字符串转义为合法的 JSON 字符串格式
-     * @param string 输入字符串
+     * @brief 安全转义 JSON 字符串视图
+     * @details 该函数不修改原始字符串视图，仅返回转义后的字符串视图
+     * @param string 输入字符串视图
      * @return std::string 转义后的字符串
      */
     std::string string_utils_t::escape_json(std::string_view string) noexcept {
-        std::string result;
-        result.reserve(string.size() + 10);  // 预分配一点额外空间
+        std::string result{};
+        result.reserve(string.size() + 16);  // 预分配稍大一点的合理空间
+
         for (char c : string) {
             switch (c) {
                 case '"':
-                    result += "\\\"";
+                    result.append("\\\"");
                     break;
                 case '\\':
-                    result += "\\\\";
+                    result.append("\\\\");
                     break;
                 case '\b':
-                    result += "\\b";
+                    result.append("\\b");
                     break;
                 case '\f':
-                    result += "\\f";
+                    result.append("\\f");
                     break;
                 case '\n':
-                    result += "\\n";
+                    result.append("\\n");
                     break;
                 case '\r':
-                    result += "\\r";
+                    result.append("\\r");
                     break;
                 case '\t':
-                    result += "\\t";
+                    result.append("\\t");
                     break;
                 default:
                     if (static_cast<unsigned char>(c) < 0x20) {
-                        // 处理其他不可见的控制字符
-                        char buf[7];
-                        snprintf(buf, sizeof(buf), "\\u%04x", c);
-                        result += buf;
+                        result.append("\\u00");
+                        std::array<char, 2> buffer;
+                        auto [ptr, ec] =
+                            std::to_chars(buffer.data(), buffer.data() + buffer.size(), static_cast<uint8_t>(c), 16);
+                        if (ec == std::errc{}) {
+                            if (ptr - buffer.data() == 1) {
+                                result.push_back('0');
+                                result.push_back(buffer[0]);
+                            } else {
+                                result.append(buffer.data(), 2);
+                            }
+                        }
                     } else {
-                        result += c;
+                        result.push_back(c);
                     }
             }
         }
