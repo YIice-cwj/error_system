@@ -33,26 +33,26 @@ namespace error_system::core {
          * @brief 构造函数
          * @param value 成功值
          */
-        result_t(const value_type& value) : value_or_error_(value) {}
+        result_t(const value_type& value) noexcept : value_or_error_(value) {}
 
         /**
          * @brief 移动构造函数
          * @param value 成功值
          */
-        result_t(value_type&& value) : value_or_error_(std::move(value)) {}
+        result_t(value_type&& value) noexcept : value_or_error_(std::move(value)) {}
 
         /**
          * @brief 构造函数
          * @param error_context 错误上下文
          */
-        result_t(const error_context_t& error_context) : value_or_error_(error_context) {}
+        result_t(const error_context_t& error_context) noexcept : value_or_error_(error_context) {}
 
         /**
          * @brief 构造函数
          * @param code 错误码
          * @param message 错误信息
          */
-        result_t(error_code_t code, const std::string& message = "")
+        result_t(error_code_t code, const std::string& message = "") noexcept
             : value_or_error_(error_context_t{code, message}) {}
 
         public:
@@ -107,6 +107,15 @@ namespace error_system::core {
          */
         value_type value_or(value_type default_value) const noexcept {
             return is_success() ? std::get<value_type>(value_or_error_) : std::move(default_value);
+        }
+
+        /**
+         * @brief 安全获取成功值，失败时返回默认值
+         * @param default_value 默认值
+         * @return const value_type& 成功值或默认值
+         */
+        const value_type& value_or(const value_type& default_value) const noexcept {
+            return is_success() ? std::get<value_type>(value_or_error_) : default_value;
         }
 
         /**
@@ -189,13 +198,13 @@ namespace error_system::core {
         /**
          * @brief 构造函数
          */
-        result_t() : error_context_{} {}
+        result_t() noexcept : error_context_{} {}
 
         /**
          * @brief 构造函数
          * @param error_context 错误上下文
          */
-        result_t(const error_context_t& error_context) : error_context_(error_context) {}
+        result_t(const error_context_t& error_context) noexcept : error_context_(error_context) {}
 
         /**
          * @brief 构造函数
@@ -203,7 +212,7 @@ namespace error_system::core {
          * @param message 错误信息
          */
         template <typename... Args>
-        result_t(error_code_t code, const std::string_view format, Args... args)
+        result_t(error_code_t code, const std::string_view format, Args... args) noexcept
             : error_context_(code, format, args...) {}
 
         /**

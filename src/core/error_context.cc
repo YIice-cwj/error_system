@@ -46,7 +46,7 @@ namespace error_system::core {
     error_context_t error_context_t::wrap(const error_context_t& underlying) const noexcept {
         error_context_t new_code_context = *this;
 
-        object_pool_t& object_pool = object_pool_t::instance();
+        object_pool_t& object_pool = object_pool_t::instance_thread_local();
         error_context_t* context_pointer = object_pool.acquire();
         if (context_pointer) {
             *context_pointer = underlying;
@@ -69,14 +69,14 @@ namespace error_system::core {
     error_context_t error_context_t::wrap(error_context_t&& underlying) const noexcept {
         error_context_t new_code_context = *this;
 
-        object_pool_t& object_pool = object_pool_t::instance();
+        object_pool_t& object_pool = object_pool_t::instance_thread_local();
         error_context_t* context_pointer = object_pool.acquire();
         if (context_pointer) {
             *context_pointer = std::move(underlying);
             new_code_context.cause =
                 std::shared_ptr<error_context_t>(context_pointer, [](error_context_t* context_pointer) -> void {
                     *context_pointer = error_context_t{};
-                    object_pool_t::instance().release(context_pointer);
+                    object_pool_t::instance_thread_local().release(context_pointer);
                 });
         } else {
             new_code_context.cause = std::make_shared<error_context_t>(std::move(underlying));
@@ -133,10 +133,11 @@ namespace error_system::core {
 #endif
 
         auto info = error_system::core::error_registry_t::instance().get_info(this->code);
-        std::string desc = info ? info->description : "未注册的未知错误";
-        std::string name = info ? info->name : "UNKNOWN_ERR_CODE";
+        std::string desc = info.has_value() ? info.value().get().description : "未注册的未知错误";
+        std::string name = info.has_value() ? info.value().get().name : "UNKNOWN_ERR_CODE";
 
-        result += utils::string_utils_t::format("[Level: {}, System: {}, {}] Code: {} ({}) - {}: {}",
+        result += utils::string_utils_t::format("[Sign: {} Level: {}, System: {}, {}] Code: {} ({}) - {}: {}",
+                                                is_error() ? "Error" : "Success",
                                                 core::to_string(code.get_level()),
                                                 domain::to_string(code.get_system()),
                                                 subsys_module_str,

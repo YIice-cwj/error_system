@@ -27,6 +27,11 @@ namespace error_system::plugin {
  * @copyright Copyright (c) 2026
  */
 namespace error_system::core {
+    /**
+     * @brief 错误上下文对象池大小
+     * @details 用于优化内存分配和释放，避免频繁的内存分配和释放
+     */
+    constexpr size_t ERROR_CONTEXT_POOL_SIZE = 128;
 
     /**
      * @brief 通知所有已注册插件
@@ -48,7 +53,7 @@ namespace error_system::core {
      * @details 封装错误上下文信息，提供字段解析和访问功能
      */
     struct error_context_t {
-        using object_pool_t = memory::object_pool_t<error_context_t, 128>;
+        using object_pool_t = memory::object_pool_t<error_context_t, ERROR_CONTEXT_POOL_SIZE>;
 
         error_code_t code{};
         std::string message{};
@@ -68,8 +73,9 @@ namespace error_system::core {
 
         /**
          * @brief 构造函数
-         * @param code 错误码
-         * @param message 错误信息
+         * @param code_with 错误码和位置信息
+         * @param format 错误信息格式化字符串
+         * @param args 格式化字符串参数列表
          */
         template <typename... Args>
         error_context_t(code_with_location_t code_with, std::string format = "", Args&&... args) noexcept

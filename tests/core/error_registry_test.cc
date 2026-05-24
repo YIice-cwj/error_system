@@ -25,8 +25,8 @@ namespace error_system::core {
 
         auto info = error_registry_t::instance().get_info(code);
         ASSERT_TRUE(info.has_value());
-        EXPECT_EQ(info->name, "ERR_DB_CONN");
-        EXPECT_EQ(info->description, "Database connection failed");
+        EXPECT_EQ(info->get().name, "ERR_DB_CONN");
+        EXPECT_EQ(info->get().description, "Database connection failed");
     }
 
     TEST_F(error_registry_test, register_multiple_errors) {
@@ -100,6 +100,10 @@ namespace error_system::core {
         auto errors = error_registry_t::instance().get_errors_by_module(module_id);
 
         EXPECT_EQ(errors.size(), 2);
+        EXPECT_EQ(errors[0].get().name, "ERR_1");
+        EXPECT_EQ(errors[1].get().name, "ERR_2");
+        EXPECT_EQ(errors[0].get().name, "ERR_1");
+        EXPECT_EQ(errors[1].get().name, "ERR_2");
     }
 
     TEST_F(error_registry_test, singleton_returns_same_instance) {
@@ -117,8 +121,8 @@ namespace error_system::core {
         auto info = error_registry_t::instance().get_info(code);
         ASSERT_TRUE(info.has_value());
         // Duplicate registration should keep the first registered metadata
-        EXPECT_EQ(info->name, "OLD_NAME");
-        EXPECT_EQ(info->description, "Old description");
+        EXPECT_EQ(info->get().name, "OLD_NAME");
+        EXPECT_EQ(info->get().description, "Old description");
     }
 
     TEST_F(error_registry_test, duplicate_policy_skip) {
@@ -128,9 +132,10 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "FIRST", "First description");
         error_registry_t::instance().register_error(code, "SECOND", "Second description");
 
+        // First registration should be kept
         auto info = error_registry_t::instance().get_info(code);
         ASSERT_TRUE(info.has_value());
-        EXPECT_EQ(info->name, "FIRST");
+        EXPECT_EQ(info->get().name, "FIRST");
     }
 
     TEST_F(error_registry_test, duplicate_policy_overwrite) {
@@ -142,8 +147,8 @@ namespace error_system::core {
 
         auto info = error_registry_t::instance().get_info(code);
         ASSERT_TRUE(info.has_value());
-        EXPECT_EQ(info->name, "SECOND");
-        EXPECT_EQ(info->description, "Second description");
+        EXPECT_EQ(info->get().name, "SECOND");
+        EXPECT_EQ(info->get().description, "Second description");
     }
 
     TEST_F(error_registry_test, duplicate_policy_get_set) {
@@ -196,7 +201,8 @@ namespace error_system::core {
         EXPECT_EQ(count, 1);
         auto info = error_registry_t::instance().get_info(code);
         ASSERT_TRUE(info.has_value());
-        EXPECT_EQ(info->name, "UPDATED");
+        EXPECT_EQ(info->get().name, "UPDATED");
+        EXPECT_EQ(info->get().description, "Updated desc");
     }
 
     TEST_F(error_registry_test, duplicate_policy_warn_triggers_callback) {
@@ -265,8 +271,9 @@ namespace error_system::core {
 
         auto info = error_registry_t::instance().get_info(code);
         ASSERT_TRUE(info.has_value());
-        EXPECT_EQ(info->name, "ORIGINAL");
-        EXPECT_EQ(info->description, "Original description");
+        EXPECT_EQ(info->get().name, "ORIGINAL");
+        EXPECT_EQ(info->get().description, "Original description");
     }
 
 }  // namespace error_system::core
+    

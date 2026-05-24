@@ -212,13 +212,14 @@ namespace error_system::core {
     /**
      * @brief 通过 64 位错误码 获取详情
      * @param code 错误码
-     * @return std::optional<error_metadata_t> 错误码元数据，若未注册则返回空可选
+     * @return std::optional<std::reference_wrapper<const error_metadata_t>> 错误码元数据引用，若未注册则返回空可选
      */
-    std::optional<error_metadata_t> error_registry_t::get_info(const error_code_t code) const noexcept {
+    std::optional<std::reference_wrapper<const error_metadata_t>>
+    error_registry_t::get_info(const error_code_t code) const noexcept {
         std::shared_lock<std::shared_mutex> lock(index_mutex_);
         auto it = primary_index_.find(code.get_identity_code());
         if (it != primary_index_.end()) {
-            return it->second;
+            return std::ref(it->second);
         }
         return std::nullopt;
     }
@@ -226,14 +227,14 @@ namespace error_system::core {
     /**
      * @brief 通过模块组 ID 获取所有错误码
      * @param module_group_id 模块组 ID
-     * @return std::vector<error_metadata_t> 模块组内所有错误码的元数据
+     * @return std::vector<std::reference_wrapper<const error_metadata_t>> 模块组内所有错误码的元数据引用
      */
-    std::vector<error_metadata_t>
+    std::vector<std::reference_wrapper<const error_metadata_t>>
     error_registry_t::get_errors_by_module(const module_group_id_t module_group_id) const noexcept {
         std::shared_lock<std::shared_mutex> lock(index_mutex_);
         auto it = module_index_.find(module_group_id);
         if (it != module_index_.end()) {
-            std::vector<error_metadata_t> errors;
+            std::vector<std::reference_wrapper<const error_metadata_t>> errors;
             errors.reserve(it->second.size());
             for (code_t raw_code : it->second) {
                 errors.push_back(primary_index_.at(raw_code));

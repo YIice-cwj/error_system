@@ -183,16 +183,17 @@ namespace error_system::core {
         /**
          * @brief 通过 64位错误码 获取详情
          * @param code 错误码
-         * @return std::optional<error_metadata_t> 错误码元数据，若未注册则返回空可选
+         * @return std::optional<std::reference_wrapper<const error_metadata_t>> 错误码元数据，若未注册则返回空可选
          */
-        std::optional<error_metadata_t> get_info(const error_code_t code) const noexcept;
+        std::optional<std::reference_wrapper<const error_metadata_t>> get_info(const error_code_t code) const noexcept;
 
         /**
          * @brief 通过模块 ID 获取所有错误码
          * @param module_group_id 模块组 ID
-         * @return std::vector<error_metadata_t> 模块下所有错误码的元数据
+         * @return std::vector<std::reference_wrapper<const error_metadata_t>> 模块下所有错误码的元数据
          */
-        std::vector<error_metadata_t> get_errors_by_module(const module_group_id_t module_group_id) const noexcept;
+        std::vector<std::reference_wrapper<const error_metadata_t>>
+        get_errors_by_module(const module_group_id_t module_group_id) const noexcept;
 
         public:
         /**
