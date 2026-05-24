@@ -7,7 +7,9 @@
 #include <string>
 // IWYU pragma: end_exports
 #include <shared_mutex>
+
 /**
+ * @file error_config.h
  * @brief 错误配置类
  * @details 封装错误配置信息
  * @author yiice
@@ -25,27 +27,97 @@ namespace error_system::config {
 
     using translator_func_t = std::function<std::string(uint16_t subsys_id, uint16_t module_id)>;
 
+    /**
+     * @brief 错误配置类
+     * @details 封装错误配置信息
+     */
     class error_config_t {
         private:
-        static inline formatter_callback_t custom_formatter_{nullptr};
+        /**
+         * @brief 内部共享锁
+         * @details 保护全局配置项并发访问的互斥锁
+         * @return std::shared_mutex& 共享锁引用
+         */
+        static std::shared_mutex& __get_mutex() noexcept {
+            static std::shared_mutex mutex;
+            return mutex;
+        }
 
-        static inline translator_func_t custom_translator_{nullptr};
+        /**
+         * @brief 自定义格式化函数存储
+         * @details 保护全局配置项并发访问的互斥锁
+         * @return formatter_callback_t& 自定义格式化函数引用
+         */
+        static formatter_callback_t& __get_custom_formatter() noexcept {
+            static formatter_callback_t formatter{nullptr};
+            return formatter;
+        }
+
+        /**
+         * @brief 自定义翻译函数存储
+         * @details 保护全局配置项并发访问的互斥锁
+         * @return translator_func_t& 自定义翻译函数引用
+         */
+        static translator_func_t& __get_custom_translator() noexcept {
+            static translator_func_t translator{nullptr};
+            return translator;
+        }
 
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
-        static inline std::atomic<core::error_level_t> min_stacktrace_level_{core::error_level_t::error};
-        static inline std::atomic<bool> enable_stacktrace_{true};
+        /**
+         * @brief 触发堆栈追踪的最小错误等级存储
+         * @details 保护全局配置项并发访问的互斥锁
+         * @return std::atomic<core::error_level_t>& 触发堆栈追踪的最小错误等级引用
+         */
+        static std::atomic<core::error_level_t>& __get_min_stacktrace_level() noexcept {
+            static std::atomic<core::error_level_t> level{core::error_level_t::error};
+            return level;
+        }
+
+        /**
+         * @brief 是否启用堆栈追踪标志位存储
+         * @details 保护全局配置项并发访问的互斥锁
+         * @return std::atomic<bool>& 是否启用堆栈追踪标志位引用
+         */
+        static std::atomic<bool>& __get_enable_stacktrace() noexcept {
+            static std::atomic<bool> enabled{true};
+            return enabled;
+        }
 #endif
 
 #ifdef ERROR_SYSTEM_ENABLE_VALIDATION
-        static inline std::atomic<bool> enable_validation_{true};
+        /**
+         * @brief 是否启用错误码验证标志位存储
+         * @details 保护全局配置项并发访问的互斥锁
+         * @return std::atomic<bool>& 是否启用错误码验证标志位引用
+         */
+        static std::atomic<bool>& __get_enable_validation() noexcept {
+            static std::atomic<bool> enabled{true};
+            return enabled;
+        }
 #endif
 
 #ifdef ERROR_SYSTEM_ENABLE_LOCATION
-        static inline std::atomic<bool> enable_source_location_{true};
-        static inline std::atomic<bool> enable_short_filename_{true};
-#endif
+        /**
+         * @brief 是否启用错误源位置(文件/行号)标志位存储
+         * @details 保护全局配置项并发访问的互斥锁
+         * @return std::atomic<bool>& 是否启用错误源位置(文件/行号)标志位引用
+         */
+        static std::atomic<bool>& __get_enable_source_location() noexcept {
+            static std::atomic<bool> enabled{true};
+            return enabled;
+        }
 
-        static inline std::shared_mutex config_mutex_{};
+        /**
+         * @brief 是否启用缩短源文件名标志位存储
+         * @details 保护全局配置项并发访问的互斥锁
+         * @return std::atomic<bool>& 是否启用缩短源文件名标志位引用
+         */
+        static std::atomic<bool>& __get_enable_short_filename() noexcept {
+            static std::atomic<bool> enabled{true};
+            return enabled;
+        }
+#endif
 
         public:
         error_config_t() = delete;
@@ -55,26 +127,28 @@ namespace error_system::config {
          * @param formatter 自定义格式化函数
          */
         static void set_custom_formatter(formatter_callback_t formatter) noexcept {
-            std::unique_lock<std::shared_mutex> lock(config_mutex_);
-            custom_formatter_ = formatter;
+            std::unique_lock<std::shared_mutex> lock(__get_mutex());
+            __get_custom_formatter() = std::move(formatter);
         }
 
         /**
          * @brief 获取自定义格式化函数
+         * @details 保护全局配置项并发访问的互斥锁
          * @return formatter_callback_t 自定义格式化函数
          */
         static formatter_callback_t get_custom_formatter() noexcept {
-            std::shared_lock<std::shared_mutex> lock(config_mutex_);
-            return custom_formatter_;
+            std::shared_lock<std::shared_mutex> lock(__get_mutex());
+            return __get_custom_formatter();
         }
 
         /**
          * @brief 设置自定义翻译函数
+         * @details 保护全局配置项并发访问的互斥锁
          * @param translator 自定义翻译函数
          */
         static void set_translator(translator_func_t translator) noexcept {
-            std::unique_lock<std::shared_mutex> lock(config_mutex_);
-            custom_translator_ = translator;
+            std::unique_lock<std::shared_mutex> lock(__get_mutex());
+            __get_custom_translator() = std::move(translator);
         }
 
         /**
@@ -82,40 +156,46 @@ namespace error_system::config {
          * @return translator_func_t 自定义翻译函数
          */
         static translator_func_t get_translator() noexcept {
-            std::shared_lock<std::shared_mutex> lock(config_mutex_);
-            return custom_translator_;
+            std::shared_lock<std::shared_mutex> lock(__get_mutex());
+            return __get_custom_translator();
         }
 
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
         /**
          * @brief 获取堆栈等级
+         * @details 保护全局配置项并发访问的互斥锁
          * @return error_level_t 堆栈等级
          */
         static core::error_level_t get_stacktrace_level() noexcept {
-            return min_stacktrace_level_.load(std::memory_order_relaxed);
+            return __get_min_stacktrace_level().load(std::memory_order_relaxed);
         }
 
         /**
          * @brief 设置堆栈等级
+         * @details 保护全局配置项并发访问的互斥锁
          * @param level 堆栈等级
          */
         static void set_stacktrace_level(core::error_level_t level) noexcept {
-            min_stacktrace_level_.store(level, std::memory_order_relaxed);
+            __get_min_stacktrace_level().store(level, std::memory_order_relaxed);
         }
 
         /**
          * @brief 全局开启/关闭堆栈追踪功能
+         * @details 保护全局配置项并发访问的互斥锁
          * @param enable 是否开启
          */
         static void set_enable_stacktrace(bool enable) noexcept {
-            enable_stacktrace_.store(enable, std::memory_order_relaxed);
+            __get_enable_stacktrace().store(enable, std::memory_order_relaxed);
         }
 
         /**
          * @brief 检查全局堆栈追踪功能是否开启
+         * @details 保护全局配置项并发访问的互斥锁
          * @return bool 是否开启
          */
-        static bool is_stacktrace_enabled() noexcept { return enable_stacktrace_.load(std::memory_order_relaxed); }
+        static bool is_stacktrace_enabled() noexcept {
+            return __get_enable_stacktrace().load(std::memory_order_relaxed);
+        }
 #else
         /**
          * @brief 获取堆栈等级
@@ -149,14 +229,16 @@ namespace error_system::config {
          * @param enable 是否开启
          */
         static void set_enable_validation(bool enable) noexcept {
-            enable_validation_.store(enable, std::memory_order_relaxed);
+            __get_enable_validation().store(enable, std::memory_order_relaxed);
         }
 
         /**
          * @brief 检查错误码验证功能是否开启
          * @return bool 是否开启
          */
-        static bool is_validation_enabled() noexcept { return enable_validation_.load(std::memory_order_relaxed); }
+        static bool is_validation_enabled() noexcept {
+            return __get_enable_validation().load(std::memory_order_relaxed);
+        }
 #else
         /**
          * @brief 全局开启/关闭错误码验证功能
@@ -178,7 +260,7 @@ namespace error_system::config {
          * @param enable 是否开启
          */
         static void set_enable_source_location(bool enable) noexcept {
-            enable_source_location_.store(enable, std::memory_order_relaxed);
+            __get_enable_source_location().store(enable, std::memory_order_relaxed);
         }
 
         /**
@@ -186,7 +268,7 @@ namespace error_system::config {
          * @return bool 是否开启
          */
         static bool is_source_location_enabled() noexcept {
-            return enable_source_location_.load(std::memory_order_relaxed);
+            return __get_enable_source_location().load(std::memory_order_relaxed);
         }
 
         /**
@@ -194,7 +276,7 @@ namespace error_system::config {
          * @param enable 是否开启
          */
         static void set_enable_short_filename(bool enable) noexcept {
-            enable_short_filename_.store(enable, std::memory_order_relaxed);
+            __get_enable_short_filename().store(enable, std::memory_order_relaxed);
         }
 
         /**
@@ -202,7 +284,7 @@ namespace error_system::config {
          * @return bool 是否开启
          */
         static bool is_short_filename_enabled() noexcept {
-            return enable_short_filename_.load(std::memory_order_relaxed);
+            return __get_enable_short_filename().load(std::memory_order_relaxed);
         }
 #else
         /**
