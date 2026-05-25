@@ -1,4 +1,5 @@
 #include "error_system/plugin/error_router_plugin.h"
+#include <iostream>
 
 namespace error_system::plugin {
 
@@ -19,18 +20,29 @@ namespace error_system::plugin {
     void error_router_plugin_t::on_error(const core::error_context_t& context) noexcept {
         std::shared_lock<std::shared_mutex> lock(mutex_);
 
+        auto invoke_handler = [](const auto& handler, const core::error_context_t& ctx) noexcept {
+            try {
+                handler(ctx);
+            } catch (const std::exception& e) {
+                std::cerr << "[error_router_plugin_t] Handler threw an exception: " << e.what() << std::endl;
+            } catch (...) {
+                std::cerr << "[error_router_plugin_t] Handler threw an unknown exception." << std::endl;
+            }
+        };
+
         if (auto it = specific_handlers_.find(context.code.get_code()); it != specific_handlers_.end()) {
-            it->second(context);
+            invoke_handler(it->second, context);
             return;
         }
 
-        if (auto it = module_group_handlers_.find(context.code.get_module()); it != module_group_handlers_.end()) {
-            it->second(context);
+        if (auto it = module_group_handlers_.find(context.code.get_module_group_id());
+            it != module_group_handlers_.end()) {
+            invoke_handler(it->second, context);
             return;
         }
 
         if (auto it = domain_handlers_.find(context.code.get_system()); it != domain_handlers_.end()) {
-            it->second(context);
+            invoke_handler(it->second, context);
             return;
         }
     }

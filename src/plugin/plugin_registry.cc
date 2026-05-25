@@ -1,4 +1,5 @@
 #include "error_system/plugin/plugin_registry.h"
+#include <iostream>
 
 namespace error_system::plugin {
 
@@ -13,8 +14,9 @@ namespace error_system::plugin {
 
         std::unique_lock<std::shared_mutex> lock(plugins_mutex_);
 
-        auto it = std::find_if(plugins_.begin(), plugins_.end(),
-            [&](const i_error_plugin_t* registered_plugin) { return registered_plugin->name() == plugin->name(); });
+        auto it = std::find_if(plugins_.begin(), plugins_.end(), [&](const i_error_plugin_t* registered_plugin) {
+            return registered_plugin->name() == plugin->name();
+        });
 
         if (it != plugins_.end()) {
             *it = plugin;
@@ -28,11 +30,12 @@ namespace error_system::plugin {
      */
     void plugin_registry_t::unregister_plugin(std::string_view name) noexcept {
         std::unique_lock<std::shared_mutex> lock(plugins_mutex_);
-        plugins_.erase(
-            std::remove_if(plugins_.begin(), plugins_.end(),
-                [&](const i_error_plugin_t* registered_plugin) { return registered_plugin->name() == name; }),
-            plugins_.end()
-        );
+        plugins_.erase(std::remove_if(plugins_.begin(),
+                                      plugins_.end(),
+                                      [&](const i_error_plugin_t* registered_plugin) {
+                                          return registered_plugin->name() == name;
+                                      }),
+                       plugins_.end());
     }
 
     /**
@@ -41,7 +44,15 @@ namespace error_system::plugin {
     void plugin_registry_t::notify_error(const core::error_context_t& context) noexcept {
         std::shared_lock<std::shared_mutex> lock(plugins_mutex_);
         for (auto* registered_plugin : plugins_) {
-            registered_plugin->on_error(context);
+            try {
+                registered_plugin->on_error(context);
+            } catch (const std::exception& e) {
+                std::cerr << "[Plugin Error] Plugin '" << registered_plugin->name()
+                          << "' threw an exception: " << e.what() << std::endl;
+            } catch (...) {
+                std::cerr << "[Plugin Error] Plugin '" << registered_plugin->name() << "' threw an unknown exception."
+                          << std::endl;
+            }
         }
     }
 
