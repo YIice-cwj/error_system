@@ -32,7 +32,7 @@ namespace error_system::memory {
 
         private:
         std::unique_ptr<std::array<value_type, Capacity>> objects_{};
-        std::unique_ptr<std::array<size_type, Capacity>> next_indexs_{};
+        std::unique_ptr<std::array<size_type, Capacity>> next_indices_{};
         size_type next_index_{0};
         size_type count_{0};
 
@@ -64,8 +64,9 @@ namespace error_system::memory {
         /**
          * @brief 归还对象到对象池
          * @param object 对象指针
+         * @return bool 归还成功返回 true，指针无效返回 false
          */
-        void release(pointer& object) noexcept;
+        bool release(pointer& object) noexcept;
 
         /**
          * @brief 获取对象池容量
@@ -127,11 +128,11 @@ namespace error_system::memory {
     template <typename T, size_t Capacity>
     object_pool_t<T, Capacity>::object_pool_t() noexcept
         : objects_(std::make_unique<std::array<value_type, Capacity>>()),
-          next_indexs_(std::make_unique<std::array<size_type, Capacity>>()),
+          next_indices_(std::make_unique<std::array<size_type, Capacity>>()),
           next_index_(0),
           count_(0) {
         for (size_type i = 0; i < Capacity; ++i) {
-            (*next_indexs_)[i] = i;
+            (*next_indices_)[i] = i;
         }
     }
 
@@ -150,7 +151,7 @@ namespace error_system::memory {
         if (full()) {
             return nullptr;
         }
-        size_type free_index = (*next_indexs_)[next_index_++];
+        size_type free_index = (*next_indices_)[next_index_++];
         ++count_;
         return &(*objects_)[free_index];
     }
@@ -160,13 +161,15 @@ namespace error_system::memory {
      * @param object 对象指针
      */
     template <typename T, size_t Capacity>
-    void object_pool_t<T, Capacity>::release(pointer& object) noexcept {
+    bool object_pool_t<T, Capacity>::release(pointer& object) noexcept {
         if (__is_valid(object)) {
             size_type index = object - objects_->data();
-            (*next_indexs_)[--next_index_] = index;
+            (*next_indices_)[--next_index_] = index;
             --count_;
             object = nullptr;
+            return true;
         }
+        return false;
     }
 
     /**

@@ -114,7 +114,7 @@ namespace error_system::translator {
  * REGISTER_LEGACY_MODULE(
  *     1, 1, "支付服务", "支付网关")
  */
-#define REGISTER_LEGACY_MODULE(SUBSYS_ID, MODULE_ID, SUBSYS_NAME, MODULE_NAME)                                         \
+#define REGISTER_MODULE(SUBSYS_ID, MODULE_ID, SUBSYS_NAME, MODULE_NAME)                                                \
     do {                                                                                                               \
         error_system::translator::error_translator_t::instance().register_subsystem(SUBSYS_ID, SUBSYS_NAME);           \
         error_system::translator::error_translator_t::instance().register_module(SUBSYS_ID, MODULE_ID, MODULE_NAME);   \
