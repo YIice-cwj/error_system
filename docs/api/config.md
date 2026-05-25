@@ -30,12 +30,12 @@ public:
     static bool is_short_filename_enabled() noexcept;
 
     // 自定义格式化器
-    static void set_custom_formatter(std::function<std::string(const error_context_t&)> formatter);
-    static std::function<std::string(const error_context_t&)> get_custom_formatter() noexcept;
+    static void set_custom_formatter(std::function<std::string(const error_context_t&)> formatter) noexcept;
+    static const std::function<std::string(const error_context_t&)>& get_custom_formatter() noexcept;
 
     // 自定义翻译器
-    static void set_custom_translator(std::function<std::string(error_code_t)> translator);
-    static std::function<std::string(error_code_t)> get_custom_translator() noexcept;
+    static void set_translator(std::function<std::string(error_code_t)> translator) noexcept;
+    static const std::function<std::string(error_code_t)>& get_translator() noexcept;
 
     // 重置所有配置为默认值
     static void reset_to_defaults() noexcept;
@@ -80,7 +80,7 @@ error_config_t::set_custom_formatter([](const error_context_t& ctx) {
 });
 
 // 设置自定义翻译器
-error_config_t::set_custom_translator([](error_code_t code) {
+error_config_t::set_translator([](error_code_t code) {
     return "Translated: " + std::to_string(code.get_raw_code());
 });
 

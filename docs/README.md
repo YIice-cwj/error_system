@@ -53,3 +53,5 @@ ctest --output-on-failure
 | Config 层 | 1 | 7 |
 | Translator 层 | 1 | 9 |
 | **总计** | **17** | **149+** |
+
+> 注：`tests/CMakeLists.txt` 中已配置 `DISCOVERY_TIMEOUT 30`，确保测试发现阶段在复杂环境下稳定运行。

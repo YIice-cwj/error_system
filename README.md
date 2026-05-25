@@ -91,6 +91,10 @@ if (code.get_sign() == 1) { // 判断是否为错误
     auto system = code.get_system(); // 获取系统域
     auto module = code.get_module(); // 获取模块编号
     auto number = code.get_number(); // 获取具体的错误编号
+
+    // 错误码比较
+    if (code == another_code) { /* ... */ }
+    if (code < another_code)  { /* 用于排序 */ }
 }
 ```
 
@@ -116,6 +120,12 @@ error_context_t ctx(code, "数据库连接失败: {}", "timeout");
 ctx.with("host", "192.168.1.100")
    .with("port", "3306")
    .with("database", "user_db");
+
+// 获取 payload 只读引用
+const auto& payload = ctx.get_payload();
+
+// 获取 C 风格错误描述
+const char* desc = ctx.what();
 
 // 输出完整错误信息（含堆栈和负载）
 std::cout << ctx.to_string() << "\n";
@@ -388,13 +398,13 @@ auto dict = utils::json_dict_t::parse(R"({"user": {"name": "Alice"}})");
 std::string name = dict->get_value_or("user.name", "Unknown").value();
 ```
 
-### file_utils
+### file_utils_t
 
 跨平台文件读写工具：
 
 ```cpp
-auto content = utils::file_utils::read_file("config.json");
-utils::file_utils::write_file("output.txt", "Hello, World!");
+auto content = utils::file_utils_t::read_file("config.json");
+utils::file_utils_t::write_file("output.txt", "Hello, World!");
 ```
 
 ### stack_trace_utils_t
@@ -448,6 +458,8 @@ ctest --output-on-failure
 | Config 层 | 1 | 7 |
 | Translator 层 | 1 | 9 |
 | **总计** | **17** | **149+** |
+
+> 注：测试发现超时已调整为 30 秒（`DISCOVERY_TIMEOUT 30`），确保在复杂环境下测试稳定运行。
 
 ### 安装到系统
 
@@ -536,14 +548,14 @@ error_system/
 │   │   └── plugin_registry.h
 │   ├── translator/             # 翻译器
 │   │   └── error_translator.h
-│   └── utils/                  # 辅助工具
-│       ├── error_formatter.h
-│       ├── file_utils.h
-│       ├── json_lexer.h
-│       ├── json_utils.h
-│       ├── source_location.h
-│       ├── stack_trace_utils.h
-│       └── string_utils.h
+│  ├── utils/                  # 辅助工具
+│  │   ├── error_formatter.h
+│  │   ├── file_utils.h         # 文件操作 (file_utils_t)
+│  │   ├── json_lexer.h
+│  │   ├── json_utils.h
+│  │   ├── source_location.h
+│  │   ├── stack_trace_utils.h
+│  │   └── string_utils.h
 ├── include/generated/          # 自动生成的错误码定义
 ├── src/                        # 核心实现代码
 │   ├── core/                   # error_context, error_registry 实现

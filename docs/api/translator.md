@@ -94,12 +94,12 @@ auto module_name = get_static_module_name(101, 1); // 可能返回 "订单模块
 
 ## 宏定义
 
-### REGISTER_LEGACY_MODULE
+### REGISTER_MODULE
 
 在静态初始化阶段自动注册子系统和模块描述。
 
 ```cpp
-REGISTER_LEGACY_MODULE(
+REGISTER_MODULE(
     101,          // 子系统 ID
     1,            // 模块 ID
     "交易服务",   // 子系统名称
@@ -116,17 +116,6 @@ static struct legacy_module_registrar_101_1 {
         error_translator_t::instance().register_module(101, 1, "订单模块");
     }
 } legacy_module_registrar_101_1_instance;
-```
-
-### REGISTER_LEGACY_ERROR
-
-在静态初始化阶段自动注册错误码描述到 `error_registry_t`。
-
-```cpp
-REGISTER_LEGACY_ERROR(
-    ERR_ORDER_NOT_FOUND,
-    "订单不存在或已删除"
-);
 ```
 
 ---

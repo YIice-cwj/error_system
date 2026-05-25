@@ -95,6 +95,14 @@ JSON 字典加载与点路径访问工具。
 ```cpp
 class json_dict_t {
 public:
+    json_dict_t() noexcept = default;
+    ~json_dict_t() noexcept = default;
+
+    json_dict_t(const json_dict_t&) = default;
+    json_dict_t& operator=(const json_dict_t&) = default;
+    json_dict_t(json_dict_t&&) noexcept = default;
+    json_dict_t& operator=(json_dict_t&&) noexcept = default;
+
     bool load_from_file(const std::string& file_path);
     bool load_from_string(const std::string& json_str);
 
@@ -153,7 +161,7 @@ auto msg = dict.get_string("message");  // "Not Found"
 ### 核心 API
 
 ```cpp
-class file_utils {
+class file_utils_t {
 public:
     static std::string read_file(const std::string& file_path);
     static bool write_file(const std::string& file_path, std::string_view content);
@@ -175,21 +183,21 @@ public:
 using namespace error_system::utils;
 
 // 读取文件
-auto content = file_utils::read_file("config/errors.json");
+auto content = file_utils_t::read_file("config/errors.json");
 
 // 写入文件
-file_utils::write_file("output.txt", "Hello, World!");
+file_utils_t::write_file("output.txt", "Hello, World!");
 
 // 检查存在性
-if (file_utils::exists("config/errors.json")) {
+if (file_utils_t::exists("config/errors.json")) {
     // ...
 }
 
 // 创建目录
-file_utils::create_directory("logs/2024");
+file_utils_t::create_directory("logs/2024");
 
 // 列出文件
-auto files = file_utils::list_files("config/errors");
+auto files = file_utils_t::list_files("config/errors");
 // files = {"trade_service_errors.json", "user_service_errors.json", ...}
 ```
 

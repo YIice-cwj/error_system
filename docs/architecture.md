@@ -137,6 +137,7 @@ Plugin 的 `plugin_registry_t` 采用单例模式：
 - **不持有所有权**：调用方负责对象生命周期
 - **Meyer's singleton**：`static` 局部变量，C++11 保证线程安全的初始化
 - **线程安全访问**：`plugin_registry_t` 使用 `std::shared_mutex` 保护插件列表
+- **异常安全**：`notify_error()` 捕获每个插件的异常，避免一个插件崩溃影响其他插件
 
 ### 5. result_t\<T\> 无异常错误传递
 
@@ -225,6 +226,8 @@ error_context_t ctx(code, "错误信息");  // 若 code.level >= warn，ctx.stac
 | `custom_formatter_` | `nullptr` | 自定义格式化回调 |
 | `custom_translator_` | `nullptr` | 自定义翻译函数 |
 
+> **锁粒度优化**：`custom_formatter_` 和 `custom_translator_` 分别使用独立的 `std::shared_mutex`，避免读写冲突。
+
 ### 12. DEFINE_ERROR_CODE 宏
 
 系统提供 `DEFINE_ERROR_CODE` 宏用于在定义错误码的同时自动注册到错误码注册表：
@@ -238,7 +241,7 @@ DEFINE_ERROR_CODE(
     "数据库连接超时");
 ```
 
-宏会在静态初始化阶段自动调用 `error_registry_t::instance().register_error()` 完成注册。
+宏使用 `inline const error_registrar_t` 在链接期自动完成注册，避免匿名命名空间导致的重复定义问题，同时兼容动态库（shared library）场景。
 
 ### 13. 代码生成工具
 
@@ -284,8 +287,11 @@ JSON 配置格式：
 | `ERROR_SYSTEM_ENABLE_STACKTRACE` | `ON` | 启用堆栈追踪功能 |
 | `ERROR_SYSTEM_ENABLE_VALIDATION` | `ON` | 启用错误码验证 |
 | `ERROR_SYSTEM_ENABLE_LOCATION` | `ON` | 启用源位置追踪 |
+| `BUILD_SHARED_LIBS` | `OFF` | 构建为动态库（自动添加宏定义） |
 
 关闭后相关 API 将标记为 `[[deprecated]]` 并返回默认值，实现零开销的编译期裁剪。
+
+> **动态库支持**：当 `BUILD_SHARED_LIBS=ON` 时，CMake 会自动定义 `ERROR_SYSTEM_BUILDING_SHARED` 和 `ERROR_SYSTEM_USING_SHARED` 宏，确保符号正确导出/导入。
 
 ---
 
@@ -309,6 +315,8 @@ JSON 配置格式：
 | Translator 层 | 1 | 9 | `tests/translator/*_test.cc` |
 | Domain 层 | 1 | - | `tests/domain/*_test.cc` |
 | **总计** | **17** | **149+** | - |
+
+> 注：`tests/CMakeLists.txt` 中已配置 `DISCOVERY_TIMEOUT 30`，确保测试发现阶段在复杂环境下稳定运行。
 
 ### 测试目录结构
 

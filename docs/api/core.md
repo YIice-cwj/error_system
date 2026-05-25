@@ -195,6 +195,9 @@ public:
     bool has_cause() const noexcept;
     std::string get_full_message() const;
     std::string get_stack_trace() const;
+
+    const std::unordered_map<std::string, std::string>& get_payload() const noexcept;
+    const char* what() const noexcept;
 };
 ```
 
@@ -397,9 +400,9 @@ result_t<int> divide(int a, int b) {
             system_domain_t::application,
             1, 1, 1
         );
-        return {code, "除数不能为零"};
+        return result_t<int>(error_context_t(code, "除数不能为零"));
     }
-    return a / b;
+    return result_t<int>(a / b);
 }
 
 auto result = divide(10, 0);
@@ -488,17 +491,9 @@ inline constexpr error_code_t ERR_DB_CONNECTION_TIMEOUT =
         1, 1, 0x0001
     );
 
-// 静态初始化时自动注册
-static struct ERR_DB_CONNECTION_TIMEOUT_registrar {
-    ERR_DB_CONNECTION_TIMEOUT_registrar() {
-        error_registry_t::instance().register_error(
-            ERR_DB_CONNECTION_TIMEOUT,
-            "ERR_DB_CONNECTION_TIMEOUT",
-            "数据库连接超时",
-            "database"
-        );
-    }
-} ERR_DB_CONNECTION_TIMEOUT_registrar_instance;
+// 内联静态初始化时自动注册
+inline const error_registrar_t ERR_DB_CONNECTION_TIMEOUT_registrar_(
+    ERR_DB_CONNECTION_TIMEOUT, "ERR_DB_CONNECTION_TIMEOUT", "数据库连接超时");
 ```
 
 ---

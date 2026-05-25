@@ -17,7 +17,7 @@ public:
     static object_pool_t& instance_thread_local() noexcept;
 
     T* acquire() noexcept;
-    void release(T* ptr) noexcept;
+    bool release(T* ptr) noexcept;
     void clear() noexcept;
 
     size_t size() const noexcept;
@@ -63,7 +63,8 @@ if (ptr) {
     *ptr = error_context_t(code, "错误信息");
 
     // 使用完后归还到池中
-    pool.release(ptr);
+    bool released = pool.release(ptr);
+    // released == true 表示归还成功
 }
 ```
 
@@ -84,7 +85,7 @@ error_context_t error_context_t::wrap(error_code_t new_code, std::string new_mes
         *ptr = *this;
         new_code_context.cause = std::shared_ptr<error_context_t>(
             ptr,
-            [&pool](auto* p) { pool.release(p); }
+            [&pool](error_context_t* p) { pool.release(p); }
         );
     } else {
         // 池已满，回退到堆分配

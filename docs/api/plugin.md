@@ -13,8 +13,8 @@ class i_error_plugin_t {
 public:
     virtual ~i_error_plugin_t() = default;
 
-    virtual void on_error(const error_context_t& context) = 0;
-    virtual std::string get_plugin_name() const = 0;
+    virtual void on_error(const error_context_t& context) noexcept = 0;
+    virtual std::string_view name() const noexcept = 0;
 };
 ```
 
@@ -30,18 +30,18 @@ public:
 ```cpp
 class logging_plugin_t : public i_error_plugin_t {
 public:
-    void on_error(const error_context_t& context) override {
+    void on_error(const error_context_t& context) noexcept override {
         std::cerr << "[LOG] " << context.to_string() << std::endl;
     }
 
-    std::string get_plugin_name() const override {
+    std::string_view name() const noexcept override {
         return "logging_plugin";
     }
 };
 
 class metrics_plugin_t : public i_error_plugin_t {
 public:
-    void on_error(const error_context_t& context) override {
+    void on_error(const error_context_t& context) noexcept override {
         auto level = context.code.get_level();
         if (level == error_level_t::error || level == error_level_t::fatal) {
             // 上报监控指标
@@ -52,7 +52,7 @@ public:
         }
     }
 
-    std::string get_plugin_name() const override {
+    std::string_view name() const noexcept override {
         return "metrics_plugin";
     }
 };
@@ -71,10 +71,10 @@ class plugin_registry_t {
 public:
     static plugin_registry_t& instance() noexcept;
 
-    void register_plugin(i_error_plugin_t* plugin);
-    void unregister_plugin(i_error_plugin_t* plugin);
+    void register_plugin(i_error_plugin_t* plugin) noexcept;
+    void unregister_plugin(std::string_view name) noexcept;
 
-    void notify_all(const error_context_t& context) const;
+    void notify_error(const core::error_context_t& context) noexcept;
 
     size_t size() const noexcept;
     bool empty() const noexcept;
@@ -106,8 +106,8 @@ registry.register_plugin(metrics.get());
 error_context_t ctx(code, "错误信息");
 // logger->on_error(ctx) 和 metrics->on_error(ctx) 被自动调用
 
-// 注销插件
-registry.unregister_plugin(logger.get());
+// 注销插件（按名称）
+registry.unregister_plugin(logger->name());
 
 // 清空所有插件
 registry.clear();
@@ -146,12 +146,14 @@ class error_router_plugin_t : public i_error_plugin_t {
 public:
     using handler_t = std::function<void(const error_context_t&)>;
 
-    void add_route_by_code(error_code_t code, handler_t handler);
-    void add_route_by_domain(uint8_t domain, handler_t handler);
-    void add_route_by_module_group(std::string_view group, handler_t handler);
+    static error_router_plugin_t& instance() noexcept;
 
-    void on_error(const error_context_t& context) override;
-    std::string get_plugin_name() const override;
+    void register_handler_by_code(error_code_t code, handler_t handler);
+    void register_handler_by_domain(uint8_t domain, handler_t handler);
+    void register_handler_by_module_group(uint16_t module_group_id, handler_t handler);
+
+    void on_error(const error_context_t& context) noexcept override;
+    std::string_view name() const noexcept override;
 };
 ```
 
@@ -160,16 +162,17 @@ public:
 ```cpp
 using namespace error_system::plugin;
 
-auto router = std::make_unique<error_router_plugin_t>();
-
 // 按错误码路由
-router->add_route_by_code(ERR_DB_CONNECTION_TIMEOUT, [](const error_context_t& ctx) {
-    // 发送数据库告警
-    alert_system::send("db_alert", ctx.to_string());
-});
+error_router_plugin_t::instance().register_handler_by_code(
+    ERR_DB_CONNECTION_TIMEOUT,
+    [](const error_context_t& ctx) {
+        // 发送数据库告警
+        alert_system::send("db_alert", ctx.to_string());
+    }
+);
 
 // 按系统域路由
-router->add_route_by_domain(
+error_router_plugin_t::instance().register_handler_by_domain(
     static_cast<uint8_t>(system_domain_t::database),
     [](const error_context_t& ctx) {
         // 记录数据库错误日志
@@ -178,13 +181,16 @@ router->add_route_by_domain(
 );
 
 // 按模块组路由
-router->add_route_by_module_group("payment", [](const error_context_t& ctx) {
-    // 上报支付模块错误
-    payment_metrics::record_error(ctx);
-});
+error_router_plugin_t::instance().register_handler_by_module_group(
+    1,  // module_group_id
+    [](const error_context_t& ctx) {
+        // 上报支付模块错误
+        payment_metrics::record_error(ctx);
+    }
+);
 
 // 注册到全局注册表
-plugin_registry_t::instance().register_plugin(router.get());
+plugin_registry_t::instance().register_plugin(&error_router_plugin_t::instance());
 ```
 
 ### 路由优先级
@@ -209,11 +215,11 @@ plugin_registry_t::instance().register_plugin(router.get());
 ```cpp
 class minimal_plugin_t : public i_error_plugin_t {
 public:
-    void on_error(const error_context_t& context) override {
+    void on_error(const error_context_t& context) noexcept override {
         // 处理错误
     }
 
-    std::string get_plugin_name() const override {
+    std::string_view name() const noexcept override {
         return "minimal_plugin";
     }
 };
@@ -229,7 +235,7 @@ class thread_safe_plugin_t : public i_error_plugin_t {
     std::atomic<size_t> error_count_{0};
 
 public:
-    void on_error(const error_context_t& context) override {
+    void on_error(const error_context_t& context) noexcept override {
         ++error_count_;
 
         std::lock_guard<std::mutex> lock(mutex_);
@@ -237,7 +243,7 @@ public:
         shared_data_.push_back(context.code.get_raw_code());
     }
 
-    std::string get_plugin_name() const override {
+    std::string_view name() const noexcept override {
         return "thread_safe_plugin";
     }
 };
@@ -252,7 +258,7 @@ public:
 ```cpp
 class efficient_plugin_t : public i_error_plugin_t {
 public:
-    void on_error(const error_context_t& context) override {
+    void on_error(const error_context_t& context) noexcept override {
         // 快速过滤
         if (context.code.get_level() < error_level_t::error) {
             return;
@@ -262,7 +268,7 @@ public:
         async_queue_.enqueue(context.to_json());
     }
 
-    std::string get_plugin_name() const override {
+    std::string_view name() const noexcept override {
         return "efficient_plugin";
     }
 };
