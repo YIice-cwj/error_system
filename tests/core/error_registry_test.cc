@@ -1,5 +1,8 @@
 #include "error_system/core/error_registry.h"
+#include <atomic>
 #include <gtest/gtest.h>
+#include <thread>
+#include <vector>
 
 namespace error_system::core {
 
@@ -275,5 +278,55 @@ namespace error_system::core {
         EXPECT_EQ(info->get().description, "Original description");
     }
 
+    TEST_F(error_registry_test, concurrent_register_and_query) {
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        error_registry_t::instance().register_error(code, "CONCURRENT", "Concurrent test");
+
+        std::vector<std::thread> threads;
+        std::atomic<int> success_count{0};
+
+        for (int i = 0; i < 10; ++i) {
+            threads.emplace_back([&]() {
+                for (int j = 0; j < 100; ++j) {
+                    if (error_registry_t::instance().is_registered(code)) {
+                        auto info = error_registry_t::instance().get_info(code);
+                        if (info.has_value() && info->get().name == "CONCURRENT") {
+                            success_count.fetch_add(1);
+                        }
+                    }
+                }
+            });
+        }
+
+        for (auto& t : threads) {
+            t.join();
+        }
+
+        EXPECT_EQ(success_count.load(), 1000);
+    }
+
+    TEST_F(error_registry_test, concurrent_register_different_codes) {
+        std::vector<std::thread> threads;
+        std::atomic<int> success_count{0};
+
+        for (int i = 0; i < 10; ++i) {
+            threads.emplace_back([&, i]() {
+                for (int j = 0; j < 10; ++j) {
+                    auto code = error_builder_t::make_error_code(
+                        error_level_t::error, domain::system_domain_t::database, i, j, j);
+                    error_registry_t::instance().register_error(code, "CONCURRENT", "Test");
+                    if (error_registry_t::instance().is_registered(code)) {
+                        success_count.fetch_add(1);
+                    }
+                }
+            });
+        }
+
+        for (auto& t : threads) {
+            t.join();
+        }
+
+        EXPECT_EQ(success_count.load(), 100);
+    }
+
 }  // namespace error_system::core
-    

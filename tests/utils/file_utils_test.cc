@@ -20,10 +20,10 @@ namespace error_system::utils {
         auto file_path = temp_dir_ / "write_test.txt";
         std::string content = "hello world";
 
-        EXPECT_TRUE(file_utils::write_file(file_path, content));
-        EXPECT_TRUE(file_utils::file_exists(file_path));
+        EXPECT_TRUE(file_utils_t::write_file(file_path, content));
+        EXPECT_TRUE(file_utils_t::file_exists(file_path));
 
-        auto result = file_utils::read_file(file_path);
+        auto result = file_utils_t::read_file(file_path);
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(result.value(), content);
     }
@@ -32,14 +32,14 @@ namespace error_system::utils {
         auto file_path = temp_dir_ / "sub" / "dir" / "nested.txt";
         std::string content = "nested content";
 
-        EXPECT_TRUE(file_utils::write_file(file_path, content));
-        EXPECT_TRUE(file_utils::file_exists(file_path));
+        EXPECT_TRUE(file_utils_t::write_file(file_path, content));
+        EXPECT_TRUE(file_utils_t::file_exists(file_path));
     }
 
     TEST_F(file_utils_test, read_file_returns_nullopt_for_missing_file) {
         auto file_path = temp_dir_ / "nonexistent.txt";
 
-        auto result = file_utils::read_file(file_path);
+        auto result = file_utils_t::read_file(file_path);
         EXPECT_FALSE(result.has_value());
     }
 
@@ -47,15 +47,15 @@ namespace error_system::utils {
         auto dir_path = temp_dir_ / "a_directory";
         std::filesystem::create_directories(dir_path);
 
-        auto result = file_utils::read_file(dir_path);
+        auto result = file_utils_t::read_file(dir_path);
         EXPECT_FALSE(result.has_value());
     }
 
     TEST_F(file_utils_test, read_file_handles_empty_file) {
         auto file_path = temp_dir_ / "empty.txt";
-        file_utils::write_file(file_path, "");
+        file_utils_t::write_file(file_path, "");
 
-        auto result = file_utils::read_file(file_path);
+        auto result = file_utils_t::read_file(file_path);
         ASSERT_TRUE(result.has_value());
         EXPECT_TRUE(result.value().empty());
     }
@@ -64,8 +64,8 @@ namespace error_system::utils {
         auto file_path = temp_dir_ / "binary.bin";
         std::string content = std::string{"\x00\x01\x02\x03\xff\xfe", 6};
 
-        file_utils::write_file(file_path, content);
-        auto result = file_utils::read_file(file_path);
+        file_utils_t::write_file(file_path, content);
+        auto result = file_utils_t::read_file(file_path);
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(result.value(), content);
     }
@@ -73,103 +73,103 @@ namespace error_system::utils {
     TEST_F(file_utils_test, create_file_creates_new_file) {
         auto file_path = temp_dir_ / "created.txt";
 
-        EXPECT_TRUE(file_utils::create_file(file_path));
-        EXPECT_TRUE(file_utils::file_exists(file_path));
+        EXPECT_TRUE(file_utils_t::create_file(file_path));
+        EXPECT_TRUE(file_utils_t::file_exists(file_path));
     }
 
     TEST_F(file_utils_test, create_file_returns_true_for_existing_file) {
         auto file_path = temp_dir_ / "existing.txt";
-        file_utils::write_file(file_path, "content");
+        file_utils_t::write_file(file_path, "content");
 
-        EXPECT_TRUE(file_utils::create_file(file_path));
-        EXPECT_TRUE(file_utils::file_exists(file_path));
+        EXPECT_TRUE(file_utils_t::create_file(file_path));
+        EXPECT_TRUE(file_utils_t::file_exists(file_path));
     }
 
     TEST_F(file_utils_test, create_file_creates_parent_directories) {
         auto file_path = temp_dir_ / "deep" / "path" / "file.txt";
 
-        EXPECT_TRUE(file_utils::create_file(file_path));
-        EXPECT_TRUE(file_utils::file_exists(file_path));
+        EXPECT_TRUE(file_utils_t::create_file(file_path));
+        EXPECT_TRUE(file_utils_t::file_exists(file_path));
     }
 
     TEST_F(file_utils_test, delete_file_removes_existing_file) {
         auto file_path = temp_dir_ / "to_delete.txt";
-        file_utils::write_file(file_path, "delete me");
+        file_utils_t::write_file(file_path, "delete me");
 
-        EXPECT_TRUE(file_utils::delete_file(file_path));
-        EXPECT_FALSE(file_utils::file_exists(file_path));
+        EXPECT_TRUE(file_utils_t::delete_file(file_path));
+        EXPECT_FALSE(file_utils_t::file_exists(file_path));
     }
 
     TEST_F(file_utils_test, delete_file_returns_true_for_already_deleted_file) {
         auto file_path = temp_dir_ / "already_gone.txt";
 
-        EXPECT_TRUE(file_utils::delete_file(file_path));
+        EXPECT_TRUE(file_utils_t::delete_file(file_path));
     }
 
     TEST_F(file_utils_test, force_delete_file_removes_file) {
         auto file_path = temp_dir_ / "force_delete.txt";
-        file_utils::write_file(file_path, "content");
+        file_utils_t::write_file(file_path, "content");
 
-        EXPECT_TRUE(file_utils::force_delete_file(file_path));
-        EXPECT_FALSE(file_utils::file_exists(file_path));
+        EXPECT_TRUE(file_utils_t::force_delete_file(file_path));
+        EXPECT_FALSE(file_utils_t::file_exists(file_path));
     }
 
     TEST_F(file_utils_test, force_delete_file_removes_directory_recursively) {
         auto dir_path = temp_dir_ / "dir_to_remove";
         std::filesystem::create_directories(dir_path / "subdir");
-        file_utils::write_file(dir_path / "file.txt", "content");
+        file_utils_t::write_file(dir_path / "file.txt", "content");
 
-        EXPECT_TRUE(file_utils::force_delete_file(dir_path));
+        EXPECT_TRUE(file_utils_t::force_delete_file(dir_path));
         EXPECT_FALSE(std::filesystem::exists(dir_path));
     }
 
     TEST_F(file_utils_test, file_exists_returns_true_for_file) {
         auto file_path = temp_dir_ / "exists.txt";
-        file_utils::write_file(file_path, "content");
+        file_utils_t::write_file(file_path, "content");
 
-        EXPECT_TRUE(file_utils::file_exists(file_path));
+        EXPECT_TRUE(file_utils_t::file_exists(file_path));
     }
 
     TEST_F(file_utils_test, file_exists_returns_false_for_directory) {
         auto dir_path = temp_dir_ / "a_dir";
         std::filesystem::create_directories(dir_path);
 
-        EXPECT_FALSE(file_utils::file_exists(dir_path));
+        EXPECT_FALSE(file_utils_t::file_exists(dir_path));
     }
 
     TEST_F(file_utils_test, file_exists_returns_false_for_missing_path) {
         auto file_path = temp_dir_ / "missing.txt";
 
-        EXPECT_FALSE(file_utils::file_exists(file_path));
+        EXPECT_FALSE(file_utils_t::file_exists(file_path));
     }
 
     TEST_F(file_utils_test, file_path_exists_returns_true_for_directory) {
         auto dir_path = temp_dir_ / "test_dir";
         std::filesystem::create_directories(dir_path);
 
-        EXPECT_TRUE(file_utils::file_path_exists(dir_path));
+        EXPECT_TRUE(file_utils_t::file_path_exists(dir_path));
     }
 
     TEST_F(file_utils_test, file_path_exists_returns_false_for_file) {
         auto file_path = temp_dir_ / "test_file.txt";
-        file_utils::write_file(file_path, "content");
+        file_utils_t::write_file(file_path, "content");
 
-        EXPECT_FALSE(file_utils::file_path_exists(file_path));
+        EXPECT_FALSE(file_utils_t::file_path_exists(file_path));
     }
 
     TEST_F(file_utils_test, file_path_exists_returns_false_for_missing_path) {
         auto dir_path = temp_dir_ / "missing_dir";
 
-        EXPECT_FALSE(file_utils::file_path_exists(dir_path));
+        EXPECT_FALSE(file_utils_t::file_path_exists(dir_path));
     }
 
     TEST_F(file_utils_test, write_file_overwrites_existing_content) {
         auto file_path = temp_dir_ / "overwrite.txt";
-        file_utils::write_file(file_path, "old content");
+        file_utils_t::write_file(file_path, "old content");
 
-        EXPECT_TRUE(file_utils::write_file(file_path, "new content"));
+        EXPECT_TRUE(file_utils_t::write_file(file_path, "new content"));
 
-        auto result = file_utils::read_file(file_path);
+        auto result = file_utils_t::read_file(file_path);
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(result.value(), "new content");
     }
@@ -178,8 +178,8 @@ namespace error_system::utils {
         auto file_path = temp_dir_ / "large.txt";
         std::string large_content(10000, 'x');
 
-        file_utils::write_file(file_path, large_content);
-        auto result = file_utils::read_file(file_path);
+        file_utils_t::write_file(file_path, large_content);
+        auto result = file_utils_t::read_file(file_path);
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(result.value().size(), 10000);
         EXPECT_EQ(result.value(), large_content);

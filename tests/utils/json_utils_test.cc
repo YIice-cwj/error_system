@@ -112,7 +112,7 @@ namespace error_system::utils {
 
     TEST_F(json_dict_test, from_file_reads_valid_json_file) {
         auto file_path = temp_dir_ / "test.json";
-        file_utils::write_file(file_path, R"({"file_key": "file_value"})");
+        file_utils_t::write_file(file_path, R"({"file_key": "file_value"})");
 
         auto result = json_dict_t::from_file(file_path);
         ASSERT_TRUE(result.has_value());

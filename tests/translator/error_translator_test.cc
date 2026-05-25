@@ -1,6 +1,9 @@
 #include "error_dict.h"
 #include "error_system/translator/error_translator.h"
+#include <atomic>
 #include <gtest/gtest.h>
+#include <thread>
+#include <vector>
 
 namespace error_system::translator {
 
@@ -98,6 +101,31 @@ namespace error_system::translator {
 
         std::string result = translator.translate(2000, 1);
         EXPECT_NE(result.find("新名称"), std::string::npos);
+    }
+
+    TEST_F(error_translator_test, concurrent_register_and_translate) {
+        auto& translator = error_translator_t::instance();
+        std::vector<std::thread> threads;
+        std::atomic<int> success_count{0};
+
+        for (int i = 0; i < 10; ++i) {
+            threads.emplace_back([&, i]() {
+                for (int j = 0; j < 100; ++j) {
+                    translator.register_subsystem(3000 + i, "子系统");
+                    translator.register_module(3000 + i, j, "模块");
+                    auto result = translator.translate(3000 + i, j);
+                    if (result.find("子系统") != std::string::npos) {
+                        success_count.fetch_add(1);
+                    }
+                }
+            });
+        }
+
+        for (auto& t : threads) {
+            t.join();
+        }
+
+        EXPECT_EQ(success_count.load(), 1000);
     }
 
 }  // namespace error_system::translator

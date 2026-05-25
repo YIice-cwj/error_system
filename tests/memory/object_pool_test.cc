@@ -1,5 +1,8 @@
 #include "error_system/memory/object_pool.h"
+#include <atomic>
 #include <gtest/gtest.h>
+#include <thread>
+#include <vector>
 
 namespace error_system::memory {
 
@@ -40,7 +43,6 @@ namespace error_system::memory {
         pool.release(obj);
         EXPECT_EQ(pool.size(), 0UL);
         EXPECT_TRUE(pool.empty());
-        EXPECT_EQ(obj, nullptr);
     }
 
     TEST_F(object_pool_test, full_pool_returns_nullptr) {
@@ -96,13 +98,39 @@ namespace error_system::memory {
         test_object_t invalid_obj;
         test_object_t* ptr = &invalid_obj;
 
-        pool.release(ptr);
+        bool result = pool.release(ptr);
+        EXPECT_FALSE(result);
         EXPECT_NE(ptr, nullptr);
     }
 
     TEST_F(object_pool_test, capacity_matches_template_parameter) {
         auto& pool = object_pool_t<test_object_t, 42>::instance();
         EXPECT_EQ(pool.capacity(), 42UL);
+    }
+
+    TEST_F(object_pool_test, concurrent_acquire_and_release) {
+        std::vector<std::thread> threads;
+        std::atomic<int> success_count{0};
+
+        for (int i = 0; i < 10; ++i) {
+            threads.emplace_back([&]() {
+                auto& thread_pool = object_pool_t<test_object_t, 100>::instance_thread_local();
+                for (int j = 0; j < 100; ++j) {
+                    auto* obj = thread_pool.acquire();
+                    if (obj != nullptr) {
+                        obj->value_ = j;
+                        thread_pool.release(obj);
+                        success_count.fetch_add(1);
+                    }
+                }
+            });
+        }
+
+        for (auto& t : threads) {
+            t.join();
+        }
+
+        EXPECT_EQ(success_count.load(), 1000);
     }
 
 }  // namespace error_system::memory

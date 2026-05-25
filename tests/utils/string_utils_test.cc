@@ -260,4 +260,24 @@ namespace error_system::utils {
         EXPECT_EQ(result, "startend");
     }
 
+    TEST_F(string_utils_test, format_escapes_double_braces) {
+        auto result = string_utils_t::format("{{hello}}", "world");
+        EXPECT_EQ(result, "{hello}");
+    }
+
+    TEST_F(string_utils_test, format_mixed_placeholders_and_escaped_braces) {
+        auto result = string_utils_t::format("{{}} {}", 42);
+        EXPECT_EQ(result, "{} 42");
+    }
+
+    TEST_F(string_utils_test, format_escapes_only_left_brace) {
+        auto result = string_utils_t::format("{{", "x");
+        EXPECT_EQ(result, "{");
+    }
+
+    TEST_F(string_utils_test, format_escapes_only_right_brace) {
+        auto result = string_utils_t::format("}}", "x");
+        EXPECT_EQ(result, "}");
+    }
+
 }  // namespace error_system::utils

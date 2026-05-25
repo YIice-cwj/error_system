@@ -1,13 +1,18 @@
 #include "error_system/core/error_context.h"
 #include "error_system/plugin/plugin_registry.h"
+#include <atomic>
 #include <gtest/gtest.h>
+#include <memory>
+#include <string>
+#include <thread>
+#include <vector>
 
 namespace error_system::plugin {
 
     class mock_plugin_t : public i_error_plugin_t {
         public:
         std::string name_;
-        mutable int call_count_ = 0;
+        mutable std::atomic<int> call_count_{0};
         mutable const core::error_context_t* last_context_ = nullptr;
 
         explicit mock_plugin_t(const std::string& name) : name_(name) {}
@@ -15,7 +20,7 @@ namespace error_system::plugin {
         std::string_view name() const noexcept override { return name_; }
 
         void on_error(const core::error_context_t& context) noexcept override {
-            ++call_count_;
+            call_count_.fetch_add(1);
             last_context_ = &context;
         }
     };
@@ -80,8 +85,8 @@ namespace error_system::plugin {
         core::error_context_t ctx;
         plugin_registry_t::instance().notify_error(ctx);
 
-        EXPECT_EQ(plugin1.call_count_, 1);
-        EXPECT_EQ(plugin2.call_count_, 1);
+        EXPECT_EQ(plugin1.call_count_.load(), 1);
+        EXPECT_EQ(plugin2.call_count_.load(), 1);
     }
 
     TEST_F(plugin_registry_test, clear_removes_all_plugins) {
@@ -114,6 +119,57 @@ namespace error_system::plugin {
         plugin_registry_t::instance().notify_error(ctx);
 
         EXPECT_EQ(plugin.last_context_->code.get_code(), 42ULL);
+    }
+
+    TEST_F(plugin_registry_test, concurrent_register_and_notify) {
+        mock_plugin_t plugin("concurrent");
+        plugin_registry_t::instance().register_plugin(&plugin);
+
+        std::vector<std::thread> threads;
+        std::atomic<int> notify_count{0};
+
+        for (int i = 0; i < 10; ++i) {
+            threads.emplace_back([&]() {
+                for (int j = 0; j < 100; ++j) {
+                    core::error_context_t ctx;
+                    ctx.code = core::error_code_t(42);
+                    plugin_registry_t::instance().notify_error(ctx);
+                    notify_count.fetch_add(1);
+                }
+            });
+        }
+
+        for (auto& t : threads) {
+            t.join();
+        }
+
+        EXPECT_EQ(notify_count.load(), 1000);
+        EXPECT_GE(plugin.call_count_.load(), 995);
+    }
+
+    TEST_F(plugin_registry_test, concurrent_register_and_unregister) {
+        std::vector<std::unique_ptr<mock_plugin_t>> plugins;
+        for (int i = 0; i < 100; ++i) {
+            plugins.push_back(std::make_unique<mock_plugin_t>("plugin_" + std::to_string(i)));
+        }
+
+        std::vector<std::thread> threads;
+
+        for (int i = 0; i < 10; ++i) {
+            threads.emplace_back([&, i]() {
+                for (int j = 0; j < 10; ++j) {
+                    int idx = i * 10 + j;
+                    plugin_registry_t::instance().register_plugin(plugins[idx].get());
+                    plugin_registry_t::instance().unregister_plugin("plugin_" + std::to_string(idx));
+                }
+            });
+        }
+
+        for (auto& t : threads) {
+            t.join();
+        }
+
+        EXPECT_EQ(plugin_registry_t::instance().size(), 0UL);
     }
 
 }  // namespace error_system::plugin
