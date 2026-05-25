@@ -103,9 +103,9 @@ int main() {
     auto safe_process = [](int order_id) -> result_t<int> {
         try {
             process_order(order_id);
-            return order_id * 100;
+            return result_t<int>(order_id * 100);
         } catch (const error_exception_t& e) {
-            return e.context();
+            return result_t<int>(e.context());
         }
     };
 

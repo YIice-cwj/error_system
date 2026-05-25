@@ -1,22 +1,24 @@
 #include "error_system.h"
 #include "error_system/core/error_registry.h"
 #include "error_system/translator/error_translator.h"
+// IWYU pragma: begin_exports
 #include "payment_service_errors.h"
 #include "trade_service_errors.h"
+// IWYU pragma: end_exports
 #include <iostream>
 
 using namespace error_system::core;
 using namespace error_system::translator;
 using namespace error_system::domain;
 
-// 使用宏注册传统模块（静态初始化时自动注册）
-void init_legacy_services() {
-    REGISTER_LEGACY_MODULE(101, 1, "交易服务", "订单模块");
-    REGISTER_LEGACY_MODULE(102, 1, "支付服务", "支付网关");
+// 使用宏注册模块（静态初始化时自动注册）
+void init_services() {
+    REGISTER_MODULE(101, 1, "交易服务", "订单模块");
+    REGISTER_MODULE(102, 1, "支付服务", "支付网关");
 }
 
 int main() {
-    init_legacy_services();
+    init_services();
     std::cout << "===== Demo 5: 错误翻译器 =====" << std::endl;
 
     // 1. 动态注册子系统和模块
