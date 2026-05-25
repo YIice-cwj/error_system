@@ -6,6 +6,7 @@ Release/
 .vscode/
 .idea/
 .cache/
+.claude/
 .cursorrules
 *.o
 *.obj

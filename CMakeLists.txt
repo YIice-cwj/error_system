@@ -71,10 +71,26 @@ add_custom_target(GenerateErrorAssets DEPENDS ${ALL_GENERATED_HEADERS} ${DICT_HE
 
 include_directories(${ERROR_GENERATED_DIR})
 
-file(GLOB_RECURSE SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cc ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
+set(SOURCE_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_registry.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/error_router_plugin.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/plugin_registry.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/translator/error_translator.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/file_utils.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/json_lexer.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/json_utils.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/stack_trace_utils.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/string_utils.cc
+)
 
 add_library(${PROJECT_NAME} ${SOURCE_FILES})
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
+
+if (BUILD_SHARED_LIBS)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE ERROR_SYSTEM_BUILDING_SHARED)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC ERROR_SYSTEM_USING_SHARED)
+endif()
 
 add_dependencies(${PROJECT_NAME} GenerateErrorAssets)
 
@@ -177,9 +193,9 @@ if(NOT TARGET uninstall)
         COMMAND ${CMAKE_COMMAND} -E echo "开始强制卸载文件..."
         COMMAND sh -c "[ -f install_manifest.txt ] && xargs rm -vf < install_manifest.txt || echo '⚠️ 未找到 install_manifest.txt，跳过文件逐一删除。'"
         COMMAND ${CMAKE_COMMAND} -E echo "清理残留的空目录..."
-        COMMAND rm -rf ${CMAKE_INSTALL_PREFIX}/include/${PROJECT_NAME}
-        COMMAND rm -rf ${CMAKE_INSTALL_PREFIX}/lib/cmake/${PROJECT_NAME}
-        COMMAND rm -rf ${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}
+        COMMAND rm -rf ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}
+        COMMAND rm -rf ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
+        COMMAND rm -rf ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT "Uninstalling the project and cleaning up directories..."
         VERBATIM

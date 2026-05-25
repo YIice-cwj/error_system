@@ -17,5 +17,5 @@ foreach(test_source IN LISTS TEST_SOURCES)
         target_link_options(${test_name} PRIVATE /DEBUG)
     endif()
 
-    gtest_discover_tests(${test_name}) 
+    gtest_discover_tests(${test_name} DISCOVERY_TIMEOUT 30)
 endforeach()
