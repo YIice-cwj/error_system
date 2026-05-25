@@ -21,69 +21,67 @@
  * @copyright Copyright (c) 2026
  */
 namespace error_system::utils {
-    namespace {
-        /**
-         * @brief 检查类型 T 是否具有成员函数 to_string()
-         * @tparam T 待检查类型
-         * @details 基于 SFINAE 检测 T::to_string() 是否存在
-         *          默认模板（无匹配时）继承 std::false_type
-         * @return bool 是否有成员函数 to_string()
-         */
-        template <typename T, typename = std::void_t<>>
-        struct is_member_to_string_t : std::false_type {};
+    /**
+     * @brief 检查类型 T 是否具有成员函数 to_string()
+     * @tparam T 待检查类型
+     * @details 基于 SFINAE 检测 T::to_string() 是否存在
+     *          默认模板（无匹配时）继承 std::false_type
+     * @return bool 是否有成员函数 to_string()
+     */
+    template <typename T, typename = std::void_t<>>
+    struct is_member_to_string_t : std::false_type {};
 
-        /**
-         * @brief 检查类型 T 是否具有成员函数 to_string()
-         * @tparam T 待检查类型
-         * @details 基于 SFINAE 检测 T::to_string() 是否存在
-         *          默认模板（无匹配时）继承 std::false_type
-         * @return bool 是否有成员函数 to_string()
-         */
-        template <typename T>
-        struct is_member_to_string_t<T, std::void_t<decltype(std::declval<const T&>().to_string())>>
-            : std::is_convertible<decltype(std::declval<const T&>().to_string()), std::string_view> {};
-        /**
-         * @brief 检查类型 T 是否具有全局函数 to_string()
-         * @tparam T 待检查类型
-         * @details 基于 SFINAE 检测 to_string(T) 是否存在
-         *          默认模板（无匹配时）继承 std::false_type
-         * @return bool 是否有全局函数 to_string()
-         */
-        template <typename T, typename = std::void_t<>>
-        struct is_global_to_string_t : std::false_type {};
+    /**
+     * @brief 检查类型 T 是否具有成员函数 to_string()
+     * @tparam T 待检查类型
+     * @details 基于 SFINAE 检测 T::to_string() 是否存在
+     *          默认模板（无匹配时）继承 std::false_type
+     * @return bool 是否有成员函数 to_string()
+     */
+    template <typename T>
+    struct is_member_to_string_t<T, std::void_t<decltype(std::declval<const T&>().to_string())>>
+        : std::is_convertible<decltype(std::declval<const T&>().to_string()), std::string_view> {};
+    /**
+     * @brief 检查类型 T 是否具有全局函数 to_string()
+     * @tparam T 待检查类型
+     * @details 基于 SFINAE 检测 to_string(T) 是否存在
+     *          默认模板（无匹配时）继承 std::false_type
+     * @return bool 是否有全局函数 to_string()
+     */
+    template <typename T, typename = std::void_t<>>
+    struct is_global_to_string_t : std::false_type {};
 
-        /**
-         * @brief 检查类型 T 是否具有全局函数 to_string()
-         * @tparam T 待检查类型
-         * @details 基于 SFINAE 检测 to_string(T) 是否存在
-         *          默认模板（无匹配时）继承 std::false_type
-         * @return bool 是否有全局函数 to_string()
-         */
-        template <typename T>
-        struct is_global_to_string_t<T, std::void_t<decltype(to_string(std::declval<const T&>()))>>
-            : std::is_convertible<decltype(to_string(std::declval<const T&>())), std::string_view> {};
+    /**
+     * @brief 检查类型 T 是否具有全局函数 to_string()
+     * @tparam T 待检查类型
+     * @details 基于 SFINAE 检测 to_string(T) 是否存在
+     *          默认模板（无匹配时）继承 std::false_type
+     * @return bool 是否有全局函数 to_string()
+     */
+    template <typename T>
+    struct is_global_to_string_t<T, std::void_t<decltype(to_string(std::declval<const T&>()))>>
+        : std::is_convertible<decltype(to_string(std::declval<const T&>())), std::string_view> {};
 
-        /**
-         * @brief 检查类型 T 是否具有成员函数 to_string()
-         * @tparam T 待检查类型
-         * @details 基于 SFINAE 检测 T::to_string() 是否存在
-         *          默认模板（无匹配时）继承 std::false_type
-         * @return bool 是否有成员函数 to_string()
-         */
-        template <typename T>
-        constexpr bool is_member_to_string_v = is_member_to_string_t<T>::value;
+    /**
+     * @brief 检查类型 T 是否具有成员函数 to_string()
+     * @tparam T 待检查类型
+     * @details 基于 SFINAE 检测 T::to_string() 是否存在
+     *          默认模板（无匹配时）继承 std::false_type
+     * @return bool 是否有成员函数 to_string()
+     */
+    template <typename T>
+    constexpr bool is_member_to_string_v = is_member_to_string_t<T>::value;
 
-        /**
-         * @brief 检查类型 T 是否具有全局函数 to_string()
-         * @tparam T 待检查类型
-         * @details 基于 SFINAE 检测 to_string(T) 是否存在
-         *          默认模板（无匹配时）继承 std::false_type
-         * @return bool 是否有全局函数 to_string()
-         */
-        template <typename T>
-        constexpr bool is_global_to_string_v = is_global_to_string_t<T>::value;
+    /**
+     * @brief 检查类型 T 是否具有全局函数 to_string()
+     * @tparam T 待检查类型
+     * @details 基于 SFINAE 检测 to_string(T) 是否存在
+     *          默认模板（无匹配时）继承 std::false_type
+     * @return bool 是否有全局函数 to_string()
+     */
+    template <typename T>
+    constexpr bool is_global_to_string_v = is_global_to_string_t<T>::value;
 
-    }  // namespace
     /**
      * @brief 字符串工具函数
      * @details 定义字符串相关的工具函数，用于处理字符串
@@ -95,14 +93,41 @@ namespace error_system::utils {
             std::string_view format;
             size_t cursor = 0;
 
+            void append_literal_braces() noexcept {
+                while (cursor < format.size()) {
+                    if (format[cursor] == '{') {
+                        if (cursor + 1 < format.size() && format[cursor + 1] == '{') {
+                            result.push_back('{');
+                            cursor += 2;
+                            continue;
+                        }
+                        break;
+                    }
+                    if (format[cursor] == '}') {
+                        if (cursor + 1 < format.size() && format[cursor + 1] == '}') {
+                            result.push_back('}');
+                            cursor += 2;
+                            continue;
+                        }
+                    }
+                    result.push_back(format[cursor]);
+                    ++cursor;
+                }
+            }
+
             template <typename T>
             void append_value(const T& value) noexcept {
-                size_t pos = format.find("{}", cursor);
-                if (pos == std::string_view::npos) {
+                append_literal_braces();
+
+                if (cursor >= format.size() || format[cursor] != '{') {
                     return;
                 }
-                result.append(format.data() + cursor, pos - cursor);
-                cursor = pos + 2;
+                cursor++;
+                if (cursor < format.size() && format[cursor] == '}') {
+                    cursor++;
+                } else {
+                    return;
+                }
 
                 if constexpr (std::is_convertible_v<T, std::string_view>) {
                     result.append(std::string_view(value));
@@ -141,6 +166,7 @@ namespace error_system::utils {
             }
 
             void finish() noexcept {
+                append_literal_braces();
                 if (cursor < format.size()) {
                     result.append(format.data() + cursor, format.size() - cursor);
                 }
@@ -245,7 +271,21 @@ namespace error_system::utils {
         static inline std::string format(std::string_view format, Args&&... args) noexcept {
             std::string result{};
 
-            result.reserve(format.size() + (sizeof...(args) * 16));
+            size_t estimated_size = format.size();
+            auto add_size = [&estimated_size](const auto& arg) {
+                using arg_t = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_integral_v<arg_t>) {
+                    estimated_size += 24;
+                } else if constexpr (std::is_floating_point_v<arg_t>) {
+                    estimated_size += 32;
+                } else if constexpr (std::is_pointer_v<arg_t> || std::is_same_v<arg_t, std::nullptr_t>) {
+                    estimated_size += 24;
+                } else {
+                    estimated_size += std::string_view{arg}.size();
+                }
+            };
+            (add_size(args), ...);
+            result.reserve(estimated_size);
 
             format_appender appender{result, format, 0};
 

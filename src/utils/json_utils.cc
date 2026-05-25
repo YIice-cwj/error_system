@@ -181,7 +181,7 @@ namespace error_system::utils {
      * @return std::optional<json_dict_t> JSON字典，若文件不存在或解析失败则返回空可选
      */
     std::optional<json_dict_t> json_dict_t::from_file(const std::filesystem::path& json_path) noexcept {
-        auto content_opt = file_utils::read_file(json_path);
+        auto content_opt = file_utils_t::read_file(json_path);
 
         if (!content_opt.has_value()) {
             return std::nullopt;

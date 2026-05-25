@@ -16,7 +16,7 @@
  */
 namespace error_system::utils {
 
-    class file_utils {
+    class file_utils_t {
         public:
         /**
          * @brief 读取文件内容

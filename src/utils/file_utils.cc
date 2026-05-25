@@ -8,7 +8,7 @@ namespace error_system::utils {
      * @param path 文件路径
      * @return std::optional<std::string> 文件内容的字符串表示，如果文件不存在则返回空可选
      */
-    std::optional<std::string> file_utils::read_file(const std::filesystem::path& path) noexcept {
+    std::optional<std::string> file_utils_t::read_file(const std::filesystem::path& path) noexcept {
         std::error_code ec{};
         if (!std::filesystem::exists(path, ec) || !std::filesystem::is_regular_file(path, ec)) {
             return std::nullopt;
@@ -46,7 +46,7 @@ namespace error_system::utils {
      * @param content 要写入的字符串内容
      * @return bool 写入成功则返回 true，否则返回 false
      */
-    bool file_utils::write_file(const std::filesystem::path& path, const std::string& content) noexcept {
+    bool file_utils_t::write_file(const std::filesystem::path& path, const std::string& content) noexcept {
         std::error_code error{};
         if (path.has_parent_path() && !std::filesystem::exists(path.parent_path(), error)) {
             std::filesystem::create_directories(path.parent_path(), error);
@@ -70,7 +70,7 @@ namespace error_system::utils {
      * @param path 文件路径
      * @return bool 创建成功则返回 true，否则返回 false
      */
-    bool file_utils::create_file(const std::filesystem::path& path) noexcept {
+    bool file_utils_t::create_file(const std::filesystem::path& path) noexcept {
         if (file_exists(path)) {
             return true;
         }
@@ -93,7 +93,7 @@ namespace error_system::utils {
      * @param path 文件路径
      * @return bool 删除成功则返回 true，否则返回 false
      */
-    bool file_utils::delete_file(const std::filesystem::path& path) noexcept {
+    bool file_utils_t::delete_file(const std::filesystem::path& path) noexcept {
         std::error_code error{};
         return std::filesystem::remove(path, error) || !std::filesystem::exists(path, error);
     }
@@ -104,7 +104,7 @@ namespace error_system::utils {
      * @param path 文件路径
      * @return bool 删除成功则返回 true，否则返回 false
      */
-    bool file_utils::force_delete_file(const std::filesystem::path& path) noexcept {
+    bool file_utils_t::force_delete_file(const std::filesystem::path& path) noexcept {
         std::error_code error{};
         return std::filesystem::remove_all(path, error) || !std::filesystem::exists(path, error);
     }
@@ -115,7 +115,7 @@ namespace error_system::utils {
      * @param path 文件路径
      * @return bool 文件存在则返回 true，否则返回 false
      */
-    bool file_utils::file_exists(const std::filesystem::path& path) noexcept {
+    bool file_utils_t::file_exists(const std::filesystem::path& path) noexcept {
         std::error_code error{};
         return std::filesystem::exists(path, error) && std::filesystem::is_regular_file(path, error);
     }
@@ -126,7 +126,7 @@ namespace error_system::utils {
      * @param path 文件路径
      * @return bool 文件路径存在则返回 true，否则返回 false
      */
-    bool file_utils::file_path_exists(const std::filesystem::path& path) noexcept {
+    bool file_utils_t::file_path_exists(const std::filesystem::path& path) noexcept {
         std::error_code error{};
         return std::filesystem::exists(path, error) && std::filesystem::is_directory(path, error);
     }

@@ -11,22 +11,20 @@
  * @copyright Copyright (c) 2026
  */
 namespace error_system::utils {
-    namespace {
-        /**
-         * @brief 提取源文件名
-         * @param path 源文件路径
-         * @return const char* 源文件名
-         */
-        constexpr const char* extract_short_filename(const char* path) noexcept {
-            const char* short_name = path;
-            for (const char* p = path; *p != '\0'; ++p) {
-                if (*p == '/' || *p == '\\') {
-                    short_name = p + 1;
-                }
+    /**
+     * @brief 提取源文件名
+     * @param path 源文件路径
+     * @return const char* 源文件名
+     */
+    constexpr const char* extract_short_filename(const char* path) noexcept {
+        const char* short_name = path;
+        for (const char* p = path; *p != '\0'; ++p) {
+            if (*p == '/' || *p == '\\') {
+                short_name = p + 1;
             }
-            return short_name;
         }
-    }  // namespace
+        return short_name;
+    }
 
     /**
      * @brief 源文件位置

@@ -27,6 +27,38 @@ namespace error_system::utils::detail {
                     str += '\n';
                 } else if (json_str_[pos_] == 't') {
                     str += '\t';
+                } else if (json_str_[pos_] == 'r') {
+                    str += '\r';
+                } else if (json_str_[pos_] == 'b') {
+                    str += '\b';
+                } else if (json_str_[pos_] == 'f') {
+                    str += '\f';
+                } else if (json_str_[pos_] == 'u' && pos_ + 4 < json_str_.size()) {
+                    uint32_t codepoint = 0;
+                    for (int i = 1; i <= 4; ++i) {
+                        char hex = json_str_[pos_ + i];
+                        codepoint <<= 4;
+                        if (hex >= '0' && hex <= '9') {
+                            codepoint |= hex - '0';
+                        } else if (hex >= 'a' && hex <= 'f') {
+                            codepoint |= hex - 'a' + 10;
+                        } else if (hex >= 'A' && hex <= 'F') {
+                            codepoint |= hex - 'A' + 10;
+                        } else {
+                            return {token_type_t::invalid, ""};
+                        }
+                    }
+                    pos_ += 4;
+                    if (codepoint <= 0x7F) {
+                        str += static_cast<char>(codepoint);
+                    } else if (codepoint <= 0x7FF) {
+                        str += static_cast<char>(0xC0 | (codepoint >> 6));
+                        str += static_cast<char>(0x80 | (codepoint & 0x3F));
+                    } else {
+                        str += static_cast<char>(0xE0 | (codepoint >> 12));
+                        str += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+                        str += static_cast<char>(0x80 | (codepoint & 0x3F));
+                    }
                 } else {
                     str += json_str_[pos_];
                 }

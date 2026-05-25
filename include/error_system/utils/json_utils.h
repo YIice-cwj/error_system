@@ -3,7 +3,6 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 /**
  * @file json_utils.h
@@ -29,9 +28,9 @@ namespace error_system::utils {
 
         ~json_dict_t() noexcept = default;
 
-        json_dict_t(const json_dict_t&) = delete;
+        json_dict_t(const json_dict_t&) = default;
 
-        json_dict_t& operator=(const json_dict_t&) = delete;
+        json_dict_t& operator=(const json_dict_t&) = default;
 
         json_dict_t(json_dict_t&&) noexcept = default;
 
