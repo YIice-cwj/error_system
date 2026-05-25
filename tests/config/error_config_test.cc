@@ -1,6 +1,9 @@
 #include "error_system/config/error_config.h"
 #include "error_system/core/error_context.h"
+#include <atomic>
 #include <gtest/gtest.h>
+#include <thread>
+#include <vector>
 
 namespace error_system::config {
 
@@ -72,6 +75,57 @@ namespace error_system::config {
 
         error_config_t::set_enable_short_filename(false);
         EXPECT_FALSE(error_config_t::is_short_filename_enabled());
+    }
+
+    TEST_F(error_config_test, concurrent_set_and_get_stacktrace_level) {
+        auto original = error_config_t::get_stacktrace_level();
+
+        std::vector<std::thread> threads;
+        std::atomic<int> success_count{0};
+
+        for (int i = 0; i < 10; ++i) {
+            threads.emplace_back([&]() {
+                for (int j = 0; j < 100; ++j) {
+                    error_config_t::set_stacktrace_level(core::error_level_t::error);
+                    auto level = error_config_t::get_stacktrace_level();
+                    if (level == core::error_level_t::error) {
+                        success_count.fetch_add(1);
+                    }
+                }
+            });
+        }
+
+        for (auto& t : threads) {
+            t.join();
+        }
+
+        EXPECT_EQ(success_count.load(), 1000);
+        error_config_t::set_stacktrace_level(original);
+    }
+
+    TEST_F(error_config_test, concurrent_set_and_get_formatter) {
+        formatter_callback_t formatter = [](const core::error_context_t&) -> std::string { return "test"; };
+
+        std::vector<std::thread> threads;
+        std::atomic<int> success_count{0};
+
+        for (int i = 0; i < 10; ++i) {
+            threads.emplace_back([&]() {
+                for (int j = 0; j < 100; ++j) {
+                    error_config_t::set_custom_formatter(formatter);
+                    auto retrieved = error_config_t::get_custom_formatter();
+                    if (retrieved != nullptr) {
+                        success_count.fetch_add(1);
+                    }
+                }
+            });
+        }
+
+        for (auto& t : threads) {
+            t.join();
+        }
+
+        EXPECT_EQ(success_count.load(), 1000);
     }
 
 }  // namespace error_system::config

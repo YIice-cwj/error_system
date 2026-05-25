@@ -34,11 +34,21 @@ namespace error_system::config {
     class error_config_t {
         private:
         /**
-         * @brief 内部共享锁
-         * @details 保护全局配置项并发访问的互斥锁
+         * @brief 格式化函数专用共享锁
+         * @details 保护自定义格式化函数的互斥锁
          * @return std::shared_mutex& 共享锁引用
          */
-        static std::shared_mutex& __get_mutex() noexcept {
+        static std::shared_mutex& __get_formatter_mutex() noexcept {
+            static std::shared_mutex mutex;
+            return mutex;
+        }
+
+        /**
+         * @brief 翻译函数专用共享锁
+         * @details 保护自定义翻译函数的互斥锁
+         * @return std::shared_mutex& 共享锁引用
+         */
+        static std::shared_mutex& __get_translator_mutex() noexcept {
             static std::shared_mutex mutex;
             return mutex;
         }
@@ -127,17 +137,18 @@ namespace error_system::config {
          * @param formatter 自定义格式化函数
          */
         static void set_custom_formatter(formatter_callback_t formatter) noexcept {
-            std::unique_lock<std::shared_mutex> lock(__get_mutex());
+            std::unique_lock<std::shared_mutex> lock(__get_formatter_mutex());
             __get_custom_formatter() = std::move(formatter);
         }
 
         /**
          * @brief 获取自定义格式化函数
          * @details 保护全局配置项并发访问的互斥锁
-         * @return formatter_callback_t 自定义格式化函数
+         * @return const formatter_callback_t& 自定义格式化函数引用
+         * @note 调用方需在持有锁期间使用返回值
          */
-        static formatter_callback_t get_custom_formatter() noexcept {
-            std::shared_lock<std::shared_mutex> lock(__get_mutex());
+        static const formatter_callback_t& get_custom_formatter() noexcept {
+            std::shared_lock<std::shared_mutex> lock(__get_formatter_mutex());
             return __get_custom_formatter();
         }
 
@@ -147,16 +158,17 @@ namespace error_system::config {
          * @param translator 自定义翻译函数
          */
         static void set_translator(translator_func_t translator) noexcept {
-            std::unique_lock<std::shared_mutex> lock(__get_mutex());
+            std::unique_lock<std::shared_mutex> lock(__get_translator_mutex());
             __get_custom_translator() = std::move(translator);
         }
 
         /**
          * @brief 获取自定义翻译函数
-         * @return translator_func_t 自定义翻译函数
+         * @return const translator_func_t& 自定义翻译函数引用
+         * @note 调用方需在持有锁期间使用返回值
          */
-        static translator_func_t get_translator() noexcept {
-            std::shared_lock<std::shared_mutex> lock(__get_mutex());
+        static const translator_func_t& get_translator() noexcept {
+            std::shared_lock<std::shared_mutex> lock(__get_translator_mutex());
             return __get_custom_translator();
         }
 
