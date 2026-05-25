@@ -33,26 +33,26 @@ namespace error_system::core {
          * @brief 构造函数
          * @param value 成功值
          */
-        result_t(const value_type& value) noexcept : value_or_error_(value) {}
+        explicit result_t(const value_type& value) noexcept : value_or_error_(value) {}
 
         /**
          * @brief 移动构造函数
          * @param value 成功值
          */
-        result_t(value_type&& value) noexcept : value_or_error_(std::move(value)) {}
+        explicit result_t(value_type&& value) noexcept : value_or_error_(std::move(value)) {}
 
         /**
          * @brief 构造函数
          * @param error_context 错误上下文
          */
-        result_t(const error_context_t& error_context) noexcept : value_or_error_(error_context) {}
+        explicit result_t(const error_context_t& error_context) noexcept : value_or_error_(error_context) {}
 
         /**
          * @brief 构造函数
          * @param code 错误码
          * @param message 错误信息
          */
-        result_t(error_code_t code, const std::string& message = "") noexcept
+        explicit result_t(error_code_t code, const std::string& message = "") noexcept
             : value_or_error_(error_context_t{code, message}) {}
 
         public:
@@ -204,7 +204,7 @@ namespace error_system::core {
          * @brief 构造函数
          * @param error_context 错误上下文
          */
-        result_t(const error_context_t& error_context) noexcept : error_context_(error_context) {}
+        explicit result_t(const error_context_t& error_context) noexcept : error_context_(error_context) {}
 
         /**
          * @brief 构造函数
@@ -212,8 +212,8 @@ namespace error_system::core {
          * @param message 错误信息
          */
         template <typename... Args>
-        result_t(error_code_t code, const std::string_view format, Args... args) noexcept
-            : error_context_(code, format, args...) {}
+        explicit result_t(error_code_t code, const std::string_view message_format, Args... args) noexcept
+            : error_context_(code, message_format, args...) {}
 
         /**
          * @brief 检查结果是否为错误

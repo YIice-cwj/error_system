@@ -159,6 +159,27 @@ namespace error_system::core {
          * @details 支持将隐式或显式地将 error_code_t 转换为 64位整型 code_t
          */
         constexpr operator code_t() const noexcept { return code_; }
+
+        /**
+         * @brief 相等比较运算符
+         * @param other 另一个错误码
+         * @return bool 相等返回 true
+         */
+        constexpr bool operator==(const error_code_t& other) const noexcept { return code_ == other.code_; }
+
+        /**
+         * @brief 不等比较运算符
+         * @param other 另一个错误码
+         * @return bool 不等返回 true
+         */
+        constexpr bool operator!=(const error_code_t& other) const noexcept { return code_ != other.code_; }
+
+        /**
+         * @brief 小于比较运算符
+         * @param other 另一个错误码
+         * @return bool 小于返回 true
+         */
+        constexpr bool operator<(const error_code_t& other) const noexcept { return code_ < other.code_; }
     };
 
 }  // namespace error_system::core

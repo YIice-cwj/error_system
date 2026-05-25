@@ -3,10 +3,10 @@
 #include "error_system/core/error_level.h"
 // IWYU pragma: begin_exports
 #include "error_system/core/error_builder.h"
+#include <iosfwd>
 #include <mutex>
 // IWYU pragma: end_exports
 #include <functional>
-#include <iostream>
 #include <shared_mutex>
 #include <string_view>
 #include <unordered_map>
@@ -78,13 +78,7 @@ namespace error_system::core {
         std::function<void(code_t, const error_metadata_t&)> duplicate_warn_callback_{nullptr};
 
         private:
-        error_registry_t() {
-            duplicate_warn_callback_ = [](code_t raw_code, const error_metadata_t& meta) {
-                std::cerr << "[error_system::warn] 重复注册错误码: " << meta.name << " (0x" << std::hex << raw_code
-                          << std::dec << ")"
-                          << ", 已有描述: " << meta.description << "\n";
-            };
-        }
+        error_registry_t();
 
         ~error_registry_t() = default;
 
@@ -279,6 +273,4 @@ namespace error_system::core {
 #define DEFINE_ERROR_CODE(NAME, LEVEL, SYSTEM, SUBSYS, MODULE, NUMBER, DESC)                                           \
     constexpr ::error_system::core::error_code_t NAME =                                                                \
         ::error_system::core::error_builder_t::make_error_code(LEVEL, SYSTEM, SUBSYS, MODULE, NUMBER);                 \
-    namespace {                                                                                                        \
-        const ::error_system::core::error_registrar_t NAME##_registrar_(NAME, #NAME, DESC);                            \
-    }
+    inline const ::error_system::core::error_registrar_t NAME##_registrar_(NAME, #NAME, DESC);

@@ -78,8 +78,9 @@ namespace error_system::core {
          * @param args 格式化字符串参数列表
          */
         template <typename... Args>
-        error_context_t(code_with_location_t code_with, std::string format = "", Args&&... args) noexcept
-            : code(code_with.code), message(utils::string_utils_t::format(format, std::forward<Args>(args)...)) {
+        error_context_t(code_with_location_t code_with, std::string message_format = "", Args&&... args) noexcept
+            : code(code_with.code),
+              message(utils::string_utils_t::format(message_format, std::forward<Args>(args)...)) {
             if (is_success()) {
                 return;
             }
@@ -176,5 +177,18 @@ namespace error_system::core {
          * @return std::string 错误上下文的二进制字符串表示
          */
         std::string to_binary() const noexcept;
+
+        /**
+         * @brief 获取 payload 的只读引用
+         * @return const std::unordered_map<std::string, std::string>& payload 的只读引用
+         */
+        const std::unordered_map<std::string, std::string>& get_payload() const noexcept { return payload; }
+
+        /**
+         * @brief 获取 C 风格错误描述字符串
+         * @return const char* 错误描述字符串
+         * @details 返回 message 的 C 风格字符串，生命周期与 error_context_t 对象绑定
+         */
+        const char* what() const noexcept { return message.c_str(); }
     };
 }  // namespace error_system::core

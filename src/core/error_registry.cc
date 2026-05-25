@@ -1,6 +1,15 @@
 #include "error_system/core/error_registry.h"
+#include <iostream>
 
 namespace error_system::core {
+
+    error_registry_t::error_registry_t() {
+        duplicate_warn_callback_ = [](code_t raw_code, const error_metadata_t& meta) {
+            std::cerr << "[error_system::warn] 重复注册错误码: " << meta.name << " (0x" << std::hex << raw_code
+                      << std::dec << ")"
+                      << ", 已有描述: " << meta.description << "\n";
+        };
+    }
 
     /**
      * @brief 处理 skip 策略
