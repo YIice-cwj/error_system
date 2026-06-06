@@ -11,10 +11,18 @@ macro(error_system_generate_codes)
         message(FATAL_ERROR "❌ [Error System SDK] 必须指定 JSON_DIR 参数！")
     endif()
 
-    # 🔒 绝对路径强行死锁
-    set(PYTHON_SCRIPT   "${CMAKE_INSTALL_PREFIX}/share/error_system/scripts/generate_error_codes.py")
-    set(DICT_SCRIPT     "${CMAKE_INSTALL_PREFIX}/share/error_system/scripts/generate_error_dict.py")
-    set(DOCS_SCRIPT     "${CMAKE_INSTALL_PREFIX}/share/error_system/scripts/generate_error_docs.py")
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(NOT Python3_FOUND)
+        message(FATAL_ERROR "❌ [Error System SDK] 代码生成需要 Python3，但未找到 Python3 解释器！")
+    endif()
+
+    if(NOT DEFINED ERROR_SYSTEM_SCRIPTS_DIR)
+        message(FATAL_ERROR "❌ [Error System SDK] ERROR_SYSTEM_SCRIPTS_DIR 未定义，请检查 error_system Config.cmake 是否正确加载！")
+    endif()
+
+    set(PYTHON_SCRIPT   "${ERROR_SYSTEM_SCRIPTS_DIR}/generate_error_codes.py")
+    set(DICT_SCRIPT     "${ERROR_SYSTEM_SCRIPTS_DIR}/generate_error_dict.py")
+    set(DOCS_SCRIPT     "${ERROR_SYSTEM_SCRIPTS_DIR}/generate_error_docs.py")
 
     set(OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated_errors/include")
     set(DOCS_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated_errors/docs")

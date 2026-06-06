@@ -29,45 +29,62 @@ option(ERROR_SYSTEM_ENABLE_STACKTRACE "是否编译堆栈追踪功能 (关闭可
 option(ERROR_SYSTEM_ENABLE_VALIDATION "是否编译严格的错误码验证器" ON)
 option(ERROR_SYSTEM_ENABLE_LOCATION "是否编译源位置宏" ON)
 
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
+find_package(Python3 COMPONENTS Interpreter QUIET)
 
-set(ERROR_JSON_DIR "${CMAKE_SOURCE_DIR}/config/errors")
 set(ERROR_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated_errors/include")
-set(ERROR_DOCS_OUT_DIR "${CMAKE_BINARY_DIR}/generated_errors/docs")
 
-file(GLOB ERROR_JSON_FILES "${ERROR_JSON_DIR}/*.json")
-set(ALL_GENERATED_HEADERS "")
+if(Python3_FOUND)
+    set(ERROR_JSON_DIR "${CMAKE_SOURCE_DIR}/config/errors")
+    set(ERROR_DOCS_OUT_DIR "${CMAKE_BINARY_DIR}/generated_errors/docs")
 
-foreach(JSON_FILE ${ERROR_JSON_FILES})
-    get_filename_component(BASENAME ${JSON_FILE} NAME_WE)
-    set(GENERATED_HEADER "${ERROR_GENERATED_DIR}/${BASENAME}.h")
+    file(GLOB ERROR_JSON_FILES "${ERROR_JSON_DIR}/*.json")
+    set(ALL_GENERATED_HEADERS "")
 
+    foreach(JSON_FILE ${ERROR_JSON_FILES})
+        get_filename_component(BASENAME ${JSON_FILE} NAME_WE)
+        set(GENERATED_HEADER "${ERROR_GENERATED_DIR}/${BASENAME}.h")
+
+        add_custom_command(
+            OUTPUT ${GENERATED_HEADER}
+            COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/script/script_py/generate_error_codes.py ${JSON_FILE} ${ERROR_GENERATED_DIR}
+            DEPENDS ${JSON_FILE} ${CMAKE_SOURCE_DIR}/script/script_py/generate_error_codes.py
+            COMMENT "🔨 [Code Generation] 正在从 ${BASENAME}.json 生成 C++ 错误码头文件..."
+        )
+        list(APPEND ALL_GENERATED_HEADERS ${GENERATED_HEADER})
+    endforeach()
+
+    set(DICT_HEADER "${ERROR_GENERATED_DIR}/error_dict.h")
     add_custom_command(
-        OUTPUT ${GENERATED_HEADER}
-        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/script/script_py/generate_error_codes.py ${JSON_FILE} ${ERROR_GENERATED_DIR}
-        DEPENDS ${JSON_FILE} ${CMAKE_SOURCE_DIR}/script/script_py/generate_error_codes.py
-        COMMENT "🔨 [Code Generation] 正在从 ${BASENAME}.json 生成 C++ 错误码头文件..."
+        OUTPUT ${DICT_HEADER}
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/script/script_py/generate_error_dict.py ${ERROR_JSON_DIR} ${DICT_HEADER}
+        DEPENDS ${ERROR_JSON_FILES} ${CMAKE_SOURCE_DIR}/script/script_py/generate_error_dict.py
+        COMMENT "🔨 [Code Generation] 正在生成 O(1) 极速错误字典..."
     )
-    list(APPEND ALL_GENERATED_HEADERS ${GENERATED_HEADER})
-endforeach()
 
-set(DICT_HEADER "${ERROR_GENERATED_DIR}/error_dict.h")
-add_custom_command(
-    OUTPUT ${DICT_HEADER}
-    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/script/script_py/generate_error_dict.py ${ERROR_JSON_DIR} ${DICT_HEADER}
-    DEPENDS ${ERROR_JSON_FILES} ${CMAKE_SOURCE_DIR}/script/script_py/generate_error_dict.py
-    COMMENT "🔨 [Code Generation] 正在生成 O(1) 极速错误字典..."
-)
+    set(DOCS_MD_OUT "${ERROR_DOCS_OUT_DIR}/error_dictionary.md")
+    add_custom_command(
+        OUTPUT ${DOCS_MD_OUT}
+        COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/script/script_py/generate_error_docs.py ${ERROR_JSON_DIR} ${DOCS_MD_OUT}
+        DEPENDS ${ERROR_JSON_FILES} ${CMAKE_SOURCE_DIR}/script/script_py/generate_error_docs.py
+        COMMENT "📝 [Code Generation] 正在生成研发协作错误码字典文档..."
+    )
 
-set(DOCS_MD_OUT "${ERROR_DOCS_OUT_DIR}/error_dictionary.md")
-add_custom_command(
-    OUTPUT ${DOCS_MD_OUT}
-    COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/script/script_py/generate_error_docs.py ${ERROR_JSON_DIR} ${DOCS_MD_OUT}
-    DEPENDS ${ERROR_JSON_FILES} ${CMAKE_SOURCE_DIR}/script/script_py/generate_error_docs.py
-    COMMENT "📝 [Code Generation] 正在生成研发协作错误码字典文档..."
-)
+    add_custom_target(GenerateErrorAssets DEPENDS ${ALL_GENERATED_HEADERS} ${DICT_HEADER} ${DOCS_MD_OUT})
+else()
+    message(STATUS "Python3 未找到，跳过错误码/字典/文档代码生成")
 
-add_custom_target(GenerateErrorAssets DEPENDS ${ALL_GENERATED_HEADERS} ${DICT_HEADER} ${DOCS_MD_OUT})
+    file(MAKE_DIRECTORY ${ERROR_GENERATED_DIR})
+    file(WRITE "${ERROR_GENERATED_DIR}/error_dict.h"
+        "#pragma once\n"
+        "#include <cstdint>\n"
+        "#include <string_view>\n"
+        "\n"
+        "namespace error_system::translator {\n"
+        "    inline std::string_view get_static_subsys_name(uint16_t) noexcept { return \"未知子系统\"; }\n"
+        "    inline std::string_view get_static_module_name(uint16_t, uint16_t) noexcept { return \"未知模块\"; }\n"
+        "}\n"
+    )
+endif()
 
 include_directories(${ERROR_GENERATED_DIR})
 
@@ -92,7 +109,9 @@ if (BUILD_SHARED_LIBS)
     target_compile_definitions(${PROJECT_NAME} PUBLIC ERROR_SYSTEM_USING_SHARED)
 endif()
 
-add_dependencies(${PROJECT_NAME} GenerateErrorAssets)
+if(TARGET GenerateErrorAssets)
+    add_dependencies(${PROJECT_NAME} GenerateErrorAssets)
+endif()
 
 include(GNUInstallDirs)
 
@@ -156,10 +175,12 @@ install(DIRECTORY include/
 
 include(CMakePackageConfigHelpers)
 
-install(DIRECTORY script/script_py/
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/scripts
-    FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-)
+if(Python3_FOUND)
+    install(DIRECTORY script/script_py/
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/scripts
+        FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+    )
+endif()
 
 install(FILES cmake/ErrorSystemHelpers.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
@@ -172,8 +193,9 @@ write_basic_package_version_file(
 )
 
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
-    "include(\"\${CMAKE_CURRENT_LIST_DIR}/${PROJECT_NAME}Targets.cmake\")
-    include(\"\${CMAKE_CURRENT_LIST_DIR}/ErrorSystemHelpers.cmake\")"
+    "include(\"\${CMAKE_CURRENT_LIST_DIR}/${PROJECT_NAME}Targets.cmake\")\n"
+    "set(ERROR_SYSTEM_SCRIPTS_DIR \"\${CMAKE_CURRENT_LIST_DIR}/../../../${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/scripts\")\n"
+    "include(\"\${CMAKE_CURRENT_LIST_DIR}/ErrorSystemHelpers.cmake\")\n"
 )
 
 install(FILES
