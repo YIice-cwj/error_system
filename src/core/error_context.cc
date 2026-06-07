@@ -123,8 +123,7 @@ namespace error_system::core {
 
     /**
      * @brief 转换为字符串
-     * @details 优先使用传入的翻译器；未传入时自动尝试全局注册的翻译器；
-     *          均无则降级输出可读英文名
+     * @details 从 error_registry_t 获取元数据，根据 enable_text_output 配置决定输出名称或 ID
      * @return std::string 错误上下文的字符串表示
      */
     std::string error_context_t::to_string() const noexcept {
@@ -133,10 +132,17 @@ namespace error_system::core {
         }
 
         std::string result{};
-        std::string subsys_module_str{};
         result.reserve(512);
-        if (const auto& translator = error_config_t::get_translator()) {
-            subsys_module_str = translator(code.get_subsys(), code.get_module());
+
+        auto info = error_system::core::error_registry_t::instance().get_info(this->code);
+        const std::string& desc = info.has_value() ? info.value().get().description : "未注册的未知错误";
+        const std::string& name = info.has_value() ? info.value().get().name : "UNKNOWN_ERR_CODE";
+
+        std::string subsys_module_str{};
+        if (error_config_t::is_text_output_enabled()) {
+            const auto& sm_info = error_system::core::error_registry_t::instance().get_subsystem_module_info(
+                code.get_subsys(), code.get_module());
+            subsys_module_str = sm_info.subsystem_name + " / " + sm_info.module_name;
         } else {
             subsys_module_str =
                 utils::string_utils_t::format("SubSys: {}, Module: {}", code.get_subsys(), code.get_module());
@@ -152,10 +158,6 @@ namespace error_system::core {
                 .append("]");
         }
 #endif
-
-        auto info = error_system::core::error_registry_t::instance().get_info(this->code);
-        const std::string& desc = info.has_value() ? info.value().get().description : "未注册的未知错误";
-        const std::string& name = info.has_value() ? info.value().get().name : "UNKNOWN_ERR_CODE";
 
         result.append(utils::string_utils_t::format("[Sign: {} Level: {}, System: {}, {}] Code: {} ({}) - {}: {}",
                                                     is_error() ? "Error" : "Success",

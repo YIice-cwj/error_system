@@ -76,12 +76,13 @@ else()
     file(MAKE_DIRECTORY ${ERROR_GENERATED_DIR})
     file(WRITE "${ERROR_GENERATED_DIR}/error_dict.h"
         "#pragma once\n"
-        "#include <cstdint>\n"
-        "#include <string_view>\n"
+        "#include \"error_system/core/error_registry.h\"\n"
         "\n"
-        "namespace error_system::translator {\n"
-        "    inline std::string_view get_static_subsys_name(uint16_t) noexcept { return \"未知子系统\"; }\n"
-        "    inline std::string_view get_static_module_name(uint16_t, uint16_t) noexcept { return \"未知模块\"; }\n"
+        "namespace error_system::core {\n"
+        "    struct subsystem_module_registrar_t {\n"
+        "        subsystem_module_registrar_t() {}\n"
+        "    };\n"
+        "    inline subsystem_module_registrar_t g_subsystem_module_registrar_{};\n"
         "}\n"
     )
 endif()
@@ -93,7 +94,6 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_registry.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/error_router_plugin.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/plugin_registry.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/translator/error_translator.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/file_utils.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/json_lexer.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/json_utils.cc

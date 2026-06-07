@@ -25,8 +25,6 @@ namespace error_system::config {
 
     using formatter_callback_t = std::function<std::string(const core::error_context_t&)>;
 
-    using translator_func_t = std::function<std::string(uint16_t subsys_id, uint16_t module_id)>;
-
     /**
      * @brief 错误配置类
      * @details 封装错误配置信息
@@ -44,16 +42,6 @@ namespace error_system::config {
         }
 
         /**
-         * @brief 翻译函数专用共享锁
-         * @details 保护自定义翻译函数的互斥锁
-         * @return std::shared_mutex& 共享锁引用
-         */
-        static std::shared_mutex& __get_translator_mutex() noexcept {
-            static std::shared_mutex mutex;
-            return mutex;
-        }
-
-        /**
          * @brief 自定义格式化函数存储
          * @details 保护全局配置项并发访问的互斥锁
          * @return formatter_callback_t& 自定义格式化函数引用
@@ -61,16 +49,6 @@ namespace error_system::config {
         static formatter_callback_t& __get_custom_formatter() noexcept {
             static formatter_callback_t formatter{nullptr};
             return formatter;
-        }
-
-        /**
-         * @brief 自定义翻译函数存储
-         * @details 保护全局配置项并发访问的互斥锁
-         * @return translator_func_t& 自定义翻译函数引用
-         */
-        static translator_func_t& __get_custom_translator() noexcept {
-            static translator_func_t translator{nullptr};
-            return translator;
         }
 
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
@@ -150,26 +128,6 @@ namespace error_system::config {
         static const formatter_callback_t& get_custom_formatter() noexcept {
             std::shared_lock<std::shared_mutex> lock(__get_formatter_mutex());
             return __get_custom_formatter();
-        }
-
-        /**
-         * @brief 设置自定义翻译函数
-         * @details 保护全局配置项并发访问的互斥锁
-         * @param translator 自定义翻译函数
-         */
-        static void set_translator(translator_func_t translator) noexcept {
-            std::unique_lock<std::shared_mutex> lock(__get_translator_mutex());
-            __get_custom_translator() = std::move(translator);
-        }
-
-        /**
-         * @brief 获取自定义翻译函数
-         * @return const translator_func_t& 自定义翻译函数引用
-         * @note 调用方需在持有锁期间使用返回值
-         */
-        static const translator_func_t& get_translator() noexcept {
-            std::shared_lock<std::shared_mutex> lock(__get_translator_mutex());
-            return __get_custom_translator();
         }
 
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
@@ -325,6 +283,32 @@ namespace error_system::config {
          */
         static constexpr bool is_short_filename_enabled() noexcept { return false; }
 #endif
+
+        /**
+         * @brief 是否启用文本输出模式（子系统和模块名称）
+         */
+        static std::atomic<bool>& __get_enable_text_output() noexcept {
+            static std::atomic<bool> enabled{true};
+            return enabled;
+        }
+
+        public:
+        /**
+         * @brief 设置文本输出模式
+         * @details true 时输出子系统和模块名称，false 时输出原始 ID 数字
+         * @param enable 是否开启文本输出
+         */
+        static void set_enable_text_output(bool enable) noexcept {
+            __get_enable_text_output().store(enable, std::memory_order_relaxed);
+        }
+
+        /**
+         * @brief 检查文本输出模式是否开启
+         * @return bool 是否开启文本输出
+         */
+        static bool is_text_output_enabled() noexcept {
+            return __get_enable_text_output().load(std::memory_order_relaxed);
+        }
     };
 
 }  // namespace error_system::config

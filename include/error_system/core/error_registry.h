@@ -24,6 +24,15 @@
 namespace error_system::core {
 
     /**
+     * @brief 子系统/模块名称映射
+     * @details 通过 (subsys_id << 16 | module_id) 作为 key 存储名称，避免每个错误码重复存储
+     */
+    struct subsystem_module_info_t {
+        std::string subsystem_name{"未知子系统"};
+        std::string module_name{"未知模块"};
+    };
+
+    /**
      * @brief 错误码元数据信息 (数据负载)
      */
     struct error_metadata_t {
@@ -59,6 +68,12 @@ namespace error_system::core {
          * @brief 模块索引，根据模块 ID快速查找错误码
          */
         std::unordered_map<module_group_id_t, std::vector<code_t>> module_index_;
+
+        /**
+         * @brief 子系统/模块名称映射表
+         * @details key = (subsys_id << 16) | module_id，避免每个错误码重复存储名称
+         */
+        std::unordered_map<uint32_t, subsystem_module_info_t> subsystem_module_index_;
 
         /**
          * @brief 索引互斥锁，保护索引的并发访问
@@ -189,6 +204,26 @@ namespace error_system::core {
         std::vector<std::reference_wrapper<const error_metadata_t>>
         get_errors_by_module(const module_group_id_t module_group_id) const noexcept;
 
+        /**
+         * @brief 注册子系统/模块名称
+         * @param subsys_id 子系统 ID
+         * @param module_id 模块 ID
+         * @param subsystem_name 子系统名称
+         * @param module_name 模块名称
+         */
+        void register_subsystem_module(uint16_t subsys_id,
+                                       uint16_t module_id,
+                                       const std::string_view subsystem_name,
+                                       const std::string_view module_name) noexcept;
+
+        /**
+         * @brief 查询子系统/模块名称
+         * @param subsys_id 子系统 ID
+         * @param module_id 模块 ID
+         * @return const subsystem_module_info_t& 子系统/模块名称信息
+         */
+        const subsystem_module_info_t& get_subsystem_module_info(uint16_t subsys_id, uint16_t module_id) const noexcept;
+
         public:
         /**
          * @brief 设置重复处理策略
@@ -242,7 +277,13 @@ namespace error_system::core {
      * @details 配合 DEFINE_ERROR_CODE 宏使用，利用静态初始化在 main 函数前注册错误码
      */
     struct error_registrar_t {
-        error_registrar_t(const error_code_t code, const char* name, const char* desc) noexcept {
+        error_registrar_t(const error_code_t code,
+                          const char* name,
+                          const char* desc,
+                          const char* subsys_name = "未知子系统",
+                          const char* module_name = "未知模块") noexcept {
+            error_registry_t::instance().register_subsystem_module(
+                code.get_subsys(), code.get_module(), subsys_name, module_name);
             error_registry_t::instance().register_error(code, name, desc);
         }
     };

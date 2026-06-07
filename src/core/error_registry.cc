@@ -73,6 +73,43 @@ namespace error_system::core {
     }
 
     /**
+     * @brief 注册子系统/模块名称
+     * @param subsys_id 子系统 ID
+     * @param module_id 模块 ID
+     * @param subsystem_name 子系统名称
+     * @param module_name 模块名称
+     */
+    void error_registry_t::register_subsystem_module(uint16_t subsys_id,
+                                                     uint16_t module_id,
+                                                     const std::string_view subsystem_name,
+                                                     const std::string_view module_name) noexcept {
+        std::unique_lock<std::shared_mutex> lock(index_mutex_);
+        uint32_t key = (static_cast<uint32_t>(subsys_id) << 16) | module_id;
+        if (subsystem_module_index_.find(key) == subsystem_module_index_.end()) {
+            subsystem_module_index_.emplace(
+                key, subsystem_module_info_t{std::string(subsystem_name), std::string(module_name)});
+        }
+    }
+
+    /**
+     * @brief 查询子系统/模块名称
+     * @param subsys_id 子系统 ID
+     * @param module_id 模块 ID
+     * @return const subsystem_module_info_t& 子系统/模块名称信息
+     */
+    const subsystem_module_info_t& error_registry_t::get_subsystem_module_info(uint16_t subsys_id,
+                                                                               uint16_t module_id) const noexcept {
+        std::shared_lock<std::shared_mutex> lock(index_mutex_);
+        uint32_t key = (static_cast<uint32_t>(subsys_id) << 16) | module_id;
+        auto it = subsystem_module_index_.find(key);
+        if (it != subsystem_module_index_.end()) {
+            return it->second;
+        }
+        static const subsystem_module_info_t unknown{"未知子系统", "未知模块"};
+        return unknown;
+    }
+
+    /**
      * @brief 注册错误码
      * @param code 错误码
      * @param name 错误码宏名称
@@ -206,6 +243,7 @@ namespace error_system::core {
         std::unique_lock<std::shared_mutex> lock(index_mutex_);
         decltype(primary_index_)().swap(primary_index_);
         decltype(module_index_)().swap(module_index_);
+        decltype(subsystem_module_index_)().swap(subsystem_module_index_);
     }
 
     /**

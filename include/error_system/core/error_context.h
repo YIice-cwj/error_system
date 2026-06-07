@@ -159,9 +159,7 @@ namespace error_system::core {
 
         /**
          * @brief 转换为字符串
-         * @details 优先使用传入的翻译器；未传入时自动尝试全局注册的翻译器；
-         *          均无则降级输出可读英文名
-         * @param translator 可选的翻译器接口指针，默认为 nullptr
+         * @details 从 error_registry_t 获取元数据，根据 enable_text_output 配置决定输出名称或 ID
          * @return std::string 错误上下文的字符串表示
          */
         std::string to_string() const noexcept;
