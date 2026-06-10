@@ -44,7 +44,7 @@ def generate_dict(json_dir, out_file):
 
     lines.append("        }")
     lines.append("    };")
-    lines.append("    inline subsystem_module_registrar_t g_subsystem_module_registrar_{};")
+    lines.append("    inline subsystem_module_registrar_t global_subsystem_module_registrar_{};")
     lines.append("} // namespace error_system::core")
 
     # 4. 写入文件

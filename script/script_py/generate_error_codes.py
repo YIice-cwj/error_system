@@ -26,7 +26,6 @@ def generate_header(json_file, out_dir):
         "",
         '#include "error_system/core/error_registry.h"',
         '#include "error_system/domain/system_domain.h"',
-        "#include \"error_dict.h\"",
         "",
         f"namespace {namespace} {{",
         ""
