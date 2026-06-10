@@ -1,6 +1,6 @@
 #include "error_system/core/error_context.h"
 #include "error_system/plugin/plugin_registry.h"
-#include <sstream>
+
 using namespace error_system::config;
 
 /**
@@ -13,10 +13,6 @@ using namespace error_system::config;
  * @copyright Copyright (c) 2026
  */
 namespace error_system::core {
-    /**
-     * @brief 转换为二进制字符串
-     * @return std::string 错误上下文的二进制字符串表示
-     */
     namespace {
         template <typename T>
         void write_little_endian(std::string& buf, T value) noexcept {
@@ -25,39 +21,133 @@ namespace error_system::core {
                 buf.push_back(static_cast<char>((value >> (i * 8)) & 0xFF));
             }
         }
+
+        template <typename T>
+        void append_decimal(std::string& out, T value) {
+            out.append(std::to_string(value));
+        }
+
+        void append_escaped_json_string(std::string& out, std::string_view value) {
+            out.push_back('"');
+            out.append(utils::string_utils_t::escape_json(std::string(value)));
+            out.push_back('"');
+        }
+
+        size_t estimate_string_capacity(const error_context_t& context,
+                                        size_t name_size,
+                                        size_t desc_size,
+                                        size_t subsys_module_size) noexcept {
+            size_t capacity = 96 + name_size + desc_size + subsys_module_size + context.message.size();
+
+            for (const auto& [key, value] : context.payload) {
+                capacity += key.size() + value.size() + 4;
+            }
+
+#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
+            for (const auto& frame : context.stack_frames) {
+                capacity += frame.size() + 12;
+            }
+#endif
+
+            if (context.cause) {
+                capacity += 16 + context.cause->message.size();
+            }
+            return capacity;
+        }
+
+        size_t estimate_json_capacity(const error_context_t& context) noexcept {
+            size_t capacity = 64 + context.message.size();
+
+            for (const auto& [key, value] : context.payload) {
+                capacity += key.size() + value.size() + 8;
+            }
+
+#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
+            for (const auto& frame : context.stack_frames) {
+                capacity += frame.size() + 4;
+            }
+#endif
+
+            if (context.cause) {
+                capacity += 16 + context.cause->message.size();
+            }
+            return capacity;
+        }
     }  // namespace
 
-    /**
-     * @brief 通知所有已注册插件
-     * @details 实现在 plugin_registry_t::notify_error()
-     */
     void notify_plugins(const error_context_t& context) noexcept {
         plugin::plugin_registry_t::instance().notify_error(context);
     }
 
-    /**
-     * @brief 检查错误上下文是否包含错误
-     * @details sign位为1表示有错误，0表示成功
-     * @return bool 包含错误则返回true
-     */
+    void error_context_t::finalize_runtime_features(const code_with_location_t& code_with) noexcept {
+        const bool validation_enabled = error_config_t::is_validation_enabled();
+        const bool stacktrace_enabled = error_config_t::is_stacktrace_enabled();
+        const bool location_enabled = error_config_t::is_source_location_enabled();
+#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
+        const auto stacktrace_level = stacktrace_enabled ? error_config_t::get_stacktrace_level() : error_level_t::warn;
+#endif
+#ifdef ERROR_SYSTEM_ENABLE_LOCATION
+        const bool short_filename_enabled =
+            location_enabled && error_config_t::is_short_filename_enabled();
+#endif
+
+        if (validation_enabled) {
+            fill_validation_fields();
+        }
+
+#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
+        if (stacktrace_enabled && code.get_level() >= stacktrace_level) {
+            fill_stacktrace();
+        }
+#endif
+
+#ifdef ERROR_SYSTEM_ENABLE_LOCATION
+        if (location_enabled) {
+            fill_source_location(code_with, short_filename_enabled);
+        }
+#else
+        (void)code_with;
+#endif
+
+        notify_plugins(*this);
+    }
+
+    void error_context_t::fill_validation_fields() noexcept {
+        if (error_registry_t::instance().is_registered(code)) {
+            return;
+        }
+
+        payload.insert_or_assign("illegal_raw_code", std::to_string(code.get_code()));
+        message.insert(0, "[UNREGISTERED CODE] ");
+        code = error_builder_t::make_error_code(error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFF);
+    }
+
+    void error_context_t::fill_stacktrace() noexcept {
+#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
+        stack_frames = utils::stack_trace_utils_t::generate(1);
+#endif
+    }
+
+    void error_context_t::fill_source_location(const code_with_location_t& code_with, bool short_filename_enabled) noexcept {
+#ifdef ERROR_SYSTEM_ENABLE_LOCATION
+        file_name = short_filename_enabled ? utils::extract_short_filename(code_with.source_location.file_name())
+                                           : code_with.source_location.file_name();
+        function_name = code_with.source_location.function_name();
+        line_number = code_with.source_location.line();
+#else
+        (void)code_with;
+        (void)short_filename_enabled;
+#endif
+    }
+
     bool error_context_t::is_error() const noexcept {
         return code.get_sign();
     }
 
-    /**
-     * @brief 检查错误上下文是否成功（无错误）
-     * @details sign位为0表示成功，1表示错误
-     * @return bool 成功则返回true
-     */
     bool error_context_t::is_success() const noexcept {
         return !code.get_sign();
     }
 
-    /**
-     * @brief 包装底层错误上下文
-     * @param underlying 底层错误上下文
-     * @return error_context_t 包装后的错误上下文
-     */
     error_context_t error_context_t::wrap(const error_context_t& underlying) const noexcept {
         error_context_t new_code_context = *this;
 
@@ -76,11 +166,6 @@ namespace error_system::core {
         return new_code_context;
     }
 
-    /**
-     * @brief 包装底层错误上下文
-     * @param underlying 底层错误上下文
-     * @return error_context_t 包装后的错误上下文
-     */
     error_context_t error_context_t::wrap(error_context_t&& underlying) const noexcept {
         error_context_t new_code_context = *this;
 
@@ -99,75 +184,70 @@ namespace error_system::core {
         return new_code_context;
     }
 
-    /**
-     * @brief 添加字段
-     * @param key 字段名
-     * @param val 字段值
-     * @return error_context_t& 当前错误上下文的引用
-     */
     error_context_t& error_context_t::with(const std::string& key, const std::string& value) noexcept {
-        payload[key] = value;
+        payload.insert_or_assign(key, value);
         return *this;
     }
 
-    /**
-     * @brief 添加字段
-     * @param key 字段名
-     * @param val 字段值
-     * @return error_context_t& 当前错误上下文的引用
-     */
+    error_context_t& error_context_t::with(const char* key, const char* value) noexcept {
+        return with(std::string_view(key != nullptr ? key : ""), std::string_view(value != nullptr ? value : ""));
+    }
+
+    error_context_t& error_context_t::with(std::string_view key, std::string_view value) noexcept {
+        payload.insert_or_assign(std::string(key), std::string(value));
+        return *this;
+    }
+
     error_context_t& error_context_t::with(std::string&& key, std::string&& value) noexcept {
-        payload[std::move(key)] = std::move(value);
+        payload.insert_or_assign(std::move(key), std::move(value));
         return *this;
     }
 
-    /**
-     * @brief 转换为字符串
-     * @details 从 error_registry_t 获取元数据，根据 enable_text_output 配置决定输出名称或 ID
-     * @return std::string 错误上下文的字符串表示
-     */
     std::string error_context_t::to_string() const noexcept {
         if (const auto& formatter = error_config_t::get_custom_formatter()) {
             return formatter(*this);
         }
 
-        std::string result{};
-        result.reserve(512);
+        auto& registry = error_system::core::error_registry_t::instance();
+        const auto info = registry.get_info(code);
+        const std::string& desc = info.has_value() ? info->get().description : "未注册的未知错误";
+        const std::string& name = info.has_value() ? info->get().name : "UNKNOWN_ERR_CODE";
 
-        auto info = error_system::core::error_registry_t::instance().get_info(this->code);
-        const std::string& desc = info.has_value() ? info.value().get().description : "未注册的未知错误";
-        const std::string& name = info.has_value() ? info.value().get().name : "UNKNOWN_ERR_CODE";
-
-        std::string subsys_module_str{};
+        std::string subsys_module_str;
         if (error_config_t::is_text_output_enabled()) {
-            const auto& sm_info = error_system::core::error_registry_t::instance().get_subsystem_module_info(
-                code.get_subsys(), code.get_module());
-            subsys_module_str = sm_info.subsystem_name + " / " + sm_info.module_name;
+            const auto& sm_info = registry.get_subsystem_module_info(code.get_subsys(), code.get_module());
+            subsys_module_str.reserve(sm_info.subsystem_name.size() + sm_info.module_name.size() + 3);
+            subsys_module_str.append(sm_info.subsystem_name).append(" / ").append(sm_info.module_name);
         } else {
-            subsys_module_str =
-                utils::string_utils_t::format("SubSys: {}, Module: {}", code.get_subsys(), code.get_module());
+            subsys_module_str.reserve(32);
+            subsys_module_str.append("SubSys: ");
+            append_decimal(subsys_module_str, code.get_subsys());
+            subsys_module_str.append(", Module: ");
+            append_decimal(subsys_module_str, code.get_module());
         }
+
+        std::string result;
+        result.reserve(estimate_string_capacity(*this, name.size(), desc.size(), subsys_module_str.size()));
+
 #ifdef ERROR_SYSTEM_ENABLE_LOCATION
         if (error_config_t::is_source_location_enabled() && file_name != nullptr) {
-            result.append(" [Location: ")
-                .append(file_name)
-                .append(":")
-                .append(std::to_string(line_number))
-                .append(" @ ")
-                .append(function_name)
-                .append("]");
+            result.append(" [Location: ").append(file_name).append(":");
+            append_decimal(result, line_number);
+            result.append(" @ ").append(function_name != nullptr ? function_name : "unknown").append("]");
         }
 #endif
 
-        result.append(utils::string_utils_t::format("[Sign: {} Level: {}, System: {}, {}] Code: {} ({}) - {}: {}",
-                                                    is_error() ? "Error" : "Success",
-                                                    core::to_string(code.get_level()),
-                                                    domain::to_string(code.get_system()),
-                                                    subsys_module_str,
-                                                    code.get_number(),
-                                                    name,
-                                                    message,
-                                                    desc));
+        result.append("[Sign: ")
+            .append(is_error() ? "Error" : "Success")
+            .append(" Level: ")
+            .append(core::to_string(code.get_level()))
+            .append(", System: ")
+            .append(domain::to_string(code.get_system()))
+            .append(", ")
+            .append(subsys_module_str)
+            .append("] Code: ");
+        append_decimal(result, code.get_number());
+        result.append(" (").append(name).append(") - ").append(message).append(": ").append(desc);
 
         if (!payload.empty()) {
             result.append(" {");
@@ -179,14 +259,16 @@ namespace error_system::core {
                 result.append(key).append("=").append(value);
                 first = false;
             }
-            result.append("}");
+            result.push_back('}');
         }
 
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
         if (!stack_frames.empty()) {
             result.append("\n  [Stacktrace]:");
             for (size_t i = 0; i < stack_frames.size(); ++i) {
-                result.append("\n    #").append(std::to_string(i)).append("  ").append(stack_frames[i]);
+                result.append("\n    #");
+                append_decimal(result, i);
+                result.append("  ").append(stack_frames[i]);
             }
         }
 #endif
@@ -197,73 +279,83 @@ namespace error_system::core {
         return result;
     }
 
-    /**
-     * @brief 转换为 JSON 字符串
-     * @return std::string 错误上下文的 JSON 字符串表示
-     */
     std::string error_context_t::to_json() const noexcept {
-        std::ostringstream json;
-
-        json << "{";
+        std::string json;
+        json.reserve(estimate_json_capacity(*this));
+        json.push_back('{');
 
         bool first_field = true;
+        auto append_separator = [&json, &first_field]() {
+            if (!first_field) {
+                json.push_back(',');
+            }
+            first_field = false;
+        };
+
 #ifdef ERROR_SYSTEM_ENABLE_LOCATION
         if (error_config_t::is_source_location_enabled() && file_name != nullptr && function_name != nullptr) {
-            json << "\"location\":{";
-            json << "\"file\":\"" << utils::string_utils_t::escape_json(file_name) << "\",";
-            json << "\"function\":\"" << utils::string_utils_t::escape_json(function_name ? function_name : "unknown")
-                 << "\",";
-            json << "\"line\":" << line_number;
-            json << "}";
-            first_field = false;
+            append_separator();
+            json.append("\"location\":{");
+            json.append("\"file\":");
+            append_escaped_json_string(json, file_name);
+            json.append(",\"function\":");
+            append_escaped_json_string(json, function_name != nullptr ? function_name : "unknown");
+            json.append(",\"line\":");
+            append_decimal(json, line_number);
+            json.push_back('}');
         }
 #endif
-        if (!first_field)
-            json << ",";
-        json << "\"code\":" << code.get_code() << ",";
 
-        json << "\"message\":\"" << utils::string_utils_t::escape_json(message) << "\"";
+        append_separator();
+        json.append("\"code\":");
+        append_decimal(json, code.get_code());
+        json.append(",\"message\":");
+        append_escaped_json_string(json, message);
 
         if (!payload.empty()) {
-            json << ",\"payload\":{";
-            bool first_p = true;
+            json.append(",\"payload\":{");
+            bool first_payload = true;
             for (const auto& [key, value] : payload) {
-                if (!first_p)
-                    json << ",";
-                json << "\"" << utils::string_utils_t::escape_json(key) << "\":\""
-                     << utils::string_utils_t::escape_json(value) << "\"";
-                first_p = false;
+                if (!first_payload) {
+                    json.push_back(',');
+                }
+                append_escaped_json_string(json, key);
+                json.push_back(':');
+                append_escaped_json_string(json, value);
+                first_payload = false;
             }
-            json << "}";
+            json.push_back('}');
         }
 
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
         if (!stack_frames.empty()) {
-            json << ",\"stack_frames\":[";
-            bool first_s = true;
+            json.append(",\"stack_frames\":[");
+            bool first_frame = true;
             for (const auto& frame : stack_frames) {
-                if (!first_s)
-                    json << ",";
-                json << "\"" << utils::string_utils_t::escape_json(frame) << "\"";
-                first_s = false;
+                if (!first_frame) {
+                    json.push_back(',');
+                }
+                append_escaped_json_string(json, frame);
+                first_frame = false;
             }
-            json << "]";
+            json.push_back(']');
         }
 #endif
+
         if (cause) {
-            json << ",\"cause\":" << cause->to_json();
+            json.append(",\"cause\":").append(cause->to_json());
         }
 
-        json << "}";
-        return json.str();
+        json.push_back('}');
+        return json;
     }
 
     std::string error_context_t::to_binary() const noexcept {
         std::string buf;
-        buf.reserve(128);
+        buf.reserve(128 + message.size() + payload.size() * 24);
 
         auto write_string = [&buf](const std::string& str) {
-            uint32_t len = static_cast<uint32_t>(str.size());
+            const uint32_t len = static_cast<uint32_t>(str.size());
             write_little_endian(buf, len);
             buf.append(str.data(), len);
         };
@@ -280,7 +372,7 @@ namespace error_system::core {
 
         if (has_location) {
             write_string(file_name);
-            write_string(function_name ? function_name : "unknown");
+            write_string(function_name != nullptr ? function_name : "unknown");
             write_little_endian(buf, line_number);
         }
 #else

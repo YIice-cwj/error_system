@@ -68,7 +68,16 @@ namespace error_system::core {
         const char* function_name{nullptr};
         uint32_t line_number{0};
 #endif
+        private:
+        void finalize_runtime_features(const code_with_location_t& code_with) noexcept;
 
+        void fill_validation_fields() noexcept;
+        
+        void fill_stacktrace() noexcept;
+        
+        void fill_source_location(const code_with_location_t& code_with, bool short_filename_enabled) noexcept;
+
+        public: 
         constexpr error_context_t() noexcept = default;
 
         /**
@@ -84,35 +93,7 @@ namespace error_system::core {
             if (is_success()) {
                 return;
             }
-
-            if (config::error_config_t::is_validation_enabled()) {
-                if (!error_registry_t::instance().is_registered(code)) {
-                    payload["illegal_raw_code"] = std::to_string(code.get_code());
-                    message = "[UNREGISTERED CODE] " + message;
-                    this->code = error_builder_t::make_error_code(
-                        error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFF);
-                }
-            }
-
-#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
-            if (config::error_config_t::is_stacktrace_enabled() &&
-                code.get_level() >= config::error_config_t::get_stacktrace_level()) {
-                stack_frames = utils::stack_trace_utils_t::generate(1);
-            }
-#endif
-
-#ifdef ERROR_SYSTEM_ENABLE_LOCATION
-            if (config::error_config_t::is_source_location_enabled()) {
-                if (config::error_config_t::is_short_filename_enabled()) {
-                    file_name = utils::extract_short_filename(code_with.source_location.file_name());
-                } else {
-                    file_name = code_with.source_location.file_name();
-                }
-                function_name = code_with.source_location.function_name();
-                line_number = code_with.source_location.line();
-            }
-#endif
-            notify_plugins(*this);
+            finalize_runtime_features(code_with);
         }
 
         /**
@@ -148,6 +129,22 @@ namespace error_system::core {
          * @return error_context_t& 当前错误上下文的引用
          */
         error_context_t& with(const std::string& key, const std::string& value) noexcept;
+
+        /**
+         * @brief 添加字段
+         * @param key 字段名
+         * @param val 字段值
+         * @return error_context_t& 当前错误上下文的引用
+         */
+        error_context_t& with(const char* key, const char* value) noexcept;
+
+        /**
+         * @brief 添加字段
+         * @param key 字段名
+         * @param val 字段值
+         * @return error_context_t& 当前错误上下文的引用
+         */
+        error_context_t& with(std::string_view key, std::string_view value) noexcept;
 
         /**
          * @brief 添加字段
