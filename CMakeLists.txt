@@ -15,20 +15,17 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON) 
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-if (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-    add_compile_options(/W4 /WX)
-else()
-    add_compile_options(-Wall -Wextra -Wpedantic -Werror)
-    if (WIN32)
-        add_compile_options(-g) 
-        add_link_options(-Wl,--export-all-symbols)
-    endif()
-endif()
-
 option(ERROR_SYSTEM_ENABLE_STACKTRACE "是否编译堆栈追踪功能 (关闭可减小体积，免链接 OS 底层库)" ON)
 option(ERROR_SYSTEM_ENABLE_VALIDATION "是否编译严格的错误码验证器" ON)
 option(ERROR_SYSTEM_ENABLE_LOCATION "是否编译源位置宏" ON)
+option(ERROR_SYSTEM_ENABLE_LTO "Enable LTO/IPO" OFF)
+option(ERROR_SYSTEM_ENABLE_PGO_GENERATE "Enable PGO generate phase" OFF)
+option(ERROR_SYSTEM_ENABLE_PGO_USE "Enable PGO use phase" OFF)
+option(ERROR_SYSTEM_ENABLE_ASAN "Enable AddressSanitizer" OFF)
+option(ERROR_SYSTEM_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
+option(ERROR_SYSTEM_WARNINGS_AS_ERRORS "Treat warnings as errors" ON)
 
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ErrorSystemPerformance.cmake)
 find_package(Python3 COMPONENTS Interpreter QUIET)
 
 set(ERROR_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated_errors/include")
@@ -103,6 +100,15 @@ set(SOURCE_FILES
 
 add_library(${PROJECT_NAME} ${SOURCE_FILES})
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
+target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
+error_system_apply_project_options(${PROJECT_NAME})
+
+if (WIN32 AND NOT MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE -g)
+    if (BUILD_SHARED_LIBS)
+        target_link_options(${PROJECT_NAME} PRIVATE -Wl,--export-all-symbols)
+    endif()
+endif()
 
 if (BUILD_SHARED_LIBS)
     target_compile_definitions(${PROJECT_NAME} PRIVATE ERROR_SYSTEM_BUILDING_SHARED)
@@ -138,6 +144,7 @@ endif()
 
 option(ERROR_SYSTEM_BUILD_TESTS "Build tests for error_system" ON)
 option(ERROR_SYSTEM_BUILD_EXAMPLES "Build examples for error_system" ON)
+option(ERROR_SYSTEM_BUILD_PERF_TESTS "Build performance tests" ON)
 
 if(ERROR_SYSTEM_BUILD_TESTS)
     include(FetchContent)
