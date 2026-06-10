@@ -1,5 +1,4 @@
 #include "error_system/plugin/plugin_registry.h"
-#include <iostream>
 
 namespace error_system::plugin {
 
@@ -42,16 +41,16 @@ namespace error_system::plugin {
      * @brief 通知所有插件发生了错误事件
      */
     void plugin_registry_t::notify_error(const core::error_context_t& context) noexcept {
-        std::shared_lock<std::shared_mutex> lock(plugins_mutex_);
-        for (auto* registered_plugin : plugins_) {
+        std::vector<i_error_plugin_t*> snapshot;
+        snapshot.reserve(16);
+        {
+            std::shared_lock<std::shared_mutex> lock(plugins_mutex_);
+            snapshot = plugins_;
+        }
+        for (auto* registered_plugin : snapshot) {
             try {
                 registered_plugin->on_error(context);
-            } catch (const std::exception& e) {
-                std::cerr << "[Plugin Error] Plugin '" << registered_plugin->name()
-                          << "' threw an exception: " << e.what() << std::endl;
             } catch (...) {
-                std::cerr << "[Plugin Error] Plugin '" << registered_plugin->name() << "' threw an unknown exception."
-                          << std::endl;
             }
         }
     }
