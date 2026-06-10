@@ -39,7 +39,7 @@ namespace error_system::utils {
          * @param max_frames 最大抓取深度
          * @return std::vector<std::string> 每一层调用栈的可读字符串
          */
-        static std::vector<std::string> generate(int skip_frames = 1, int max_frames = 64) noexcept;
+        static std::vector<std::string> generate(int skip_frames = 1, int max_frames = 16) noexcept;
     };
 
 }  // namespace error_system::utils

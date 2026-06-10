@@ -18,6 +18,7 @@ namespace error_system::utils::detail {
      */
     json_lexer_t::token_t json_lexer_t::__parse_string() noexcept {
         std::string str{};
+        str.reserve(32);
         ++pos_;
 
         while (pos_ < json_str_.size() && json_str_[pos_] != '"') {

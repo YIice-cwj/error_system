@@ -23,6 +23,7 @@ namespace error_system::utils {
         struct parser_context_t {
             std::vector<std::string> path_stack{};
             std::string current_key{};
+            std::string path_prefix{};
             std::unordered_map<std::string, std::string> temp_dict{};
             parse_state_t state{parse_state_t::expect_key_or_end};
         };
@@ -35,6 +36,12 @@ namespace error_system::utils {
             if (token.type == json_lexer_t::token_type_t::right_brace) {
                 if (!context.path_stack.empty()) {
                     context.path_stack.pop_back();
+                    auto dot_pos = context.path_prefix.rfind('.');
+                    if (dot_pos != std::string::npos) {
+                        context.path_prefix.resize(dot_pos);
+                    } else {
+                        context.path_prefix.clear();
+                    }
                 }
                 context.state = parse_state_t::expect_comma_or_end;
                 return true;
@@ -66,17 +73,25 @@ namespace error_system::utils {
         bool handle_expect_value_or_start(parser_context_t& context, const json_lexer_t::token_t& token) noexcept {
             if (token.type == json_lexer_t::token_type_t::left_brace) {
                 context.path_stack.push_back(context.current_key);
+                if (context.path_prefix.empty()) {
+                    context.path_prefix = context.current_key;
+                } else {
+                    context.path_prefix += ".";
+                    context.path_prefix += context.current_key;
+                }
                 context.current_key.clear();
                 context.state = parse_state_t::expect_key_or_end;
                 return true;
             }
             if (token.type == json_lexer_t::token_type_t::string) {
-                std::string full_path{};
-                for (const auto& p : context.path_stack) {
-                    full_path += p + ".";
+                std::string full_path;
+                full_path.reserve(context.path_prefix.size() + context.current_key.size() + 2);
+                if (!context.path_prefix.empty()) {
+                    full_path = context.path_prefix;
+                    full_path += ".";
                 }
                 full_path += context.current_key;
-                context.temp_dict[full_path] = token.value;
+                context.temp_dict.emplace(std::move(full_path), token.value);
 
                 context.current_key.clear();
                 context.state = parse_state_t::expect_comma_or_end;
@@ -97,6 +112,12 @@ namespace error_system::utils {
             if (token.type == json_lexer_t::token_type_t::right_brace) {
                 if (!context.path_stack.empty()) {
                     context.path_stack.pop_back();
+                    auto dot_pos = context.path_prefix.rfind('.');
+                    if (dot_pos != std::string::npos) {
+                        context.path_prefix.resize(dot_pos);
+                    } else {
+                        context.path_prefix.clear();
+                    }
                 }
                 return true;
             }
@@ -208,6 +229,7 @@ namespace error_system::utils {
                 return std::nullopt;
             }
             parser_context_t context{};
+            context.temp_dict.reserve(64);
 
             while (true) {
                 token = lexer.next();
