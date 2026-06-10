@@ -154,6 +154,20 @@ namespace error_system::core {
         EXPECT_EQ(info->get().description, "Second description");
     }
 
+    TEST_F(error_registry_test, duplicate_policy_overwrite_updates_name_index) {
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+
+        error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::overwrite);
+        error_registry_t::instance().register_error(code, "FIRST", "First description");
+        error_registry_t::instance().register_error(code, "SECOND", "Second description");
+
+        error_registry_t::instance().unregister_error("FIRST");
+        EXPECT_TRUE(error_registry_t::instance().is_registered(code));
+
+        error_registry_t::instance().unregister_error("SECOND");
+        EXPECT_FALSE(error_registry_t::instance().is_registered(code));
+    }
+
     TEST_F(error_registry_test, duplicate_policy_get_set) {
         error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::skip);
         EXPECT_EQ(error_registry_t::instance().get_duplicate_policy(), duplicate_policy_t::skip);

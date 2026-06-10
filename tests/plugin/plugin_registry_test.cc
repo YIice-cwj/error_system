@@ -1,6 +1,7 @@
 #include "error_system/core/error_context.h"
 #include "error_system/plugin/plugin_registry.h"
 #include <atomic>
+#include <chrono>
 #include <gtest/gtest.h>
 #include <memory>
 #include <string>
@@ -170,6 +171,78 @@ namespace error_system::plugin {
         }
 
         EXPECT_EQ(plugin_registry_t::instance().size(), 0UL);
+    }
+
+    TEST_F(plugin_registry_test, concurrent_unregister_during_notify_does_not_deadlock) {
+        mock_plugin_t plugin("target");
+        plugin_registry_t::instance().register_plugin(&plugin);
+
+        std::atomic<bool> notification_started{false};
+        std::atomic<bool> unregister_done{false};
+
+        std::thread notifier([&]() {
+            notification_started.store(true);
+            for (int i = 0; i < 2000; ++i) {
+                core::error_context_t ctx;
+                ctx.code = core::error_code_t(42);
+                ctx.message = "stress";
+                plugin_registry_t::instance().notify_error(ctx);
+            }
+        });
+
+        while (!notification_started.load()) {
+        }
+
+        std::thread unregisterer([&]() {
+            for (int i = 0; i < 500; ++i) {
+                plugin_registry_t::instance().unregister_plugin("target");
+                plugin_registry_t::instance().register_plugin(&plugin);
+            }
+            unregister_done.store(true);
+        });
+
+        notifier.join();
+        unregisterer.join();
+
+        EXPECT_TRUE(unregister_done.load());
+        EXPECT_GT(plugin.call_count_.load(), 0L);
+    }
+
+    TEST_F(plugin_registry_test, notify_error_with_slow_plugin_does_not_block_registration) {
+        class slow_plugin_t : public i_error_plugin_t {
+            public:
+            std::string_view name() const noexcept override { return "slow_plugin"; }
+            void on_error(const core::error_context_t&) noexcept override {
+                std::this_thread::sleep_for(std::chrono::microseconds(100));
+                call_count_.fetch_add(1);
+            }
+            std::atomic<int> call_count_{0};
+        };
+
+        slow_plugin_t slow_plugin;
+        mock_plugin_t normal_plugin("normal");
+
+        plugin_registry_t::instance().register_plugin(&slow_plugin);
+
+        std::thread notifier([&]() {
+            for (int i = 0; i < 30; ++i) {
+                core::error_context_t ctx;
+                ctx.code = core::error_code_t(42);
+                plugin_registry_t::instance().notify_error(ctx);
+            }
+        });
+
+        std::thread registrant([&]() {
+            for (int i = 0; i < 50; ++i) {
+                plugin_registry_t::instance().register_plugin(&normal_plugin);
+                plugin_registry_t::instance().unregister_plugin("normal");
+            }
+        });
+
+        notifier.join();
+        registrant.join();
+
+        EXPECT_GT(slow_plugin.call_count_.load(), 0);
     }
 
 }  // namespace error_system::plugin
