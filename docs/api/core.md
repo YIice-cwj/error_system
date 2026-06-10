@@ -179,22 +179,29 @@ public:
     error_code_t code;
     std::string message;
     std::unordered_map<std::string, std::string> payload;
-    std::vector<std::string> stack_frames;
-    utils::source_location_t source_location;
     std::shared_ptr<error_context_t> cause;
 
     error_context_t() = default;
-    explicit error_context_t(error_code_t code, std::string message = "");
 
-    error_context_t wrap(error_code_t new_code, std::string new_message) const;
+    // 模板构造函数：接受 code_with_location_t + 格式化字符串
+    template <typename... Args>
+    error_context_t(code_with_location_t code_with, std::string message_format = "", Args&&... args) noexcept;
 
-    std::string to_string() const;
-    std::string to_json() const;
-    std::string to_binary() const;
+    // 链式调用添加 payload
+    error_context_t& with(const std::string& key, const std::string& value) noexcept;
+    error_context_t& with(std::string&& key, std::string&& value) noexcept;
+    error_context_t& with(const char* key, const char* value) noexcept;
 
-    bool has_cause() const noexcept;
-    std::string get_full_message() const;
-    std::string get_stack_trace() const;
+    // 错误包装（因果链）
+    error_context_t wrap(const error_context_t& underlying) const noexcept;
+    error_context_t wrap(error_context_t&& underlying) const noexcept;
+
+    bool is_success() const noexcept;
+    bool is_error() const noexcept;
+
+    std::string to_string() const noexcept;
+    std::string to_json() const noexcept;
+    std::string to_binary() const noexcept;
 
     const std::unordered_map<std::string, std::string>& get_payload() const noexcept;
     const char* what() const noexcept;
@@ -210,13 +217,17 @@ auto code = error_builder_t::make_error_code(
     1, 1, 1
 );
 
-// 基础构造
-error_context_t ctx(code, "数据库连接超时");
+// 模板构造：code_with_location_t + 格式化字符串
+using error_system::core::code_with_location_t;
+error_context_t ctx(code_with_location_t(code), "数据库连接超时");
 
-// 添加结构化负载
-ctx.payload["host"] = "192.168.1.1";
-ctx.payload["port"] = "3306";
-ctx.payload["timeout_ms"] = "5000";
+// 或使用格式化参数
+error_context_t ctx2(code_with_location_t(code), "连接 {} 超时，耗时 {}ms", "DB", 5000);
+
+// 链式添加结构化负载
+ctx.with("host", "192.168.1.1")
+   .with("port", "3306")
+   .with("timeout_ms", "5000");
 ```
 
 ### 因果链（错误包装）
@@ -226,16 +237,15 @@ ctx.payload["timeout_ms"] = "5000";
 auto db_code = error_builder_t::make_error_code(
     error_level_t::error, system_domain_t::database, 1, 1, 1
 );
-error_context_t db_error(db_code, "连接超时");
+error_context_t db_error(code_with_location_t(db_code), "连接超时");
 
 // 业务层包装
 auto biz_code = error_builder_t::make_error_code(
     error_level_t::error, system_domain_t::application, 2, 1, 1
 );
-error_context_t biz_error = db_error.wrap(biz_code, "订单查询失败");
-
-// 结果：biz_error.cause -> db_error
-```
+error_context_t biz_error = db_error.wrap(
+    error_context_t(code_with_location_t(biz_code), "订单查询失败")
+);
 
 ### 序列化
 
@@ -295,32 +305,46 @@ error_context_t ctx(code, "错误信息");
 
 | 测试文件 | 用例数 | 覆盖内容 |
 |----------|--------|----------|
-| `tests/core/error_context_test.cc` | 20+ | 构造、包装、序列化、堆栈、源位置 |
+| `tests/core/error_context_test.cc` | 4 | 构造、payload、序列化 |
 
 ---
 
 ## error_registry_t
 
-错误码注册表，支持按模块组索引和错误码验证。
+错误码注册表，支持按码快速查找、按名注销、按模块组索引和批量注册。
 
 ```cpp
 class error_registry_t {
 public:
     static error_registry_t& instance() noexcept;
 
-    void register_error(error_code_t code, std::string_view name,
-                        std::string_view desc, std::string_view module_group);
+    void register_error(const error_code_t code, std::string_view name,
+                        std::string_view description) noexcept;
 
-    bool is_registered(error_code_t code) const noexcept;
-    std::optional<std::string> get_name(error_code_t code) const;
-    std::optional<std::string> get_description(error_code_t code) const;
-    std::optional<std::string> get_module_group(error_code_t code) const;
+    size_t register_errors(const std::vector<error_code_t>& codes,
+                           const std::vector<std::string_view>& names,
+                           const std::vector<std::string_view>& descriptions) noexcept;
 
-    std::vector<error_code_t> get_codes_by_module_group(std::string_view group) const;
-    std::vector<error_code_t> get_all_codes() const;
+    void unregister_error(const error_code_t code) noexcept;
+    void unregister_error(std::string_view name) noexcept;
+    void unregister_module(module_group_id_t module_group_id) noexcept;
+    void unregister_all() noexcept;
 
-    void clear() noexcept;
-    size_t size() const noexcept;
+    bool is_registered(const error_code_t code) const noexcept;
+
+    std::optional<std::reference_wrapper<const error_metadata_t>>
+    get_info(const error_code_t code) const noexcept;
+
+    std::vector<std::reference_wrapper<const error_metadata_t>>
+    get_errors_by_module(module_group_id_t module_group_id) const noexcept;
+
+    void register_subsystem_module(uint16_t subsys_id, uint16_t module_id,
+                                   std::string_view subsystem_name,
+                                   std::string_view module_name) noexcept;
+
+    void set_duplicate_policy(duplicate_policy_t policy) noexcept;
+    duplicate_policy_t get_duplicate_policy() const noexcept;
+    void set_duplicate_warn_callback(std::function<void(code_t, const error_metadata_t&)> callback) noexcept;
 };
 ```
 
@@ -333,19 +357,24 @@ auto& registry = error_registry_t::instance();
 registry.register_error(
     ERR_DB_CONNECTION_TIMEOUT,
     "ERR_DB_CONNECTION_TIMEOUT",
-    "数据库连接超时",
-    "database"
+    "数据库连接超时"
 );
+
+// 批量注册
+registry.register_errors({code1, code2}, {"E1", "E2"}, {"Desc1", "Desc2"});
 
 // 查询
 if (registry.is_registered(code)) {
-    auto name = registry.get_name(code);        // "ERR_DB_CONNECTION_TIMEOUT"
-    auto desc = registry.get_description(code); // "数据库连接超时"
-    auto group = registry.get_module_group(code); // "database"
+    auto info = registry.get_info(code);
+    info->get().name;        // "ERR_DB_CONNECTION_TIMEOUT"
+    info->get().description; // "数据库连接超时"
 }
 
+// 按名注销（O(1)）
+registry.unregister_error("ERR_DB_CONNECTION_TIMEOUT");
+
 // 按模块组查询
-auto db_codes = registry.get_codes_by_module_group("database");
+auto errors = registry.get_errors_by_module(code.get_module_group_id());
 
 // 使用 DEFINE_ERROR_CODE 宏自动注册
 DEFINE_ERROR_CODE(
@@ -360,7 +389,7 @@ DEFINE_ERROR_CODE(
 
 | 测试文件 | 用例数 | 覆盖内容 |
 |----------|--------|----------|
-| `tests/core/error_registry_test.cc` | 10+ | 注册、查询、模块组索引、单例 |
+| `tests/core/error_registry_test.cc` | 22 | 注册、查询、注销、批量注册、重复策略、并发、name_index |
 
 ---
 

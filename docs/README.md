@@ -46,12 +46,12 @@ ctest --output-on-failure
 
 | 模块 | 测试文件数 | 测试用例数 |
 |------|-----------|-----------|
-| Core 层 | 7 | 59+ |
-| Plugin 层 | 2 | 17 |
+| Core 层 | 7 | 70+ |
+| Plugin 层 | 2 | 20 |
 | Memory 层 | 1 | 10 |
-| Utils 层 | 5 | 37+ |
+| Utils 层 | 4 | 37+ |
 | Config 层 | 1 | 7 |
-| Translator 层 | 1 | 9 |
-| **总计** | **17** | **149+** |
+| Domain 层 | 1 | 3 |
+| **总计** | **16** | **147+** |
 
-> 注：`tests/CMakeLists.txt` 中已配置 `DISCOVERY_TIMEOUT 30`，确保测试发现阶段在复杂环境下稳定运行。
+> 另含 `tests/perf/` 下 3 个性能基线 benchmark 程序。

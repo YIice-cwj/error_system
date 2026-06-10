@@ -218,11 +218,8 @@ auto files = file_utils_t::list_files("config/errors");
 ```cpp
 class stack_trace_utils_t {
 public:
-    static std::vector<std::string> generate(size_t skip_frames = 1, size_t max_frames = 64);
-    static std::string to_string(const std::vector<std::string>& frames);
-
-    static bool is_supported() noexcept;
-    static std::string get_platform_info() noexcept;
+    static std::vector<std::string> generate(int skip_frames = 1, int max_frames = 16) noexcept;
+    static std::string to_string(const std::vector<std::string>& frames) noexcept;
 };
 ```
 
@@ -277,7 +274,7 @@ set(ERROR_SYSTEM_ENABLE_STACKTRACE OFF)
 
 | 测试文件 | 用例数 | 覆盖内容 |
 |----------|--------|----------|
-| `tests/utils/stack_trace_utils_test.cc` | 6 | 生成、格式化、平台检测 |
+| `tests/utils/stack_trace_utils_test.cc` | 8 | 生成、格式化、帧数限制、skip |
 
 ---
 
