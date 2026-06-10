@@ -1,13 +1,11 @@
 #include "error_system/core/error_registry.h"
-#include <iostream>
 
 namespace error_system::core {
 
     error_registry_t::error_registry_t() {
         duplicate_warn_callback_ = [](code_t raw_code, const error_metadata_t& meta) {
-            std::cerr << "[error_system::warn] 重复注册错误码: " << meta.name << " (0x" << std::hex << raw_code
-                      << std::dec << ")"
-                      << ", 已有描述: " << meta.description << "\n";
+            (void)raw_code;
+            (void)meta;
         };
     }
 
@@ -26,16 +24,15 @@ namespace error_system::core {
      * @return bool 是否继续注册流程
      */
     bool error_registry_t::__handle_duplicate_overwrite(code_t raw_code) noexcept {
-        uint64_t old_group_id = error_code_t(raw_code).get_module_group_id();
-        auto mod_it = module_index_.find(old_group_id);
-        if (mod_it != module_index_.end()) {
-            auto& vec = mod_it->second;
-            vec.erase(std::remove(vec.begin(), vec.end(), raw_code), vec.end());
-            if (vec.empty()) {
-                module_index_.erase(mod_it);
-            }
+        auto primary_it = primary_index_.find(raw_code);
+        if (primary_it == primary_index_.end()) {
+            return true;
         }
-        primary_index_.erase(raw_code);
+
+        const uint64_t old_group_id = error_code_t(raw_code).get_module_group_id();
+        __erase_from_module_index(old_group_id, raw_code);
+        name_index_.erase(primary_it->second.name);
+        primary_index_.erase(primary_it);
         return true;
     }
 
@@ -70,6 +67,29 @@ namespace error_system::core {
                 return __handle_duplicate_warn(raw_code);
         }
         return false;
+    }
+
+    void error_registry_t::__reserve_for_registration(size_t additional_entries) noexcept {
+        if (additional_entries == 0) {
+            return;
+        }
+
+        primary_index_.reserve(primary_index_.size() + additional_entries);
+        name_index_.reserve(name_index_.size() + additional_entries);
+        module_index_.reserve(module_index_.size() + (additional_entries / 8) + 1);
+    }
+
+    void error_registry_t::__erase_from_module_index(module_group_id_t module_group_id, code_t identity_code) noexcept {
+        auto mod_it = module_index_.find(module_group_id);
+        if (mod_it == module_index_.end()) {
+            return;
+        }
+
+        auto& vec = mod_it->second;
+        vec.erase(std::remove(vec.begin(), vec.end(), identity_code), vec.end());
+        if (vec.empty()) {
+            module_index_.erase(mod_it);
+        }
     }
 
     /**
@@ -119,6 +139,8 @@ namespace error_system::core {
                                           const std::string_view name,
                                           const std::string_view description) noexcept {
         std::unique_lock<std::shared_mutex> lock(index_mutex_);
+        __reserve_for_registration(1);
+        module_index_[code.get_module_group_id()].reserve(module_index_[code.get_module_group_id()].size() + 1);
 
         code_t identity_code = code.get_identity_code();
         auto it = primary_index_.find(identity_code);
@@ -130,7 +152,8 @@ namespace error_system::core {
 
         error_metadata_t meta{
             std::string(name), std::string(description), code.get_module(), code.get_number(), code.get_level()};
-        primary_index_.emplace(identity_code, meta);
+        name_index_.emplace(meta.name, identity_code);
+        primary_index_.emplace(identity_code, std::move(meta));
         module_index_[code.get_module_group_id()].push_back(identity_code);
     }
 
@@ -148,6 +171,17 @@ namespace error_system::core {
             return 0;
         }
         std::unique_lock<std::shared_mutex> lock(index_mutex_);
+        __reserve_for_registration(codes.size());
+
+        std::unordered_map<module_group_id_t, size_t> module_group_counts;
+        module_group_counts.reserve((codes.size() / 8) + 1);
+        for (const auto& code : codes) {
+            ++module_group_counts[code.get_module_group_id()];
+        }
+        for (const auto& [module_group_id, count] : module_group_counts) {
+            auto& module_codes = module_index_[module_group_id];
+            module_codes.reserve(module_codes.size() + count);
+        }
 
         size_t registered_count = 0;
         for (size_t i = 0; i < codes.size(); ++i) {
@@ -165,7 +199,8 @@ namespace error_system::core {
                                   codes[i].get_number(),
                                   codes[i].get_level()};
 
-            primary_index_.emplace(identity_code, meta);
+            name_index_.emplace(meta.name, identity_code);
+            primary_index_.emplace(identity_code, std::move(meta));
             module_index_[codes[i].get_module_group_id()].push_back(identity_code);
             ++registered_count;
         }
@@ -185,14 +220,8 @@ namespace error_system::core {
             return;
         }
         uint64_t group_id = code.get_module_group_id();
-        auto mod_it = module_index_.find(group_id);
-        if (mod_it != module_index_.end()) {
-            auto& vec = mod_it->second;
-            vec.erase(std::remove(vec.begin(), vec.end(), identity_code), vec.end());
-            if (vec.empty()) {
-                module_index_.erase(mod_it);
-            }
-        }
+        name_index_.erase(it->second.name);
+        __erase_from_module_index(group_id, identity_code);
         primary_index_.erase(it);
     }
 
@@ -202,22 +231,21 @@ namespace error_system::core {
      */
     void error_registry_t::unregister_error(const std::string_view name) noexcept {
         std::unique_lock<std::shared_mutex> lock(index_mutex_);
-        for (auto it = primary_index_.begin(); it != primary_index_.end(); ++it) {
-            if (it->second.name == name) {
-                code_t identity_code = it->first;
-                uint64_t group_id = error_code_t(identity_code).get_module_group_id();
-                auto mod_it = module_index_.find(group_id);
-                if (mod_it != module_index_.end()) {
-                    auto& vec = mod_it->second;
-                    vec.erase(std::remove(vec.begin(), vec.end(), identity_code), vec.end());
-                    if (vec.empty()) {
-                        module_index_.erase(mod_it);
-                    }
-                }
-                primary_index_.erase(it);
-                return;
-            }
+        auto name_it = name_index_.find(std::string(name));
+        if (name_it == name_index_.end()) {
+            return;
         }
+
+        const code_t identity_code = name_it->second;
+        const auto primary_it = primary_index_.find(identity_code);
+        if (primary_it == primary_index_.end()) {
+            name_index_.erase(name_it);
+            return;
+        }
+
+        __erase_from_module_index(error_code_t(identity_code).get_module_group_id(), identity_code);
+        primary_index_.erase(primary_it);
+        name_index_.erase(name_it);
     }
 
     /**
@@ -231,7 +259,11 @@ namespace error_system::core {
             return;
         }
         for (code_t raw_code : mod_it->second) {
-            primary_index_.erase(raw_code);
+            const auto primary_it = primary_index_.find(raw_code);
+            if (primary_it != primary_index_.end()) {
+                name_index_.erase(primary_it->second.name);
+                primary_index_.erase(primary_it);
+            }
         }
         module_index_.erase(mod_it);
     }
@@ -242,6 +274,7 @@ namespace error_system::core {
     void error_registry_t::unregister_all() noexcept {
         std::unique_lock<std::shared_mutex> lock(index_mutex_);
         decltype(primary_index_)().swap(primary_index_);
+        decltype(name_index_)().swap(name_index_);
         decltype(module_index_)().swap(module_index_);
         decltype(subsystem_module_index_)().swap(subsystem_module_index_);
     }

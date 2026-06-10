@@ -65,6 +65,11 @@ namespace error_system::core {
         std::unordered_map<code_t, error_metadata_t> primary_index_;
 
         /**
+         * @brief 名称索引，根据错误码名称快速查找 identity code
+         */
+        std::unordered_map<std::string, code_t> name_index_;
+
+        /**
          * @brief 模块索引，根据模块 ID快速查找错误码
          */
         std::unordered_map<module_group_id_t, std::vector<code_t>> module_index_;
@@ -134,6 +139,19 @@ namespace error_system::core {
          * @return bool 是否继续注册流程
          */
         bool __apply_duplicate_policy(code_t raw_code) noexcept;
+
+        /**
+         * @brief 为批量注册提前预留索引容量
+         * @param additional_entries 新增条目数量
+         */
+        void __reserve_for_registration(size_t additional_entries) noexcept;
+
+        /**
+         * @brief 从模块索引中移除指定错误码
+         * @param module_group_id 模块组 ID
+         * @param identity_code 错误码 identity
+         */
+        void __erase_from_module_index(module_group_id_t module_group_id, code_t identity_code) noexcept;
 
         public:
         /**
