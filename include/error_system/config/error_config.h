@@ -6,7 +6,9 @@
 #include <mutex>
 #include <string>
 // IWYU pragma: end_exports
+#include <optional>
 #include <shared_mutex>
+#include <unordered_map>
 
 /**
  * @file error_config.h
@@ -309,6 +311,97 @@ namespace error_system::config {
         static bool is_text_output_enabled() noexcept {
             return __get_enable_text_output().load(std::memory_order_relaxed);
         }
+
+        /**
+         * @brief 插件通知模式
+         * @details sync：同步通知（默认），error_context_t 构造时立即调用所有插件；
+         *          async_queue：异步模式，通知推入内部队列，由工作线程消费
+         */
+        enum class notify_mode_t : uint8_t {
+            sync = 0,
+            async_queue = 1,
+        };
+
+        /**
+         * @brief 设置插件通知模式
+         * @param mode 通知模式
+         */
+        static void set_notify_mode(notify_mode_t mode) noexcept {
+            __get_notify_mode().store(mode, std::memory_order_relaxed);
+        }
+
+        /**
+         * @brief 获取插件通知模式
+         * @return notify_mode_t 当前通知模式
+         */
+        static notify_mode_t get_notify_mode() noexcept {
+            return __get_notify_mode().load(std::memory_order_relaxed);
+        }
+
+#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
+        /**
+         * @brief 设置指定错误码的堆栈追踪等级（覆盖全局配置）
+         * @details 若设置了 per-code 配置，finalize_runtime_features 优先使用此值。
+         *          不影响全局 is_stacktrace_enabled 判断。
+         * @param identity_code 错误码的 identity_code（通过 get_identity_code() 获取）
+         * @param level 堆栈追踪触发等级
+         */
+        static void set_per_code_stacktrace_level(uint64_t identity_code, core::error_level_t level) noexcept {
+            std::unique_lock<std::shared_mutex> lock(__get_per_code_mutex());
+            __get_per_code_stacktrace_map()[identity_code] = level;
+        }
+
+        /**
+         * @brief 获取指定错误码的堆栈追踪等级
+         * @param identity_code 错误码的 identity_code
+         * @return std::optional<core::error_level_t> 若已设置则返回覆盖值，否则返回空
+         */
+        static std::optional<core::error_level_t> get_per_code_stacktrace_level(uint64_t identity_code) noexcept {
+            std::shared_lock<std::shared_mutex> lock(__get_per_code_mutex());
+            const auto& map = __get_per_code_stacktrace_map();
+            auto it = map.find(identity_code);
+            if (it != map.end()) {
+                return it->second;
+            }
+            return std::nullopt;
+        }
+
+        /**
+         * @brief 删除指定错误码的堆栈追踪等级覆盖配置
+         * @param identity_code 错误码的 identity_code
+         */
+        static void remove_per_code_stacktrace_level(uint64_t identity_code) noexcept {
+            std::unique_lock<std::shared_mutex> lock(__get_per_code_mutex());
+            __get_per_code_stacktrace_map().erase(identity_code);
+        }
+#endif
+
+        private:
+        /**
+         * @brief 通知模式存储
+         */
+        static std::atomic<notify_mode_t>& __get_notify_mode() noexcept {
+            static std::atomic<notify_mode_t> mode{notify_mode_t::sync};
+            return mode;
+        }
+
+#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
+        /**
+         * @brief per-code 堆栈追踪等级映射表
+         */
+        static std::unordered_map<uint64_t, core::error_level_t>& __get_per_code_stacktrace_map() noexcept {
+            static std::unordered_map<uint64_t, core::error_level_t> map;
+            return map;
+        }
+
+        /**
+         * @brief per-code 配置专用互斥锁
+         */
+        static std::shared_mutex& __get_per_code_mutex() noexcept {
+            static std::shared_mutex mutex;
+            return mutex;
+        }
+#endif
     };
 
 }  // namespace error_system::config

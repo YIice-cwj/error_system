@@ -1,4 +1,5 @@
 #include "error_system/config/error_config.h"
+#include "error_system/core/error_code.h"
 #include "error_system/core/error_context.h"
 #include <atomic>
 #include <gtest/gtest.h>
@@ -101,6 +102,62 @@ namespace error_system::config {
 
         EXPECT_EQ(success_count.load(), 1000);
         error_config_t::set_stacktrace_level(original);
+    }
+
+    TEST_F(error_config_test, set_and_get_notify_mode) {
+        error_config_t::set_notify_mode(error_config_t::notify_mode_t::sync);
+        EXPECT_EQ(error_config_t::get_notify_mode(), error_config_t::notify_mode_t::sync);
+
+        error_config_t::set_notify_mode(error_config_t::notify_mode_t::async_queue);
+        EXPECT_EQ(error_config_t::get_notify_mode(), error_config_t::notify_mode_t::async_queue);
+
+        // 恢复默认
+        error_config_t::set_notify_mode(error_config_t::notify_mode_t::sync);
+    }
+
+    TEST_F(error_config_test, per_code_stacktrace_level_set_and_get) {
+        uint64_t id1 = 0x123450000000001ULL;
+        uint64_t id2 = 0x543210000000001ULL;
+
+        // 设置 per-code 等级
+        error_config_t::set_per_code_stacktrace_level(id1, core::error_level_t::warn);
+        error_config_t::set_per_code_stacktrace_level(id2, core::error_level_t::fatal);
+
+        // 获取已设置的
+        auto level1 = error_config_t::get_per_code_stacktrace_level(id1);
+        ASSERT_TRUE(level1.has_value());
+        EXPECT_EQ(level1.value(), core::error_level_t::warn);
+
+        auto level2 = error_config_t::get_per_code_stacktrace_level(id2);
+        ASSERT_TRUE(level2.has_value());
+        EXPECT_EQ(level2.value(), core::error_level_t::fatal);
+
+        // 获取未设置的值
+        auto level3 = error_config_t::get_per_code_stacktrace_level(0xDEAD);
+        EXPECT_FALSE(level3.has_value());
+    }
+
+    TEST_F(error_config_test, per_code_stacktrace_level_remove) {
+        uint64_t id = 0xABCD0000000001ULL;
+
+        error_config_t::set_per_code_stacktrace_level(id, core::error_level_t::warn);
+        ASSERT_TRUE(error_config_t::get_per_code_stacktrace_level(id).has_value());
+
+        error_config_t::remove_per_code_stacktrace_level(id);
+        EXPECT_FALSE(error_config_t::get_per_code_stacktrace_level(id).has_value());
+    }
+
+    TEST_F(error_config_test, per_code_stacktrace_level_overwrite) {
+        uint64_t id = 0xDEAD0000000001ULL;
+
+        error_config_t::set_per_code_stacktrace_level(id, core::error_level_t::warn);
+        error_config_t::set_per_code_stacktrace_level(id, core::error_level_t::fatal);
+
+        auto level = error_config_t::get_per_code_stacktrace_level(id);
+        ASSERT_TRUE(level.has_value());
+        EXPECT_EQ(level.value(), core::error_level_t::fatal);  // 后设覆盖前设
+
+        error_config_t::remove_per_code_stacktrace_level(id);
     }
 
 }  // namespace error_system::config
