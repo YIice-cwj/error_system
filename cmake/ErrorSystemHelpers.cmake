@@ -25,7 +25,7 @@ macro(error_system_generate_codes)
     set(DOCS_SCRIPT     "${ERROR_SYSTEM_SCRIPTS_DIR}/generate_error_docs.py")
 
     set(OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated_errors/include")
-    set(DOCS_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated_errors/docs")
+    set(DOCS_OUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated_errors")
 
     file(GLOB JSON_FILES "${ARG_JSON_DIR}/*.json")
 

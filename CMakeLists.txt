@@ -32,7 +32,7 @@ set(ERROR_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated_errors/include")
 
 if(Python3_FOUND)
     set(ERROR_JSON_DIR "${CMAKE_SOURCE_DIR}/config/errors")
-    set(ERROR_DOCS_OUT_DIR "${CMAKE_BINARY_DIR}/generated_errors/docs")
+    set(ERROR_DOCS_OUT_DIR "${CMAKE_BINARY_DIR}/generated_errors")
 
     file(GLOB ERROR_JSON_FILES "${ERROR_JSON_DIR}/*.json")
     set(ALL_GENERATED_HEADERS "")

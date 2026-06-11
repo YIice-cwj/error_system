@@ -7,14 +7,14 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # 2. 定义目录和脚本路径
 JSON_DIR="$PROJECT_ROOT/config/errors"
 OUTPUT_DIR="$PROJECT_ROOT/build/generated_errors/include"
-DOCS_DIR="$PROJECT_ROOT/docs"
+GENERATED_DIR="$PROJECT_ROOT/build/generated_errors"
 
 CODE_SCRIPT="$SCRIPT_DIR/script_py/generate_error_codes.py"
 DICT_SCRIPT="$SCRIPT_DIR/script_py/generate_error_dict.py"
 DOCS_SCRIPT="$SCRIPT_DIR/script_py/generate_error_docs.py"
 
 DICT_OUTPUT="$OUTPUT_DIR/error_dict.h"
-DOCS_OUTPUT="$DOCS_DIR/error_dictionary.md"
+DOCS_OUTPUT="$GENERATED_DIR/error_dictionary.md"
 
 echo "================================================="
 echo "   🚀 开始一键生成 Error System 错误码与文档..."
@@ -27,7 +27,7 @@ fi
 
 # 确保输出目录存在
 mkdir -p "$OUTPUT_DIR"
-mkdir -p "$DOCS_DIR"
+mkdir -p "$GENERATED_DIR"
 
 # ---------------------------------------------------------
 # 阶段一：业务头文件生成
