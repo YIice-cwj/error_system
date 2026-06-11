@@ -1,6 +1,8 @@
 #include "error_system/core/error_registry.h"
 #include <atomic>
 #include <gtest/gtest.h>
+#include <set>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -26,10 +28,10 @@ namespace error_system::core {
 
         EXPECT_TRUE(error_registry_t::instance().is_registered(code));
 
-        auto info = error_registry_t::instance().get_info(code);
-        ASSERT_TRUE(info.has_value());
-        EXPECT_EQ(info->get().name, "ERR_DB_CONN");
-        EXPECT_EQ(info->get().description, "Database connection failed");
+        const error_metadata_t* info = error_registry_t::instance().get_info(code);
+        ASSERT_NE(info, nullptr);
+        EXPECT_EQ(info->name, "ERR_DB_CONN");
+        EXPECT_EQ(info->description, "Database connection failed");
     }
 
     TEST_F(error_registry_test, register_multiple_errors) {
@@ -81,12 +83,12 @@ namespace error_system::core {
         EXPECT_FALSE(error_registry_t::instance().is_registered(code2));
     }
 
-    TEST_F(error_registry_test, get_info_returns_nullopt_for_unregistered) {
+    TEST_F(error_registry_test, get_info_returns_nullptr_for_unregistered) {
         auto code =
             error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::database, 99, 99, 99);
 
-        auto info = error_registry_t::instance().get_info(code);
-        EXPECT_FALSE(info.has_value());
+        const error_metadata_t* info = error_registry_t::instance().get_info(code);
+        EXPECT_EQ(info, nullptr);
     }
 
     TEST_F(error_registry_test, get_errors_by_module) {
@@ -105,8 +107,50 @@ namespace error_system::core {
         EXPECT_EQ(errors.size(), 2);
         EXPECT_EQ(errors[0].get().name, "ERR_1");
         EXPECT_EQ(errors[1].get().name, "ERR_2");
-        EXPECT_EQ(errors[0].get().name, "ERR_1");
-        EXPECT_EQ(errors[1].get().name, "ERR_2");
+    }
+
+    TEST_F(error_registry_test, get_errors_by_subsystem) {
+        auto code1 = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code2 = error_builder_t::make_error_code(error_level_t::warn, domain::system_domain_t::database, 1, 2, 1);
+        auto code3 =
+            error_builder_t::make_error_code(error_level_t::info, domain::system_domain_t::application, 2, 2, 1);
+
+        error_registry_t::instance().register_error(code1, "ERR_1", "Error 1");
+        error_registry_t::instance().register_error(code2, "ERR_2", "Error 2");
+        error_registry_t::instance().register_error(code3, "ERR_3", "Error 3");
+
+        // 查询子系统 1 的所有错误码（顺序不保证，按名称收集验证）
+        auto errors = error_registry_t::instance().get_errors_by_subsystem(1);
+        EXPECT_EQ(errors.size(), 2);
+
+        std::set<std::string> error_names;
+        for (const auto& ref : errors) {
+            error_names.insert(ref.get().name);
+        }
+        EXPECT_TRUE(error_names.count("ERR_1"));
+        EXPECT_TRUE(error_names.count("ERR_2"));
+
+        // 查询子系统 2 的所有错误码
+        auto errors2 = error_registry_t::instance().get_errors_by_subsystem(2);
+        EXPECT_EQ(errors2.size(), 1);
+        EXPECT_EQ(errors2[0].get().name, "ERR_3");
+
+        // 查询不存在的子系统
+        auto errors3 = error_registry_t::instance().get_errors_by_subsystem(99);
+        EXPECT_TRUE(errors3.empty());
+    }
+
+    TEST_F(error_registry_test, find_by_name) {
+        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        error_registry_t::instance().register_error(code, "ERR_FIND_ME", "Find me");
+
+        auto found = error_registry_t::instance().find_by_name("ERR_FIND_ME");
+        ASSERT_TRUE(found.has_value());
+        EXPECT_EQ(found->get_identity_code(), code.get_identity_code());
+
+        // 查找不存在的名称
+        auto not_found = error_registry_t::instance().find_by_name("ERR_NOT_EXIST");
+        EXPECT_FALSE(not_found.has_value());
     }
 
     TEST_F(error_registry_test, singleton_returns_same_instance) {
@@ -121,11 +165,11 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "OLD_NAME", "Old description");
         error_registry_t::instance().register_error(code, "NEW_NAME", "New description");
 
-        auto info = error_registry_t::instance().get_info(code);
-        ASSERT_TRUE(info.has_value());
+        const error_metadata_t* info = error_registry_t::instance().get_info(code);
+        ASSERT_NE(info, nullptr);
         // Duplicate registration should keep the first registered metadata
-        EXPECT_EQ(info->get().name, "OLD_NAME");
-        EXPECT_EQ(info->get().description, "Old description");
+        EXPECT_EQ(info->name, "OLD_NAME");
+        EXPECT_EQ(info->description, "Old description");
     }
 
     TEST_F(error_registry_test, duplicate_policy_skip) {
@@ -136,9 +180,9 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "SECOND", "Second description");
 
         // First registration should be kept
-        auto info = error_registry_t::instance().get_info(code);
-        ASSERT_TRUE(info.has_value());
-        EXPECT_EQ(info->get().name, "FIRST");
+        const error_metadata_t* info = error_registry_t::instance().get_info(code);
+        ASSERT_NE(info, nullptr);
+        EXPECT_EQ(info->name, "FIRST");
     }
 
     TEST_F(error_registry_test, duplicate_policy_overwrite) {
@@ -148,10 +192,10 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "FIRST", "First description");
         error_registry_t::instance().register_error(code, "SECOND", "Second description");
 
-        auto info = error_registry_t::instance().get_info(code);
-        ASSERT_TRUE(info.has_value());
-        EXPECT_EQ(info->get().name, "SECOND");
-        EXPECT_EQ(info->get().description, "Second description");
+        const error_metadata_t* info = error_registry_t::instance().get_info(code);
+        ASSERT_NE(info, nullptr);
+        EXPECT_EQ(info->name, "SECOND");
+        EXPECT_EQ(info->description, "Second description");
     }
 
     TEST_F(error_registry_test, duplicate_policy_overwrite_updates_name_index) {
@@ -216,10 +260,10 @@ namespace error_system::core {
         size_t count = error_registry_t::instance().register_errors(codes, names, descs);
 
         EXPECT_EQ(count, 1);
-        auto info = error_registry_t::instance().get_info(code);
-        ASSERT_TRUE(info.has_value());
-        EXPECT_EQ(info->get().name, "UPDATED");
-        EXPECT_EQ(info->get().description, "Updated desc");
+        const error_metadata_t* info = error_registry_t::instance().get_info(code);
+        ASSERT_NE(info, nullptr);
+        EXPECT_EQ(info->name, "UPDATED");
+        EXPECT_EQ(info->description, "Updated desc");
     }
 
     TEST_F(error_registry_test, duplicate_policy_warn_triggers_callback) {
@@ -286,10 +330,10 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "ORIGINAL", "Original description");
         error_registry_t::instance().register_error(code, "NEW", "New description");
 
-        auto info = error_registry_t::instance().get_info(code);
-        ASSERT_TRUE(info.has_value());
-        EXPECT_EQ(info->get().name, "ORIGINAL");
-        EXPECT_EQ(info->get().description, "Original description");
+        const error_metadata_t* info = error_registry_t::instance().get_info(code);
+        ASSERT_NE(info, nullptr);
+        EXPECT_EQ(info->name, "ORIGINAL");
+        EXPECT_EQ(info->description, "Original description");
     }
 
     TEST_F(error_registry_test, concurrent_register_and_query) {
@@ -303,8 +347,8 @@ namespace error_system::core {
             threads.emplace_back([&]() {
                 for (int j = 0; j < 100; ++j) {
                     if (error_registry_t::instance().is_registered(code)) {
-                        auto info = error_registry_t::instance().get_info(code);
-                        if (info.has_value() && info->get().name == "CONCURRENT") {
+                        const error_metadata_t* info = error_registry_t::instance().get_info(code);
+                        if (info != nullptr && info->name == "CONCURRENT") {
                             success_count.fetch_add(1);
                         }
                     }

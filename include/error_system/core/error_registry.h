@@ -210,9 +210,9 @@ namespace error_system::core {
         /**
          * @brief 通过 64位错误码 获取详情
          * @param code 错误码
-         * @return std::optional<std::reference_wrapper<const error_metadata_t>> 错误码元数据，若未注册则返回空可选
+         * @return const error_metadata_t* 错误码元数据指针，若未注册则返回 nullptr
          */
-        std::optional<std::reference_wrapper<const error_metadata_t>> get_info(const error_code_t code) const noexcept;
+        const error_metadata_t* get_info(const error_code_t code) const noexcept;
 
         /**
          * @brief 通过模块 ID 获取所有错误码
@@ -221,6 +221,21 @@ namespace error_system::core {
          */
         std::vector<std::reference_wrapper<const error_metadata_t>>
         get_errors_by_module(const module_group_id_t module_group_id) const noexcept;
+
+        /**
+         * @brief 通过子系统 ID 获取该子系统下所有错误码
+         * @param subsys_id 子系统 ID
+         * @return std::vector<std::reference_wrapper<const error_metadata_t>> 子系统下所有错误码的元数据
+         */
+        std::vector<std::reference_wrapper<const error_metadata_t>>
+        get_errors_by_subsystem(uint16_t subsys_id) const noexcept;
+
+        /**
+         * @brief 通过错误码名称查找错误码
+         * @param name 错误码名称
+         * @return std::optional<error_code_t> 错误码，若未注册则返回空可选
+         */
+        std::optional<error_code_t> find_by_name(const std::string_view name) const noexcept;
 
         /**
          * @brief 注册子系统/模块名称
@@ -293,8 +308,17 @@ namespace error_system::core {
     /**
      * @brief 错误码自动注册辅助类
      * @details 配合 DEFINE_ERROR_CODE 宏使用，利用静态初始化在 main 函数前注册错误码
+     *          同时自动注册对应的子系统/模块名称
      */
     struct error_registrar_t {
+        /**
+         * @brief 构造函数（自动注册错误码及子系统/模块名称）
+         * @param code 错误码
+         * @param name 错误码宏名称
+         * @param desc 错误码中文描述
+         * @param subsys_name 子系统名称
+         * @param module_name 模块名称
+         */
         error_registrar_t(const error_code_t code,
                           const char* name,
                           const char* desc,
@@ -317,9 +341,12 @@ namespace error_system::core {
  * @param MODULE 模块 ID
  * @param NUMBER 错误编号
  * @param DESC 错误描述字符串
+ * @param SUBSYS_NAME 子系统名称（用于 to_string() 可读输出）
+ * @param MODULE_NAME 模块名称（用于 to_string() 可读输出）
  * @details 该宏会：
  *          1. 创建一个 constexpr error_code_t 常量
  *          2. 在静态初始化阶段自动将错误码注册到 error_registry_t
+ *          3. 同时注册子系统/模块名称到 error_registry_t 的映射表
  * @note 必须在全局命名空间使用
  * @example
  * DEFINE_ERROR_CODE(
@@ -327,9 +354,11 @@ namespace error_system::core {
  *     error_system::core::error_level_t::error,
  *     error_system::domain::system_domain_t::database,
  *     1, 1, 0x0001,
- *     "数据库连接超时")
+ *     "数据库连接超时",
+ *     "数据库服务",
+ *     "连接管理")
  */
-#define DEFINE_ERROR_CODE(NAME, LEVEL, SYSTEM, SUBSYS, MODULE, NUMBER, DESC)                                           \
+#define DEFINE_ERROR_CODE(NAME, LEVEL, SYSTEM, SUBSYS, MODULE, NUMBER, DESC, SUBSYS_NAME, MODULE_NAME)                  \
     constexpr ::error_system::core::error_code_t NAME =                                                                \
         ::error_system::core::error_builder_t::make_error_code(LEVEL, SYSTEM, SUBSYS, MODULE, NUMBER);                 \
-    inline const ::error_system::core::error_registrar_t NAME##_registrar_(NAME, #NAME, DESC);
+    inline const ::error_system::core::error_registrar_t NAME##_registrar_(NAME, #NAME, DESC, SUBSYS_NAME, MODULE_NAME);

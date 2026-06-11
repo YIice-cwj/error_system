@@ -292,16 +292,15 @@ namespace error_system::core {
     /**
      * @brief 通过 64 位错误码 获取详情
      * @param code 错误码
-     * @return std::optional<std::reference_wrapper<const error_metadata_t>> 错误码元数据引用，若未注册则返回空可选
+     * @return const error_metadata_t* 错误码元数据指针，若未注册则返回 nullptr
      */
-    std::optional<std::reference_wrapper<const error_metadata_t>>
-    error_registry_t::get_info(const error_code_t code) const noexcept {
+    const error_metadata_t* error_registry_t::get_info(const error_code_t code) const noexcept {
         std::shared_lock<std::shared_mutex> lock(index_mutex_);
         auto it = primary_index_.find(code.get_identity_code());
         if (it != primary_index_.end()) {
-            return std::ref(it->second);
+            return &it->second;
         }
-        return std::nullopt;
+        return nullptr;
     }
 
     /**
@@ -322,5 +321,45 @@ namespace error_system::core {
             return errors;
         }
         return {};
+    }
+
+    /**
+     * @brief 通过子系统 ID 获取该子系统下所有错误码
+     * @param subsys_id 子系统 ID
+     * @return std::vector<std::reference_wrapper<const error_metadata_t>> 子系统下所有错误码的元数据
+     */
+    std::vector<std::reference_wrapper<const error_metadata_t>>
+    error_registry_t::get_errors_by_subsystem(uint16_t subsys_id) const noexcept {
+        std::shared_lock<std::shared_mutex> lock(index_mutex_);
+        std::vector<std::reference_wrapper<const error_metadata_t>> errors;
+        // 遍历 module_index_，筛选出子系统 ID 匹配的所有模块组
+        for (const auto& [module_group_id, code_list] : module_index_) {
+            uint16_t group_subsys = static_cast<uint16_t>((module_group_id >> 32) & 0xFFFF);
+            if (group_subsys != subsys_id) {
+                continue;
+            }
+            errors.reserve(errors.size() + code_list.size());
+            for (code_t raw_code : code_list) {
+                auto it = primary_index_.find(raw_code);
+                if (it != primary_index_.end()) {
+                    errors.emplace_back(it->second);
+                }
+            }
+        }
+        return errors;
+    }
+
+    /**
+     * @brief 通过错误码名称查找错误码
+     * @param name 错误码名称
+     * @return std::optional<error_code_t> 错误码，若未注册则返回空可选
+     */
+    std::optional<error_code_t> error_registry_t::find_by_name(const std::string_view name) const noexcept {
+        std::shared_lock<std::shared_mutex> lock(index_mutex_);
+        auto name_it = name_index_.find(std::string(name));
+        if (name_it != name_index_.end()) {
+            return error_code_t(name_it->second);
+        }
+        return std::nullopt;
     }
 }  // namespace error_system::core

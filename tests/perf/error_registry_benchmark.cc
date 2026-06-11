@@ -73,9 +73,9 @@ double benchmark_lookup(const dataset_t& data, std::size_t& checksum) {
     const auto start = std::chrono::steady_clock::now();
     for (int round = 0; round < kLookupRounds; ++round) {
         for (const auto& code : data.codes) {
-            const auto info = registry.get_info(code);
-            if (info.has_value()) {
-                checksum += info->get().name.size();
+            const error_system::core::error_metadata_t* info = registry.get_info(code);
+            if (info != nullptr) {
+                checksum += info->name.size();
             }
         }
     }
