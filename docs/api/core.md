@@ -12,13 +12,13 @@
 
 | 位域 | 位数 | 说明 |
 |------|------|------|
-| Sign | 1 bit | 符号位（0=正常，1=错误） |
+| Sign | 1 bit | 符号位（0=成功，1=错误） |
 | Reserved | 3 bits | 保留位 |
 | Level | 4 bits | 错误等级（debug/info/warn/error/fatal） |
 | System Domain | 8 bits | 系统域（none/system/middleware/database/application/third_party） |
-| Subsystem | 8 bits | 子系统 ID |
-| Module | 8 bits | 模块 ID |
-| Number | 32 bits | 错误码编号 |
+| Subsystem | 16 bits | 子系统 ID |
+| Module | 16 bits | 模块 ID |
+| Number | 16 bits | 错误编号 |
 
 ### 核心 API
 
@@ -28,63 +28,69 @@ public:
     using code_t = uint64_t;
 
     constexpr error_code_t() noexcept = default;
-    explicit constexpr error_code_t(code_t code) noexcept;
+    constexpr explicit error_code_t(code_t code) noexcept;
 
-    constexpr bool is_error() const noexcept;
+    // 便捷构造函数（v2.0 新增，替代 error_builder_t::make_error_code）
+    constexpr error_code_t(error_level_t level, domain::system_domain_t system,
+                           uint16_t subsys, uint16_t module, uint16_t number) noexcept;
+
+    constexpr code_t get_code() const noexcept;
+    constexpr uint8_t get_sign() const noexcept;
     constexpr error_level_t get_level() const noexcept;
-    constexpr uint8_t get_domain() const noexcept;
-    constexpr uint8_t get_subsystem() const noexcept;
-    constexpr uint8_t get_module() const noexcept;
-    constexpr uint32_t get_number() const noexcept;
+    constexpr domain::system_domain_t get_system() const noexcept;
+    constexpr uint16_t get_subsys() const noexcept;
+    constexpr uint16_t get_module() const noexcept;
+    constexpr uint16_t get_number() const noexcept;
+    constexpr module_group_id_t get_module_group_id() const noexcept;
+    constexpr code_t get_identity_code() const noexcept;
 
-    constexpr code_t get_raw_code() const noexcept;
     constexpr bool operator==(const error_code_t& other) const noexcept;
     constexpr bool operator!=(const error_code_t& other) const noexcept;
     constexpr bool operator<(const error_code_t& other) const noexcept;
 };
 ```
 
-### 构造与解析
+### 构造方式
 
 ```cpp
-// 从原始 64 位值构造
-error_code_t code(0x8000000001010001ULL);
+// 方式 1：便捷构造函数（推荐，v2.0 新增）
+error_code_t code(error_level_t::error, system_domain_t::database, 1, 2, 0x0010);
 
-// 使用 builder 构造（推荐）
-auto code = error_builder_t::make_error_code(
-    error_level_t::error,
-    system_domain_t::database,
-    1,   // subsystem
-    1,   // module
-    1    // number
-);
+// 方式 2：使用 error_builder_t（兼容旧代码）
+auto code2 = error_builder_t::make_error_code(
+    error_level_t::error, system_domain_t::database, 1, 1, 1);
 
-// 字段解析
-auto level = code.get_level();      // error_level_t::error
-auto domain = code.get_domain();    // 4 (database)
-auto subsys = code.get_subsystem(); // 1
-auto module = code.get_module();    // 1
-auto number = code.get_number();    // 1
+// 方式 3：从原始 64 位值构造
+error_code_t code3(0x8000000001010001ULL);
+
+// 方式 4：使用 DEFINE_ERROR_CODE 宏（自动注册）
+DEFINE_ERROR_CODE(ERR_DB_FAIL,
+    error_level_t::error, system_domain_t::database,
+    1, 1, 0x0010, "数据库操作失败",
+    "数据库服务", "连接管理");
 ```
 
-### 比较与哈希
+### 字段解析
 
 ```cpp
-error_code_t a = ...;
-error_code_t b = ...;
+auto level  = code.get_level();     // error_level_t::error
+auto system = code.get_system();    // system_domain_t::database
+auto subsys = code.get_subsys();    // 1
+auto module = code.get_module();    // 2
+auto number = code.get_number();    // 0x0010
 
-if (a == b) { /* ... */ }
-if (a < b)  { /* 用于 map/set 排序 */ }
+// 模块组 ID（用于按模块查询注册表）
+auto mgid = code.get_module_group_id();
 
-// 哈希支持
-std::unordered_map<error_code_t, std::string> dict;
+// 身份码（清除 sign + reserved 位，用于注册表索引）
+auto id = code.get_identity_code();
 ```
 
 ### 测试覆盖
 
 | 测试文件 | 用例数 | 覆盖内容 |
 |----------|--------|----------|
-| `tests/core/error_code_test.cc` | 15+ | 构造、字段解析、比较、哈希、constexpr |
+| `tests/core/error_code_test.cc` | 17+ | 构造、5 参便捷构造、constexpr 5 参构造、字段解析、比较、哈希 |
 
 ---
 
@@ -94,12 +100,11 @@ std::unordered_map<error_code_t, std::string> dict;
 
 ```cpp
 enum class error_level_t : uint8_t {
-    none = 0,
-    debug = 1,
-    info = 2,
-    warn = 3,
-    error = 4,
-    fatal = 5
+    debug = 0,
+    info  = 1,
+    warn  = 2,
+    error = 3,
+    fatal = 4,
 };
 ```
 
@@ -107,14 +112,8 @@ enum class error_level_t : uint8_t {
 
 ```cpp
 constexpr const char* to_string(error_level_t level) noexcept;
-constexpr std::optional<error_level_t> from_string(std::string_view str) noexcept;
+constexpr error_level_t from_string(const char* string) noexcept;
 ```
-
-### 测试覆盖
-
-| 测试文件 | 用例数 | 覆盖内容 |
-|----------|--------|----------|
-| `tests/core/error_level_test.cc` | 8 | 枚举值、字符串转换、constexpr |
 
 ---
 
@@ -126,46 +125,12 @@ constexpr std::optional<error_level_t> from_string(std::string_view str) noexcep
 class error_builder_t {
 public:
     static constexpr error_code_t make_error_code(
-        error_level_t level,
-        uint8_t domain,
-        uint8_t subsystem,
-        uint8_t module,
-        uint32_t number) noexcept;
-
-    static constexpr error_code_t make_error_code(
-        error_level_t level,
-        system_domain_t domain,
-        uint8_t subsystem,
-        uint8_t module,
-        uint32_t number) noexcept;
+        error_level_t level, domain::system_domain_t system,
+        uint16_t subsystem, uint16_t module, uint16_t number) noexcept;
 };
 ```
 
-### 使用示例
-
-```cpp
-// 使用预定义域
-auto code = error_builder_t::make_error_code(
-    error_level_t::error,
-    system_domain_t::database,
-    1, 1, 0x0001
-);
-
-// 使用原始域 ID
-auto code2 = error_builder_t::make_error_code(
-    error_level_t::warn,
-    5,   // domain
-    2,   // subsystem
-    3,   // module
-    100  // number
-);
-```
-
-### 测试覆盖
-
-| 测试文件 | 用例数 | 覆盖内容 |
-|----------|--------|----------|
-| `tests/core/error_builder_test.cc` | 6 | 编译期构建、字段验证 |
+> **注意**: 自 v2.0 起，推荐使用 `error_code_t` 的五参数便捷构造函数作为更简洁的替代。
 
 ---
 
@@ -173,26 +138,34 @@ auto code2 = error_builder_t::make_error_code(
 
 错误上下文，包含错误码、消息、因果链、结构化负载、堆栈跟踪和源位置。
 
+构造时自动根据全局配置完成：错误码校验 → 堆栈捕获 → 源位置记录 → 插件通知。
+
+### 核心 API
+
 ```cpp
-class error_context_t {
-public:
-    error_code_t code;
-    std::string message;
-    std::unordered_map<std::string, std::string> payload;
-    std::shared_ptr<error_context_t> cause;
+struct error_context_t {
+    error_code_t code{};
+    std::string message{};
+    std::unordered_map<std::string, std::string> payload{};
+    std::shared_ptr<error_context_t> cause{nullptr};
 
-    error_context_t() = default;
+    constexpr error_context_t() noexcept = default;
 
-    // 模板构造函数：接受 code_with_location_t + 格式化字符串
+    // 模板构造函数（v2.0 简化：直接接受 error_code_t，无需 code_with_location_t）
     template <typename... Args>
-    error_context_t(code_with_location_t code_with, std::string message_format = "", Args&&... args) noexcept;
+    error_context_t(error_code_t code, std::string message_format = "", Args&&... args) noexcept;
 
-    // 链式调用添加 payload
+    // 链式添加 payload（v2.0 支持多类型值）
     error_context_t& with(const std::string& key, const std::string& value) noexcept;
-    error_context_t& with(std::string&& key, std::string&& value) noexcept;
     error_context_t& with(const char* key, const char* value) noexcept;
+    error_context_t& with(std::string_view key, std::string_view value) noexcept;
+    error_context_t& with(std::string&& key, std::string&& value) noexcept;
 
-    // 错误包装（因果链）
+    // 模板版本：自动转换 int、bool、double、float 等算术类型
+    template <typename T>
+    error_context_t& with(const std::string& key, T value) noexcept;
+
+    // 因果链
     error_context_t wrap(const error_context_t& underlying) const noexcept;
     error_context_t wrap(error_context_t&& underlying) const noexcept;
 
@@ -211,140 +184,111 @@ public:
 ### 构造与基本使用
 
 ```cpp
-auto code = error_builder_t::make_error_code(
-    error_level_t::error,
-    system_domain_t::database,
-    1, 1, 1
-);
+// v2.0 方式：直接传入 error_code_t
+error_context_t ctx(ERR_DB_TIMEOUT, "连接超时: {}ms", 3000);
 
-// 模板构造：code_with_location_t + 格式化字符串
-using error_system::core::code_with_location_t;
-error_context_t ctx(code_with_location_t(code), "数据库连接超时");
-
-// 或使用格式化参数
-error_context_t ctx2(code_with_location_t(code), "连接 {} 超时，耗时 {}ms", "DB", 5000);
-
-// 链式添加结构化负载
+// 链式添加多类型 payload
 ctx.with("host", "192.168.1.1")
-   .with("port", "3306")
-   .with("timeout_ms", "5000");
+   .with("port", 3306)           // int → "3306"
+   .with("retry", true)          // bool → "true"
+   .with("latency_ms", 150.5);   // double → "150.500000"
 ```
 
-### 因果链（错误包装）
+### 因果链
 
 ```cpp
 // 底层错误
-auto db_code = error_builder_t::make_error_code(
-    error_level_t::error, system_domain_t::database, 1, 1, 1
-);
-error_context_t db_error(code_with_location_t(db_code), "连接超时");
+error_context_t db_error(ERR_DB_TIMEOUT, "数据库连接超时");
 
 // 业务层包装
-auto biz_code = error_builder_t::make_error_code(
-    error_level_t::error, system_domain_t::application, 2, 1, 1
-);
-error_context_t biz_error = db_error.wrap(
-    error_context_t(code_with_location_t(biz_code), "订单查询失败")
-);
+error_context_t biz_error(ERR_ORDER_FAIL, "订单查询失败");
+auto chained = biz_error.wrap(db_error);
+// chained.cause 指向 db_error
+```
 
 ### 序列化
 
 ```cpp
+// 人类可读（含子系统/模块名称）
+std::string text = ctx.to_string();
+
 // JSON 序列化
 std::string json = ctx.to_json();
-// 输出示例：
-// {
-//   "code": 9223372036854775809,
-//   "message": "数据库连接超时",
-//   "payload": {"host": "192.168.1.1", "port": "3306"},
-//   "stack_frames": [...],
-//   "cause": {...}
-// }
+// {"code":0x8...","message":"...","payload":{"host":"..."},"cause":{...}}
 
-// 二进制序列化
+// 二进制序列化（高性能 RPC / 持久化）
 std::string binary = ctx.to_binary();
-// 适合高性能 RPC 或持久化存储
-```
-
-### 字符串输出
-
-```cpp
-std::cout << ctx << std::endl;
-// 输出格式：[ERROR][database][1][1][1] 数据库连接超时
-//          at main (main.cc:42)
-//          Stack: ...
 ```
 
 ### 自动堆栈跟踪
 
-当 `config::error_config_t::is_stacktrace_enabled()` 为 `true` 且错误等级 >= `get_stacktrace_level()` 时，构造函数自动捕获调用栈：
+当 `ERROR_SYSTEM_ENABLE_STACKTRACE` 开启时，构造函数根据等级自动捕获调用栈：
 
 ```cpp
-// 设置 WARN 及以上自动捕获
-config::error_config_t::set_stacktrace_level(error_level_t::warn);
+// 全局阈值
+error_config_t::set_stacktrace_level(error_level_t::warn);
 
-// 此错误会自动捕获堆栈
-error_context_t warn_ctx(warn_code, "警告信息");
-
-// DEBUG 级别不会捕获
-error_context_t debug_ctx(debug_code, "调试信息");
-```
-
-### 自动源位置
-
-当 `ERROR_SYSTEM_ENABLE_LOCATION` 开启时，构造函数自动记录源文件位置：
-
-```cpp
-error_context_t ctx(code, "错误信息");
-// ctx.source_location.file_name = "main.cc"
-// ctx.source_location.function_name = "main"
-// ctx.source_location.line_number = 42
+// per-code 覆盖（v2.0 新增）
+error_config_t::set_per_code_stacktrace_level(
+    ERR_CRITICAL.get_identity_code(), error_level_t::debug);
+// ERR_CRITICAL 总是捕获堆栈，其他错误码仍使用全局阈值
 ```
 
 ### 测试覆盖
 
 | 测试文件 | 用例数 | 覆盖内容 |
 |----------|--------|----------|
-| `tests/core/error_context_test.cc` | 4 | 构造、payload、序列化 |
+| `tests/core/error_context_test.cc` | 5 | 构造、多类型 payload、序列化、含子系统/模块名称输出 |
 
 ---
 
 ## error_registry_t
 
-错误码注册表，支持按码快速查找、按名注销、按模块组索引和批量注册。
+错误码注册表单例，支持按码/按名查询、按子系统/模块组索引、批量注册和并发安全。
+
+### 核心 API
 
 ```cpp
 class error_registry_t {
 public:
     static error_registry_t& instance() noexcept;
 
+    // 注册
     void register_error(const error_code_t code, std::string_view name,
                         std::string_view description) noexcept;
-
     size_t register_errors(const std::vector<error_code_t>& codes,
                            const std::vector<std::string_view>& names,
                            const std::vector<std::string_view>& descriptions) noexcept;
+    void register_subsystem_module(uint16_t subsys_id, uint16_t module_id,
+                                   std::string_view subsystem_name,
+                                   std::string_view module_name) noexcept;
 
+    // 查询
+    bool is_registered(const error_code_t code) const noexcept;
+
+    // v2.0: 返回裸指针，nullptr = 未注册
+    const error_metadata_t* get_info(const error_code_t code) const noexcept;
+
+    // v2.0 新增：按子系统 ID 查询该子系统下所有错误码
+    std::vector<std::reference_wrapper<const error_metadata_t>>
+    get_errors_by_subsystem(uint16_t subsys_id) const noexcept;
+
+    std::vector<std::reference_wrapper<const error_metadata_t>>
+    get_errors_by_module(module_group_id_t module_group_id) const noexcept;
+
+    // v2.0 新增：按名称查找错误码
+    std::optional<error_code_t> find_by_name(const std::string_view name) const noexcept;
+
+    // 注销
     void unregister_error(const error_code_t code) noexcept;
     void unregister_error(std::string_view name) noexcept;
     void unregister_module(module_group_id_t module_group_id) noexcept;
     void unregister_all() noexcept;
 
-    bool is_registered(const error_code_t code) const noexcept;
-
-    std::optional<std::reference_wrapper<const error_metadata_t>>
-    get_info(const error_code_t code) const noexcept;
-
-    std::vector<std::reference_wrapper<const error_metadata_t>>
-    get_errors_by_module(module_group_id_t module_group_id) const noexcept;
-
-    void register_subsystem_module(uint16_t subsys_id, uint16_t module_id,
-                                   std::string_view subsystem_name,
-                                   std::string_view module_name) noexcept;
-
+    // 重复策略
     void set_duplicate_policy(duplicate_policy_t policy) noexcept;
     duplicate_policy_t get_duplicate_policy() const noexcept;
-    void set_duplicate_warn_callback(std::function<void(code_t, const error_metadata_t&)> callback) noexcept;
+    void set_duplicate_warn_callback(std::function<void(code_t, const error_metadata_t&)> cb) noexcept;
 };
 ```
 
@@ -353,59 +297,55 @@ public:
 ```cpp
 auto& registry = error_registry_t::instance();
 
-// 注册错误码
-registry.register_error(
-    ERR_DB_CONNECTION_TIMEOUT,
-    "ERR_DB_CONNECTION_TIMEOUT",
-    "数据库连接超时"
-);
-
-// 批量注册
-registry.register_errors({code1, code2}, {"E1", "E2"}, {"Desc1", "Desc2"});
-
-// 查询
-if (registry.is_registered(code)) {
-    auto info = registry.get_info(code);
-    info->get().name;        // "ERR_DB_CONNECTION_TIMEOUT"
-    info->get().description; // "数据库连接超时"
+// 查询元数据（v2.0：指针语义）
+const error_metadata_t* info = registry.get_info(code);
+if (info != nullptr) {
+    std::cout << info->name << ": " << info->description << "\n";
 }
 
-// 按名注销（O(1)）
-registry.unregister_error("ERR_DB_CONNECTION_TIMEOUT");
+// 按子系统查询
+auto trade_errors = registry.get_errors_by_subsystem(1);
+for (const auto& ref : trade_errors) {
+    std::cout << ref.get().name << "\n";
+}
 
-// 按模块组查询
-auto errors = registry.get_errors_by_module(code.get_module_group_id());
-
-// 使用 DEFINE_ERROR_CODE 宏自动注册
-DEFINE_ERROR_CODE(
-    ERR_DB_CONNECTION_TIMEOUT,
-    error_level_t::error,
-    system_domain_t::database,
-    1, 1, 0x0001,
-    "数据库连接超时");
+// 按名称查找
+auto found = registry.find_by_name("ERR_DB_CONNECTION_TIMEOUT");
+if (found.has_value()) {
+    error_code_t code = found.value();
+}
 ```
 
 ### 测试覆盖
 
 | 测试文件 | 用例数 | 覆盖内容 |
 |----------|--------|----------|
-| `tests/core/error_registry_test.cc` | 22 | 注册、查询、注销、批量注册、重复策略、并发、name_index |
+| `tests/core/error_registry_test.cc` | 24 | 注册、查询、get_errors_by_subsystem、find_by_name、并发安全 |
 
 ---
 
 ## result_t\<T\>
 
-类 Rust Result，用于无异常的错误传递。
+类 Rust Result，用于无异常的错误传递。内部使用 `std::variant<T, error_context_t>` 存储。
+
+### 核心 API
 
 ```cpp
 template<typename T>
 class result_t {
 public:
-    result_t() = default;
-    result_t(T value);
-    result_t(error_code_t code, std::string message);
+    // 成功构造
+    explicit result_t(const T& value) noexcept;
 
-    bool is_ok() const noexcept;
+    // 错误构造（接受 error_context_t）
+    explicit result_t(const error_context_t& ctx) noexcept;
+
+    // v2.0 工厂函数（推荐，避免构造函数重载混淆）
+    static result_t make_error(error_code_t code, const std::string& message = "") noexcept;
+    static result_t make_error(error_code_t code, std::string&& message) noexcept;
+    static result_t make_error(const error_context_t& ctx) noexcept;
+
+    bool is_success() const noexcept;
     bool is_error() const noexcept;
 
     T& value();
@@ -413,45 +353,45 @@ public:
     error_context_t& error();
     const error_context_t& error() const;
 
-    T& operator*();
-    T* operator->();
-    explicit operator bool() const noexcept;
+    // 链式操作（移动语义）
+    result_t and_then(std::function<result_t(T)> fn) &&;
+    result_t or_else(std::function<result_t(const error_context_t&)> fn) &&;
+    result_t and_then(std::function<result_t(T)> fn) const&;
+    result_t or_else(std::function<result_t(const error_context_t&)> fn) const&;
 };
 ```
 
 ### 使用示例
 
 ```cpp
-result_t<int> divide(int a, int b) {
-    if (b == 0) {
-        auto code = error_builder_t::make_error_code(
-            error_level_t::error,
-            system_domain_t::application,
-            1, 1, 1
-        );
-        return result_t<int>(error_context_t(code, "除数不能为零"));
-    }
-    return result_t<int>(a / b);
-}
+// 成功
+result_t<int> result(42);
 
-auto result = divide(10, 0);
-if (result.is_error()) {
-    std::cerr << result.error().to_string() << std::endl;
-} else {
-    std::cout << "结果: " << result.value() << std::endl;
-}
+// 错误（v2.0 推荐工厂函数）
+return result_t<int>::make_error(ERR_DB_FAIL, "数据库操作失败");
 
-// 或使用 bool 转换
-if (result) {
-    std::cout << *result << std::endl;
-}
+// 或直接传 error_context_t
+error_context_t ctx(ERR_DB_FAIL, "失败");
+return result_t<int>(ctx);
+
+// 链式操作
+auto final = query_order(123)
+    .and_then([](int amount) { return process_payment(amount); })
+    .or_else([](const error_context_t& err) {
+        log_error(err);
+        return result_t<std::string>::make_error(ERR_FLOW_FAIL, "流程失败");
+    });
+
+// void 特化
+result_t<void> ok;
+result_t<void> fail(error_context_t(ERR_FAIL, "失败"));
 ```
 
 ### 测试覆盖
 
 | 测试文件 | 用例数 | 覆盖内容 |
 |----------|--------|----------|
-| `tests/core/result_test.cc` | 12+ | 构造、值访问、错误访问、bool 转换 |
+| `tests/core/result_test.cc` | 15+ | 构造、make_error、链式操作、void 特化 |
 
 ---
 
@@ -462,67 +402,60 @@ if (result) {
 ```cpp
 class error_exception_t : public std::exception {
 public:
-    explicit error_exception_t(error_context_t ctx);
-
+    explicit error_exception_t(error_context_t ctx) noexcept;
     const char* what() const noexcept override;
     const error_context_t& context() const noexcept;
     error_code_t code() const noexcept;
 };
 ```
 
-### 使用示例
-
-```cpp
-try {
-    auto code = error_builder_t::make_error_code(
-        error_level_t::fatal,
-        system_domain_t::system,
-        1, 1, 1
-    );
-    throw error_exception_t(error_context_t(code, "系统崩溃"));
-} catch (const error_exception_t& e) {
-    std::cerr << e.what() << std::endl;
-    std::cerr << e.context().to_string() << std::endl;
-}
-```
-
-### 测试覆盖
-
-| 测试文件 | 用例数 | 覆盖内容 |
-|----------|--------|----------|
-| `tests/core/error_exception_test.cc` | 6 | 构造、what()、context() 访问 |
-
 ---
 
 ## DEFINE_ERROR_CODE 宏
 
-在定义错误码的同时自动注册到错误码注册表。
+在定义错误码的同时自动注册到错误码注册表，同步注册子系统/模块名称。
+
+```cpp
+// v2.0 签名（新增 SUBSYS_NAME 和 MODULE_NAME 参数）
+DEFINE_ERROR_CODE(
+    NAME,          // 错误码宏名
+    LEVEL,         // error_level_t
+    SYSTEM,        // system_domain_t
+    SUBSYS,        // 子系统 ID
+    MODULE,        // 模块 ID
+    NUMBER,        // 错误编号
+    DESC,          // 中文描述
+    SUBSYS_NAME,   // 子系统名称（to_string() 可读输出）
+    MODULE_NAME    // 模块名称（to_string() 可读输出）
+);
+```
+
+### 使用示例
 
 ```cpp
 DEFINE_ERROR_CODE(
-    ERR_DB_CONNECTION_TIMEOUT,                    // 变量名
-    error_system::core::error_level_t::error,     // 等级
-    error_system::domain::system_domain_t::database, // 域
-    1,                                             // 子系统
-    1,                                             // 模块
-    0x0001,                                        // 编号
-    "数据库连接超时"                               // 描述
+    ERR_DB_CONNECTION_TIMEOUT,
+    error_system::core::error_level_t::error,
+    error_system::domain::system_domain_t::database,
+    1, 1, 0x0001,
+    "数据库连接超时",
+    "数据库服务",
+    "连接管理"
 );
+
+// to_string() 输出：[ERROR][数据库服务][连接管理][1] 数据库连接超时
 ```
 
 宏展开后等价于：
 
 ```cpp
-inline constexpr error_code_t ERR_DB_CONNECTION_TIMEOUT =
+constexpr error_code_t ERR_DB_CONNECTION_TIMEOUT =
     error_builder_t::make_error_code(
-        error_level_t::error,
-        system_domain_t::database,
-        1, 1, 0x0001
-    );
+        error_level_t::error, system_domain_t::database, 1, 1, 0x0001);
 
-// 内联静态初始化时自动注册
 inline const error_registrar_t ERR_DB_CONNECTION_TIMEOUT_registrar_(
-    ERR_DB_CONNECTION_TIMEOUT, "ERR_DB_CONNECTION_TIMEOUT", "数据库连接超时");
+    ERR_DB_CONNECTION_TIMEOUT, "ERR_DB_CONNECTION_TIMEOUT",
+    "数据库连接超时", "数据库服务", "连接管理");
 ```
 
 ---
@@ -531,8 +464,6 @@ inline const error_registrar_t ERR_DB_CONNECTION_TIMEOUT_registrar_(
 
 | CMake 选项 | 默认值 | 影响 |
 |------------|--------|------|
-| `ERROR_SYSTEM_ENABLE_STACKTRACE` | `ON` | 堆栈追踪功能 |
-| `ERROR_SYSTEM_ENABLE_VALIDATION` | `ON` | 错误码验证 |
-| `ERROR_SYSTEM_ENABLE_LOCATION` | `ON` | 源位置追踪 |
-
-关闭后相关 API 标记为 `[[deprecated]]` 并返回默认值。
+| `ERROR_SYSTEM_ENABLE_STACKTRACE` | `ON` | 堆栈追踪 + per-code 堆栈等级覆盖 |
+| `ERROR_SYSTEM_ENABLE_VALIDATION` | `ON` | 错误码注册表校验 |
+| `ERROR_SYSTEM_ENABLE_LOCATION` | `ON` | 源文件/函数/行号追踪 |

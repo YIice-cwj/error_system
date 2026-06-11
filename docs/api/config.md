@@ -19,6 +19,11 @@ public:
     static void set_enable_stacktrace(bool enable) noexcept;
     static bool is_stacktrace_enabled() noexcept;
 
+    // per-code 堆栈等级覆盖（v2.0 新增）
+    static void set_per_code_stacktrace_level(uint64_t identity_code, error_level_t level) noexcept;
+    static std::optional<error_level_t> get_per_code_stacktrace_level(uint64_t identity_code) noexcept;
+    static void remove_per_code_stacktrace_level(uint64_t identity_code) noexcept;
+
     // 验证配置
     static void set_enable_validation(bool enable) noexcept;
     static bool is_validation_enabled() noexcept;
@@ -29,13 +34,18 @@ public:
     static void set_enable_short_filename(bool enable) noexcept;
     static bool is_short_filename_enabled() noexcept;
 
+    // 输出格式配置
+    static void set_enable_text_output(bool enable) noexcept;
+    static bool is_text_output_enabled() noexcept;
+
     // 自定义格式化器
     static void set_custom_formatter(std::function<std::string(const error_context_t&)> formatter) noexcept;
     static const std::function<std::string(const error_context_t&)>& get_custom_formatter() noexcept;
 
-    // 自定义翻译器
-    static void set_translator(std::function<std::string(error_code_t)> translator) noexcept;
-    static const std::function<std::string(error_code_t)>& get_translator() noexcept;
+    // 插件通知模式（v2.0 新增）
+    enum class notify_mode_t : uint8_t { sync = 0, async_queue = 1 };
+    static void set_notify_mode(notify_mode_t mode) noexcept;
+    static notify_mode_t get_notify_mode() noexcept;
 
     // 重置所有配置为默认值
     static void reset_to_defaults() noexcept;
@@ -47,12 +57,14 @@ public:
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | `min_stacktrace_level_` | `error_level_t::error` | 自动捕获堆栈的最低等级 |
+| `per_code_stacktrace_map_` | 空 | per-code 堆栈等级覆盖（优先级 > 全局配置） |
 | `enable_stacktrace_` | `true` | 堆栈追踪总开关 |
 | `enable_validation_` | `true` | 错误码验证开关 |
 | `enable_source_location_` | `true` | 源位置追踪开关 |
 | `enable_short_filename_` | `true` | 短文件名模式（仅显示文件名，不含路径） |
-| `custom_formatter_` | `nullptr` | 自定义格式化回调，用于 `error_context_t::to_string()` |
-| `custom_translator_` | `nullptr` | 自定义翻译函数，用于错误码描述翻译 |
+| `enable_text_output_` | `true` | 文本输出模式（false 时输出数字 ID） |
+| `notify_mode_` | `sync` | 插件通知模式（sync：同步，async_queue：异步队列） |
+| `custom_formatter_` | `nullptr` | 自定义格式化回调 |
 
 ### 使用示例
 
@@ -62,37 +74,58 @@ using namespace error_system::config;
 // 设置 WARN 及以上自动捕获堆栈
 error_config_t::set_stacktrace_level(error_level_t::warn);
 
+// per-code 覆盖：为特定错误码设置更低的触发等级
+auto id = ERR_CRITICAL.get_identity_code();
+error_config_t::set_per_code_stacktrace_level(id, error_level_t::debug);
+
+// 查询 per-code 覆盖值
+auto level = error_config_t::get_per_code_stacktrace_level(id);
+if (level.has_value()) {
+    // ERR_CRITICAL 总是捕获堆栈
+}
+
+// 删除 per-code 覆盖，恢复使用全局配置
+error_config_t::remove_per_code_stacktrace_level(id);
+
 // 关闭堆栈追踪（性能敏感场景）
 error_config_t::set_enable_stacktrace(false);
 
 // 关闭错误码验证
 error_config_t::set_enable_validation(false);
 
-// 关闭源位置追踪
-error_config_t::set_enable_source_location(false);
+// 控制输出格式：文本模式显示子系统/模块名称，数字模式显示原始 ID
+error_config_t::set_enable_text_output(true);
 
-// 使用完整路径
-error_config_t::set_enable_short_filename(false);
+// 切换为异步插件通知（v2.0 新增）
+error_config_t::set_notify_mode(error_config_t::notify_mode_t::async_queue);
+// error_context_t 构造时不再阻塞在插件 I/O 上
 
 // 设置自定义格式化器
 error_config_t::set_custom_formatter([](const error_context_t& ctx) {
     return "[CUSTOM] " + ctx.message;
 });
 
-// 设置自定义翻译器
-error_config_t::set_translator([](error_code_t code) {
-    return "Translated: " + std::to_string(code.get_raw_code());
-});
-
 // 重置为默认值
 error_config_t::reset_to_defaults();
+```
+
+### per-code 配置优先级
+
+当同时设置了全局和 per-code 堆栈等级时，`finalize_runtime_features()` 的决策逻辑：
+
+```
+1. 若 is_stacktrace_enabled() == false → 不捕获堆栈
+2. 否则，取 max(全局等级, per-code 等级)
+   - 若 per-code 有值，使用 per-code 值
+   - 若 per-code 无值，使用全局值
+3. 若错误等级 >= 最终阈值 → 捕获堆栈
 ```
 
 ### 与 CMake 选项的关系
 
 | CMake 选项 | 编译期影响 | 运行时影响 |
 |------------|-----------|-----------|
-| `ERROR_SYSTEM_ENABLE_STACKTRACE` | 开启/关闭堆栈追踪 API | `is_stacktrace_enabled()` 返回值 |
+| `ERROR_SYSTEM_ENABLE_STACKTRACE` | 开启/关闭堆栈追踪 + per-code API | `is_stacktrace_enabled()` 返回值 |
 | `ERROR_SYSTEM_ENABLE_VALIDATION` | 开启/关闭验证 API | `is_validation_enabled()` 返回值 |
 | `ERROR_SYSTEM_ENABLE_LOCATION` | 开启/关闭源位置 API | `is_source_location_enabled()` 返回值 |
 
@@ -102,7 +135,7 @@ error_config_t::reset_to_defaults();
 
 | 测试文件 | 用例数 | 覆盖内容 |
 |----------|--------|----------|
-| `tests/config/error_config_test.cc` | 7 | 配置项设置/获取、默认值、重置 |
+| `tests/config/error_config_test.cc` | 11 | 配置项设置/获取、per-code 覆盖、notify_mode、默认值、重置、并发 |
 
 ---
 
@@ -111,47 +144,46 @@ error_config_t::reset_to_defaults();
 ### 1. 开发环境配置
 
 ```cpp
-// 开发环境：启用所有诊断功能
 error_config_t::set_stacktrace_level(error_level_t::debug);
 error_config_t::set_enable_stacktrace(true);
 error_config_t::set_enable_validation(true);
 error_config_t::set_enable_source_location(true);
 error_config_t::set_enable_short_filename(true);
+error_config_t::set_enable_text_output(true);
 ```
 
 ### 2. 生产环境配置
 
 ```cpp
-// 生产环境：仅捕获 ERROR 及以上堆栈，关闭验证以提升性能
 error_config_t::set_stacktrace_level(error_level_t::error);
 error_config_t::set_enable_validation(false);
 error_config_t::set_enable_source_location(true);
 error_config_t::set_enable_short_filename(true);
+error_config_t::set_enable_text_output(true);
+
+// 低延迟服务：使用异步插件通知
+error_config_t::set_notify_mode(error_config_t::notify_mode_t::async_queue);
 ```
 
 ### 3. 高性能场景配置
 
 ```cpp
-// 高频错误场景：关闭堆栈和源位置，仅保留基本错误码
 error_config_t::set_enable_stacktrace(false);
 error_config_t::set_enable_source_location(false);
 error_config_t::set_enable_validation(false);
+error_config_t::set_enable_text_output(false);  // 数字 ID 输出（更快）
+error_config_t::set_notify_mode(error_config_t::notify_mode_t::async_queue);
 ```
 
-### 4. 自定义格式化示例
+### 4. 差异化堆栈策略
 
 ```cpp
-// JSON 格式输出
-error_config_t::set_custom_formatter([](const error_context_t& ctx) {
-    return ctx.to_json();
-});
+// 全局：仅 ERROR 级别以上捕获堆栈
+error_config_t::set_stacktrace_level(error_level_t::error);
 
-// 简洁格式输出
-error_config_t::set_custom_formatter([](const error_context_t& ctx) {
-    std::ostringstream oss;
-    oss << "[" << to_string(ctx.code.get_level()) << "]"
-        << "[" << ctx.code.get_domain() << "]"
-        << " " << ctx.message;
-    return oss.str();
-});
+// 关键错误码：总是捕获堆栈（包括 DEBUG）
+error_config_t::set_per_code_stacktrace_level(ERR_CRITICAL.get_identity_code(), error_level_t::debug);
+
+// 大量发生的可恢复错误：完全关闭堆栈
+error_config_t::set_per_code_stacktrace_level(ERR_RATE_LIMIT.get_identity_code(), error_level_t::fatal);
 ```

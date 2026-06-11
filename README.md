@@ -26,14 +26,13 @@
 *   **现代 C++17**: 大量使用 `constexpr`，支持编译期错误码构建，提供极致性能。
 *   **零开销位移封装**: 采用明确的位移和掩码操作实现 64 位错误码字段拆解，100% 避免严格别名规则与位域排布未定义行为。
 *   **丰富的错误上下文**: 统一的 64 位错误码结构，包含了等级（Level）、系统域（Domain）、子系统（Subsystem）、模块（Module）和错误编号（Number），轻松实现问题的快速定位。
-*   **结构化负载 (Payload)**: `error_context_t` 支持键值对形式的结构化负载，方便附加任意调试信息。
-*   **自动堆栈跟踪**: 可配置的错误等级阈值，当错误等级达到阈值时自动捕获当前调用栈，加速问题定位。
+*   **结构化负载 (Payload)**: `error_context_t::with()` 支持 int、bool、double 等多类型值，方便附加任意调试信息。
+*   **自动堆栈跟踪 + Per-Code 覆盖**: 可配置的全局错误等级阈值，支持按错误码粒度覆盖堆栈触发策略。
 *   **源位置追踪**: 自动记录错误发生的文件名、函数名和行号，支持完整路径或短文件名模式。
-*   **插件系统 (Plugin)**: 提供可扩展的插件接口，支持日志、统计、告警等自定义错误处理能力的接入。
-*   **代码生成工具**: 提供 Python 脚本从 JSON 配置自动生成错误码定义头文件。
+*   **插件系统 (Plugin)**: 支持同步/异步通知模式，异步模式通过后台工作线程解耦插件 I/O。
+*   **代码生成工具**: 提供 Python 脚本从 JSON 配置自动生成错误码定义头文件，含 ID 冲突检测。
 *   **对象池优化**: `error_context_t` 的因果链包装使用线程局部对象池，减少高频场景下的堆分配开销。
-*   **完备的测试**: 深度集成 GoogleTest，16 个测试文件覆盖所有核心模块，确保逻辑坚如磐石。
-*   **异常封装**: 提供 `error_exception_t` 继承 `std::exception`，在需要异常机制的场景中无缝传递错误上下文。
+*   **完备的测试**: 深度集成 GoogleTest，16 个测试文件 238 个用例覆盖所有核心模块，确保逻辑坚如磐石。
 
 ---
 
@@ -70,7 +69,7 @@ using namespace error_system::core;
 using namespace error_system::domain;
 
 // 在编译期构建一个数据库模块的严重错误
-constexpr auto db_err = error_builder_t::make_error_code(
+constexpr auto db_err = error_code_t(
     error_level_t::fatal,      // 错误等级
     system_domain_t::database, // 系统域
     100,                       // 子系统ID
@@ -110,16 +109,17 @@ using namespace error_system::core;
 // 设置堆栈捕获阈值（WARN 及以上自动捕获堆栈）
 config::error_config_t::set_stacktrace_level(error_level_t::warn);
 
-// 创建错误上下文
-auto code = error_builder_t::make_error_code(
+// 创建错误上下文（v2.0：直接传入 error_code_t，无需 code_with_location_t）
+auto code = error_code_t(
     error_level_t::error, domain::system_domain_t::database, 0, 0, 1001);
 
 error_context_t ctx(code, "数据库连接失败: {}", "timeout");
 
-// 添加结构化负载
+// 添加多类型结构化负载（v2.0：支持 int、bool、double 等）
 ctx.with("host", "192.168.1.100")
-   .with("port", "3306")
-   .with("database", "user_db");
+   .with("port", 3306)
+   .with("retry", true)
+   .with("latency_ms", 150.5);
 
 // 获取 payload 只读引用
 const auto& payload = ctx.get_payload();
@@ -149,9 +149,9 @@ using namespace error_system::core;
 
 result_t<int> divide(int a, int b) {
     if (b == 0) {
-        auto code = error_builder_t::make_error_code(
-            error_level_t::error, domain::system_domain_t::application, 0, 0, 1);
-        return error_context_t(code, "除数不能为零");
+        return result_t<int>::make_error(
+            error_code_t(error_level_t::error, system_domain_t::application, 0, 0, 1),
+            "除数不能为零");
     }
     return a / b;
 }
@@ -197,20 +197,28 @@ try {
 ```cpp
 #include "error_system/core/error_registry.h"
 
-// 定义错误码（自动注册）
+// 定义错误码（v2.0：含子系统/模块名称，to_string() 可读输出）
 DEFINE_ERROR_CODE(
     ERR_DB_CONNECTION_TIMEOUT,
     error_system::core::error_level_t::error,
     error_system::domain::system_domain_t::database,
     1, 1, 0x0001,
-    "数据库连接超时");
+    "数据库连接超时",
+    "数据库服务",
+    "连接管理"
+);
 
 // 使用
 auto& registry = error_registry_t::instance();
-if (registry.is_registered(ERR_DB_CONNECTION_TIMEOUT)) {
-    auto info = registry.get_info(ERR_DB_CONNECTION_TIMEOUT);
-    std::cout << info->get().description << "\n";
+if (const auto* info = registry.get_info(ERR_DB_CONNECTION_TIMEOUT)) {
+    std::cout << info->description << "\n"; // "数据库连接超时"
 }
+
+// 按子系统查询
+auto db_errors = registry.get_errors_by_subsystem(1);
+
+// 按名称查找
+auto found = registry.find_by_name("ERR_DB_CONNECTION_TIMEOUT");
 ```
 
 ### 7. 使用代码生成工具
@@ -241,12 +249,10 @@ if (registry.is_registered(ERR_DB_CONNECTION_TIMEOUT)) {
 }
 ```
 
-**生成命令**:
+**生成命令**（v2.0 统一入口）:
 
 ```bash
-python script/script_py/generate_error_codes.py \
-    config/errors/trade_service_errors.json \
-    include/generated/
+python script/script_py/generate_all.py
 ```
 
 生成的头文件可以直接在业务代码中使用：
@@ -322,15 +328,15 @@ error_context_t ctx{db_error_code, "连接超时"};  // 触发数据库域处理
 │                        Error System                          │
 ├─────────────────────────────────────────────────────────────┤
 │  Config Layer                                                │
-│  └── error_config_t  (全局错误配置：堆栈阈值、源位置等)      │
+│  └── error_config_t  (全局配置 + per-code 覆盖 + 通知模式)    │
 ├─────────────────────────────────────────────────────────────┤
 │  Core Layer                                                  │
-│  ├── error_code_t    (64位错误码数据类)                      │
-│  ├── error_builder_t (编译期错误码构建器)                    │
+│  ├── error_code_t    (64位错误码，5 参便捷构造)               │
+│  ├── error_builder_t (兼容旧代码：编译期构建)                 │
 │  ├── error_level_t   (错误等级枚举)                          │
-│  ├── error_context_t (错误上下文：码+消息+因果链+负载+堆栈)  │
-│  ├── error_registry_t(错误码注册器)                          │
-│  ├── result_t<T>     (类Rust Result，替代异常传递错误)       │
+│  ├── error_context_t (错误上下文：码+消息+因果链+多类型负载) │
+│  ├── error_registry_t(错误码注册表：按子系统查询、按名查找)  │
+│  ├── result_t<T>     (类Rust Result，含 make_error() 工厂)    │
 │  └── error_exception_t (异常封装)                            │
 ├─────────────────────────────────────────────────────────────┤
 │  Domain Layer                                                │
@@ -338,7 +344,7 @@ error_context_t ctx{db_error_code, "连接超时"};  // 触发数据库域处理
 ├─────────────────────────────────────────────────────────────┤
 │  Plugin Layer                                                │
 │  ├── i_error_plugin_t   (插件抽象接口)                       │
-│  ├── plugin_registry_t  (插件单例注册表，负责广播)           │
+│  ├── plugin_registry_t  (单例注册表，支持同步/异步通知)       │
 │  └── error_router_plugin_t (错误路由插件，按码/域分发)       │
 ├─────────────────────────────────────────────────────────────┤
 │  Memory Layer                                                │
@@ -451,13 +457,13 @@ ctest --output-on-failure
 
 | 模块 | 测试文件数 | 测试用例数 |
 |------|-----------|-----------|
-| Core 层 | 7 | 59+ |
-| Plugin 层 | 2 | 17 |
+| Core 层 | 7 | 85+ |
+| Plugin 层 | 2 | 20 |
 | Memory 层 | 1 | 10 |
-| Utils 层 | 5 | 37+ |
-| Config 层 | 1 | 7 |
-| Translator 层 | 1 | 9 |
-| **总计** | **17** | **149+** |
+| Utils 层 | 4 | 37+ |
+| Config 层 | 1 | 11 |
+| Domain 层 | 1 | 3 |
+| **总计** | **16** | **238** |
 
 > 注：测试发现超时已调整为 30 秒（`DISCOVERY_TIMEOUT 30`），确保在复杂环境下测试稳定运行。
 
@@ -546,8 +552,6 @@ error_system/
 │   │   ├── error_router_plugin.h
 │   │   ├── i_error_plugin.h
 │   │   └── plugin_registry.h
-│   ├── translator/             # 翻译器
-│   │   └── error_translator.h
 │  ├── utils/                  # 辅助工具
 │  │   ├── error_formatter.h
 │  │   ├── file_utils.h         # 文件操作 (file_utils_t)
@@ -556,11 +560,9 @@ error_system/
 │  │   ├── source_location.h
 │  │   ├── stack_trace_utils.h
 │  │   └── string_utils.h
-├── include/generated/          # 自动生成的错误码定义
 ├── src/                        # 核心实现代码
 │   ├── core/                   # error_context, error_registry 实现
 │   ├── plugin/                 # plugin_registry, error_router_plugin 实现
-│   ├── translator/             # error_translator 实现
 │   └── utils/                  # 工具函数实现
 ├── tests/                      # GoogleTest 单元测试
 │   ├── config/                 # 配置层测试
@@ -568,11 +570,11 @@ error_system/
 │   ├── domain/                 # 系统域测试
 │   ├── memory/                 # 内存层测试
 │   ├── plugin/                 # 插件层测试
-│   ├── translator/             # 翻译器测试
 │   └── utils/                  # 工具库测试
 ├── script/                     # 代码生成脚本
 │   ├── generate_errors.sh      # 批量生成错误码脚本
 │   └── script_py/
+│       ├── generate_all.py      # v2.0 统一生成入口
 │       ├── generate_error_codes.py
 │       ├── generate_error_dict.py
 │       └── generate_error_docs.py
@@ -585,8 +587,10 @@ error_system/
 ├── docs/                       # 文档
 │   ├── api/                    # API 文档
 │   ├── architecture.md         # 架构设计
-│   ├── error_dictionary.md     # 错误码字典
 │   └── README.md               # 文档索引
+├── build/generated_errors/      # 生成产物（构建时自动生成）
+│   ├── include/                # C++ 头文件 + error_dict.h
+│   └── error_dictionary.md     # 错误码字典
 └── LICENSE                     # 许可证
 ```
 
