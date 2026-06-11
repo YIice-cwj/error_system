@@ -53,4 +53,45 @@ namespace error_system::core {
         EXPECT_EQ(code.get_level(), error_level_t::debug);
     }
 
+    TEST_F(error_code_test, five_parameter_constructor_builds_correct_code) {
+        constexpr error_code_t code(
+            error_level_t::error,
+            domain::system_domain_t::database,
+            0x0102,  // subsys
+            0x0304,  // module
+            0x0506   // number
+        );
+
+        EXPECT_EQ(code.get_sign(), 1);  // always 1 for error
+        EXPECT_EQ(code.get_level(), error_level_t::error);
+        EXPECT_EQ(code.get_system(), domain::system_domain_t::database);
+        EXPECT_EQ(code.get_subsys(), 0x0102);
+        EXPECT_EQ(code.get_module(), 0x0304);
+        EXPECT_EQ(code.get_number(), 0x0506);
+
+        // 对比 error_builder_t 结果是否一致
+        const auto builder_code = error_builder_t::make_error_code(
+            error_level_t::error,
+            domain::system_domain_t::database,
+            0x0102, 0x0304, 0x0506);
+        EXPECT_EQ(code.get_code(), builder_code.get_code());
+    }
+
+    TEST_F(error_code_test, constexpr_five_parameter_constructor) {
+        constexpr error_level_t level = error_level_t::warn;
+        constexpr domain::system_domain_t sys = domain::system_domain_t::application;
+        constexpr uint16_t subsys = 101;
+        constexpr uint16_t module = 1;
+        constexpr uint16_t number = 1;
+
+        constexpr error_code_t code(level, sys, subsys, module, number);
+
+        static_assert(code.get_level() == level, "");
+        static_assert(code.get_system() == sys, "");
+        static_assert(code.get_subsys() == subsys, "");
+        static_assert(code.get_module() == module, "");
+        static_assert(code.get_number() == number, "");
+        EXPECT_TRUE(true);
+    }
+
 }  // namespace error_system::core

@@ -63,6 +63,29 @@ namespace error_system::core {
         constexpr explicit error_code_t(code_t code) noexcept : code_(code) {}
 
         /**
+         * @brief 便捷构造函数（通过位域值构造完整错误码）
+         * @details 直接传入 level、system、subsys、module、number 五个段，内部通过位运算组装。
+         *          替代 error_builder_t::make_error_code()，减少中间层调用。
+         * @param level 错误等级 (bits 59-56)
+         * @param system 系统域 (bits 55-48)
+         * @param subsys 子系统 ID (bits 47-32)
+         * @param module 模块 ID (bits 31-16)
+         * @param number 错误编号 (bits 15-0)
+         *
+         * @example
+         * // 替代 error_builder_t::make_error_code(...)
+         * error_code_t code(error_level_t::error, system_domain_t::database, 1, 2, 0x0010);
+         */
+        constexpr error_code_t(error_level_t level, domain::system_domain_t system,
+                               uint16_t subsys, uint16_t module, uint16_t number) noexcept
+            : code_((1ULL << SIGN_SHIFT)  // sign = 1 (错误)
+                    | (static_cast<code_t>(level) << LEVEL_SHIFT)
+                    | (static_cast<code_t>(system) << SYSTEM_SHIFT)
+                    | (static_cast<code_t>(subsys) << SUBSYS_SHIFT)
+                    | (static_cast<code_t>(module) << MODULE_SHIFT)
+                    | (static_cast<code_t>(number) << NUMBER_SHIFT)) {}
+
+        /**
          * @brief 获取原始错误码
          * @return code_t 64位原始错误码值
          */
