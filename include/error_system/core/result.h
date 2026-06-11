@@ -30,6 +30,41 @@ namespace error_system::core {
 
         public:
         /**
+         * @brief 错误构造工厂函数（推荐）
+         * @details 替代直接使用构造函数构造错误结果，语义更清晰。
+         *          避免构造函数重载混淆（value vs error_context vs error_code）。
+         * @param code 错误码
+         * @param message 错误信息，默认为空
+         * @return result_t 包装了错误的结果对象
+         *
+         * @example
+         * // 替代 result_t<int>(code, "失败")
+         * return result_t<int>::make_error(ERR_DB_FAIL, "数据库操作失败");
+         */
+        static result_t make_error(error_code_t code, const std::string& message = "") noexcept {
+            return result_t(error_context_t{code, message});
+        }
+
+        /**
+         * @brief 错误构造工厂函数（移动消息版本）
+         * @param code 错误码
+         * @param message 错误信息
+         * @return result_t 包装了错误的结果对象
+         */
+        static result_t make_error(error_code_t code, std::string&& message) noexcept {
+            return result_t(error_context_t{code, std::move(message)});
+        }
+
+        /**
+         * @brief 错误构造工厂函数（从已有 error_context_t）
+         * @param ctx 错误上下文
+         * @return result_t 包装了错误的结果对象
+         */
+        static result_t make_error(const error_context_t& ctx) noexcept {
+            return result_t(ctx);
+        }
+
+        /**
          * @brief 构造函数
          * @param value 成功值
          */
