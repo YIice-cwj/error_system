@@ -12,7 +12,7 @@ using namespace error_system::domain;
 int main() {
     std::cout << "===== Demo 1: 基础错误码使用 =====" << std::endl;
 
-    // 1. 使用自动生成的错误码
+    // 1. 使用自动生成的错误码（无需 code_with_location_t 包装）
     std::cout << "\n--- 1. 使用自动生成的错误码 ---" << std::endl;
     error_context_t ctx1(biz::trade_errors::ERR_ORDER_NOT_FOUND, "订单查询失败");
     ctx1.with("user_id", "8848").with("action", "query_order");
@@ -46,6 +46,16 @@ int main() {
     error_context_t wrapper(biz::trade_errors::ERR_ORDER_NOT_FOUND, "订单服务不可用");
     auto chained = wrapper.wrap(root);
     std::cout << chained << std::endl;
+
+    // 6. payload 多类型值
+    std::cout << "\n--- 6. payload 多类型值 ---" << std::endl;
+    error_context_t ctx4(biz::payment_errors::ERR_INSUFFICIENT_BALANCE, "余额不足");
+    ctx4.with("user_id", 8848)
+        .with("balance", 150)
+        .with("required", 500)
+        .with("is_vip", false)
+        .with("exchange_rate", 7.25);
+    std::cout << ctx4 << std::endl;
 
     return 0;
 }

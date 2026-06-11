@@ -34,10 +34,9 @@ int main() {
 
     // 2. 查看元数据
     std::cout << "\n--- 2. 查看元数据 ---" << std::endl;
-    if (auto info = registry.get_info(code1)) {
-        const auto& meta = info.value().get();
-        std::cout << "错误码: " << meta.name << std::endl;
-        std::cout << "描述: " << meta.description << std::endl;
+    if (const error_metadata_t* info = registry.get_info(code1)) {
+        std::cout << "错误码: " << info->name << std::endl;
+        std::cout << "描述: " << info->description << std::endl;
     }
     const auto& sm_info = registry.get_subsystem_module_info(code1.get_subsys(), code1.get_module());
     std::cout << "子系统: " << sm_info.subsystem_name << std::endl;
