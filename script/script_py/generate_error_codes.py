@@ -48,7 +48,9 @@ def generate_header(json_file, out_dir):
         lines.append(f"        {subsystem_id},  // subsystem: {service_name}")
         lines.append(f"        {module_id},    // module: {err['module']}")
         lines.append(f"        {err['number']},")
-        lines.append(f"        \"{err['desc']}\"")
+        lines.append(f"        \"{err['desc']}\",")
+        lines.append(f"        \"{service_name}\",  // 子系统名称")
+        lines.append(f"        \"{module_desc}\"    // 模块名称")
         lines.append(f"    );")
         lines.append("")
         

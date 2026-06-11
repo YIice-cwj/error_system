@@ -8,12 +8,15 @@ def generate_dict(json_dir, out_file):
     subsystems = {}
     modules = {}
 
+    # 用于冲突检测：key = (subsys_id, module_id, number), value = list of error descriptions
+    id_conflict_map = {}
+
     # 1. 扫描目录下所有的 json 文件
     for filepath in glob.glob(os.path.join(json_dir, '*.json')):
         with open(filepath, 'r', encoding='utf-8') as f:
             data = json.load(f)
             subsys_id = data.get('subsystem_id')
-            subsys_name = data.get('service_name', f'Unknown_{subsys_id}') 
+            subsys_name = data.get('service_name', f'Unknown_{subsys_id}')
             if subsys_id is not None:
                 subsystems[subsys_id] = subsys_name
             for mod_key, mod_info in data.get('modules', {}).items():
@@ -22,7 +25,37 @@ def generate_dict(json_dir, out_file):
                 if mod_id is not None and subsys_id is not None:
                     modules[(subsys_id, mod_id)] = mod_desc
 
-    # 2. 生成静态注册宏
+                # 冲突检测：遍历每个模块下的每个错误码
+                for err in mod_info.get('errors', []):
+                    err_number = err.get('number')
+                    err_name = err.get('name', 'UNNAMED')
+                    if err_number is not None and mod_id is not None and subsys_id is not None:
+                        key = (subsys_id, mod_id, err_number)
+                        if key not in id_conflict_map:
+                            id_conflict_map[key] = []
+                        id_conflict_map[key].append(
+                            f"  file='{os.path.basename(filepath)}', service='{subsys_name}', "
+                            f"module='{mod_desc}' (id={mod_id}), "
+                            f"error='{err_name}' (number=0x{err_number:04X})")
+
+    # 2. ID 冲突检测
+    conflicts = {k: v for k, v in id_conflict_map.items() if len(v) > 1}
+    if conflicts:
+        print()
+        print("=" * 70)
+        print("  [错误] 检测到错误码 ID 冲突！")
+        print("  (subsystem_id, module_id, number) 三元组必须在所有配置中唯一")
+        print("=" * 70)
+        for (subsys, mod, num), entries in conflicts.items():
+            print(f"\n  冲突: subsystem_id={subsys}, module_id={mod}, number=0x{num:04X}")
+            for entry in entries:
+                print(f"    - {entry}")
+        print("\n  请修改冲突的错误码 number，确保全局唯一")
+        print("=" * 70)
+        print()
+        sys.exit(1)
+
+    # 3. 生成静态注册宏
     lines = [
         "#pragma once",
         "#include \"error_system/core/error_registry.h\"",
