@@ -61,7 +61,7 @@ namespace error_system::core {
     };
 
     TEST_F(error_context_test, constructor_with_registered_code_keeps_code_and_message) {
-        error_context_t context({registered_code_}, "hello {}", "world");
+        error_context_t context(registered_code_, "hello {}", "world");
 
         EXPECT_EQ(context.code.get_code(), registered_code_.get_code());
         EXPECT_EQ(context.message, "hello world");
@@ -70,7 +70,7 @@ namespace error_system::core {
 
     TEST_F(error_context_test, constructor_with_unregistered_code_marks_context_invalid) {
         const auto unregistered_code = make_code(99);
-        error_context_t context({unregistered_code}, "boom");
+        error_context_t context(unregistered_code, "boom");
 
         EXPECT_EQ(context.code.get_level(), error_level_t::fatal);
         EXPECT_NE(context.message.find("[UNREGISTERED CODE]"), std::string::npos);
@@ -81,7 +81,7 @@ namespace error_system::core {
     }
 
     TEST_F(error_context_test, with_string_view_inserts_payload_without_extra_overload_work) {
-        error_context_t context({registered_code_}, "payload test");
+        error_context_t context(registered_code_, "payload test");
         context.with(std::string_view("user"), std::string_view("alice"));
 
         const auto& payload = context.get_payload();
@@ -89,8 +89,20 @@ namespace error_system::core {
         EXPECT_EQ(payload.at("user"), "alice");
     }
 
+    TEST_F(error_context_test, with_multiple_types_inserts_payload) {
+        error_context_t context(registered_code_, "multi type test");
+        context.with("int_val", 42)
+               .with("bool_val", true)
+               .with("double_val", 3.14);
+
+        const auto& payload = context.get_payload();
+        EXPECT_EQ(payload.at("int_val"), "42");
+        EXPECT_EQ(payload.at("bool_val"), "true");
+        EXPECT_EQ(payload.at("double_val"), "3.140000");
+    }
+
     TEST_F(error_context_test, serialization_contains_registered_metadata_and_payload) {
-        error_context_t context({registered_code_}, "serialize me");
+        error_context_t context(registered_code_, "serialize me");
         context.with("user", "alice");
 
         const std::string text = context.to_string();

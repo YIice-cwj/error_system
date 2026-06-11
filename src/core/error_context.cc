@@ -79,12 +79,19 @@ namespace error_system::core {
         plugin::plugin_registry_t::instance().notify_error(context);
     }
 
-    void error_context_t::finalize_runtime_features(const code_with_location_t& code_with) noexcept {
+    void error_context_t::finalize_runtime_features() noexcept {
         const bool validation_enabled = error_config_t::is_validation_enabled();
         const bool stacktrace_enabled = error_config_t::is_stacktrace_enabled();
         const bool location_enabled = error_config_t::is_source_location_enabled();
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
-        const auto stacktrace_level = stacktrace_enabled ? error_config_t::get_stacktrace_level() : error_level_t::warn;
+        // 优先使用 per-code 堆栈等级覆盖，否则使用全局配置
+        auto stacktrace_level = stacktrace_enabled ? error_config_t::get_stacktrace_level() : error_level_t::warn;
+        if (stacktrace_enabled) {
+            const auto per_code_level = error_config_t::get_per_code_stacktrace_level(code.get_identity_code());
+            if (per_code_level.has_value()) {
+                stacktrace_level = per_code_level.value();
+            }
+        }
 #endif
 #ifdef ERROR_SYSTEM_ENABLE_LOCATION
         const bool short_filename_enabled =
@@ -103,13 +110,16 @@ namespace error_system::core {
 
 #ifdef ERROR_SYSTEM_ENABLE_LOCATION
         if (location_enabled) {
-            fill_source_location(code_with, short_filename_enabled);
+            fill_source_location(short_filename_enabled);
         }
-#else
-        (void)code_with;
 #endif
 
-        notify_plugins(*this);
+        // 根据通知模式选择同步或异步
+        if (error_config_t::get_notify_mode() == error_config_t::notify_mode_t::async_queue) {
+            plugin::plugin_registry_t::instance().enqueue_notification(*this);
+        } else {
+            plugin::plugin_registry_t::instance().notify_error(*this);
+        }
     }
 
     void error_context_t::fill_validation_fields() noexcept {
@@ -128,14 +138,13 @@ namespace error_system::core {
 #endif
     }
 
-    void error_context_t::fill_source_location(const code_with_location_t& code_with, bool short_filename_enabled) noexcept {
+    void error_context_t::fill_source_location(bool short_filename_enabled) noexcept {
 #ifdef ERROR_SYSTEM_ENABLE_LOCATION
-        file_name = short_filename_enabled ? utils::extract_short_filename(code_with.source_location.file_name())
-                                           : code_with.source_location.file_name();
-        function_name = code_with.source_location.function_name();
-        line_number = code_with.source_location.line();
+        file_name = short_filename_enabled ? utils::extract_short_filename(source_location_.file_name())
+                                           : source_location_.file_name();
+        function_name = source_location_.function_name();
+        line_number = source_location_.line();
 #else
-        (void)code_with;
         (void)short_filename_enabled;
 #endif
     }
@@ -209,9 +218,9 @@ namespace error_system::core {
         }
 
         auto& registry = error_system::core::error_registry_t::instance();
-        const auto info = registry.get_info(code);
-        const std::string& desc = info.has_value() ? info->get().description : "未注册的未知错误";
-        const std::string& name = info.has_value() ? info->get().name : "UNKNOWN_ERR_CODE";
+        const error_metadata_t* info = registry.get_info(code);
+        const std::string& desc = info ? info->description : "未注册的未知错误";
+        const std::string& name = info ? info->name : "UNKNOWN_ERR_CODE";
 
         std::string subsys_module_str;
         if (error_config_t::is_text_output_enabled()) {

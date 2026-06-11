@@ -16,8 +16,7 @@ namespace error_system::core {
         auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::none, 0, 0, 42);
         error_registry_t::instance().register_error(code, "ERR_42", "Test error 42");
 
-        code_with_location_t cwl(code);
-        error_context_t ctx(cwl, "test message");
+        error_context_t ctx(code, "test message");
         error_exception_t ex(ctx);
 
         EXPECT_EQ(ex.code().get_code(), code.get_code());
@@ -27,8 +26,7 @@ namespace error_system::core {
         auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
-        code_with_location_t cwl(code);
-        error_context_t ctx(cwl, "error");
+        error_context_t ctx(code, "error");
         error_exception_t ex(ctx);
 
         const std::exception* base = &ex;
@@ -40,8 +38,7 @@ namespace error_system::core {
         auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::none, 0, 0, 100);
         error_registry_t::instance().register_error(code, "ERR_100", "Error 100");
 
-        code_with_location_t cwl(code);
-        error_context_t ctx(cwl, "original");
+        error_context_t ctx(code, "original");
         error_exception_t ex(ctx);
 
         const auto& retrieved = ex.context();
@@ -52,8 +49,7 @@ namespace error_system::core {
         auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::none, 0, 0, 200);
         error_registry_t::instance().register_error(code, "ERR_200", "Error 200");
 
-        code_with_location_t cwl(code);
-        error_context_t ctx(cwl, "moved");
+        error_context_t ctx(code, "moved");
         error_exception_t ex(std::move(ctx));
 
         EXPECT_EQ(ex.code().get_code(), code.get_code());
