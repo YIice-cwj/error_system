@@ -81,6 +81,12 @@ namespace error_system::core {
         std::unordered_map<uint32_t, subsystem_module_info_t> subsystem_module_index_;
 
         /**
+         * @brief 子系统索引，根据子系统 ID 快速查找其下所有模块组
+         * @details key = subsys_id，value = 该子系统下的所有 module_group_id
+         */
+        std::unordered_map<uint16_t, std::vector<module_group_id_t>> subsystem_index_;
+
+        /**
          * @brief 索引互斥锁，保护索引的并发访问
          */
         mutable std::shared_mutex index_mutex_;
@@ -98,7 +104,7 @@ namespace error_system::core {
         std::function<void(code_t, const error_metadata_t&)> duplicate_warn_callback_{nullptr};
 
         private:
-        error_registry_t();
+        error_registry_t() = default;
 
         ~error_registry_t() = default;
 
@@ -152,6 +158,13 @@ namespace error_system::core {
          * @param identity_code 错误码 identity
          */
         void __erase_from_module_index(module_group_id_t module_group_id, code_t identity_code) noexcept;
+
+        /**
+         * @brief 从子系统索引中移除空的模块组条目
+         * @param subsys_id 子系统 ID
+         * @param module_group_id 模块组 ID
+         */
+        void __erase_from_subsystem_index(uint16_t subsys_id, module_group_id_t module_group_id) noexcept;
 
         public:
         /**

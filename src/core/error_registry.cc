@@ -2,13 +2,6 @@
 
 namespace error_system::core {
 
-    error_registry_t::error_registry_t() {
-        duplicate_warn_callback_ = [](code_t raw_code, const error_metadata_t& meta) {
-            (void)raw_code;
-            (void)meta;
-        };
-    }
-
     /**
      * @brief 处理 skip 策略
      * @param raw_code 错误码原始值
@@ -92,6 +85,19 @@ namespace error_system::core {
         }
     }
 
+    void error_registry_t::__erase_from_subsystem_index(uint16_t subsys_id,
+                                                        module_group_id_t module_group_id) noexcept {
+        auto it = subsystem_index_.find(subsys_id);
+        if (it == subsystem_index_.end()) {
+            return;
+        }
+        auto& vec = it->second;
+        vec.erase(std::remove(vec.begin(), vec.end(), module_group_id), vec.end());
+        if (vec.empty()) {
+            subsystem_index_.erase(it);
+        }
+    }
+
     /**
      * @brief 注册子系统/模块名称
      * @param subsys_id 子系统 ID
@@ -155,6 +161,14 @@ namespace error_system::core {
         name_index_.emplace(meta.name, identity_code);
         primary_index_.emplace(identity_code, std::move(meta));
         module_index_[code.get_module_group_id()].push_back(identity_code);
+        {
+            uint16_t subsys_id = code.get_subsys();
+            auto& subsys_vec = subsystem_index_[subsys_id];
+            auto module_group_id = code.get_module_group_id();
+            if (std::find(subsys_vec.begin(), subsys_vec.end(), module_group_id) == subsys_vec.end()) {
+                subsys_vec.push_back(module_group_id);
+            }
+        }
     }
 
     /**
@@ -202,6 +216,15 @@ namespace error_system::core {
             name_index_.emplace(meta.name, identity_code);
             primary_index_.emplace(identity_code, std::move(meta));
             module_index_[codes[i].get_module_group_id()].push_back(identity_code);
+            {
+                uint16_t subsys_id = codes[i].get_subsys();
+                auto& subsys_vec = subsystem_index_[subsys_id];
+                auto mg_id = codes[i].get_module_group_id();
+                if (std::find(subsys_vec.begin(), subsys_vec.end(), mg_id) == subsys_vec.end()) {
+                    subsys_vec.push_back(mg_id);
+                }
+            }
+
             ++registered_count;
         }
         return registered_count;
@@ -222,6 +245,12 @@ namespace error_system::core {
         uint64_t group_id = code.get_module_group_id();
         name_index_.erase(it->second.name);
         __erase_from_module_index(group_id, identity_code);
+
+        // 若模块组已空，同步清理子系统索引
+        if (module_index_.find(group_id) == module_index_.end()) {
+            __erase_from_subsystem_index(code.get_subsys(), group_id);
+        }
+
         primary_index_.erase(it);
     }
 
@@ -243,7 +272,13 @@ namespace error_system::core {
             return;
         }
 
-        __erase_from_module_index(error_code_t(identity_code).get_module_group_id(), identity_code);
+        error_code_t code(identity_code);
+        uint64_t group_id = code.get_module_group_id();
+        __erase_from_module_index(group_id, identity_code);
+        if (module_index_.find(group_id) == module_index_.end()) {
+            __erase_from_subsystem_index(code.get_subsys(), group_id);
+        }
+
         primary_index_.erase(primary_it);
         name_index_.erase(name_it);
     }
@@ -265,6 +300,9 @@ namespace error_system::core {
                 primary_index_.erase(primary_it);
             }
         }
+        uint16_t subsys_id = static_cast<uint16_t>((module_group_id >> 32) & 0xFFFF);
+        __erase_from_subsystem_index(subsys_id, module_group_id);
+
         module_index_.erase(mod_it);
     }
 
@@ -277,6 +315,7 @@ namespace error_system::core {
         decltype(name_index_)().swap(name_index_);
         decltype(module_index_)().swap(module_index_);
         decltype(subsystem_module_index_)().swap(subsystem_module_index_);
+        decltype(subsystem_index_)().swap(subsystem_index_);
     }
 
     /**
@@ -332,17 +371,22 @@ namespace error_system::core {
     error_registry_t::get_errors_by_subsystem(uint16_t subsys_id) const noexcept {
         std::shared_lock<std::shared_mutex> lock(index_mutex_);
         std::vector<std::reference_wrapper<const error_metadata_t>> errors;
-        // 遍历 module_index_，筛选出子系统 ID 匹配的所有模块组
-        for (const auto& [module_group_id, code_list] : module_index_) {
-            uint16_t group_subsys = static_cast<uint16_t>((module_group_id >> 32) & 0xFFFF);
-            if (group_subsys != subsys_id) {
+
+        auto it = subsystem_index_.find(subsys_id);
+        if (it == subsystem_index_.end()) {
+            return errors;
+        }
+
+        for (module_group_id_t module_group_id : it->second) {
+            auto mod_it = module_index_.find(module_group_id);
+            if (mod_it == module_index_.end()) {
                 continue;
             }
-            errors.reserve(errors.size() + code_list.size());
-            for (code_t raw_code : code_list) {
-                auto it = primary_index_.find(raw_code);
-                if (it != primary_index_.end()) {
-                    errors.emplace_back(it->second);
+            errors.reserve(errors.size() + mod_it->second.size());
+            for (code_t raw_code : mod_it->second) {
+                auto primary_it = primary_index_.find(raw_code);
+                if (primary_it != primary_index_.end()) {
+                    errors.emplace_back(primary_it->second);
                 }
             }
         }
