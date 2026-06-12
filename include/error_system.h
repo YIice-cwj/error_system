@@ -21,7 +21,6 @@
 #include "error_system/core/error_level.h"
 #include "error_system/core/error_registry.h"
 #include "error_system/core/result.h"
-#include "error_system/core/try_catch.h"
 // ─── Domain ───────────────────────────────────────────────────────────────────
 #include "error_system/domain/system_domain.h"
 
