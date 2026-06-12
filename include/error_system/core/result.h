@@ -1,7 +1,9 @@
 #pragma once
 #include "error_system/core/error_context.h"
+#include <cassert>
 #include <functional>
 #include <string_view>
+#include <type_traits>
 #include <variant>
 
 /**
@@ -97,52 +99,76 @@ namespace error_system::core {
 
         /**
          * @brief 获取错误上下文
+         * @details 使用 std::get_if 安全获取，若当前为成功状态则返回静态哨兵值（空 error_context_t）。
+         *          调用方应在调用前通过 is_error() 检查，否则返回的哨兵值 is_error() 为 false。
          * @return const error_context_t& 错误上下文
          */
-        const error_context_t& error() const noexcept { return std::get<error_context_t>(value_or_error_); }
+        const error_context_t& error() const noexcept {
+            auto* ptr = std::get_if<error_context_t>(&value_or_error_);
+            if (ptr) {
+                return *ptr;
+            }
+            static const error_context_t sentinel{};
+            return sentinel;
+        }
 
         /**
-         * @brief 获取成功值（不安全，仅在 is_success() 时调用）
+         * @brief 获取成功值
+         * @details 使用 std::get_if 安全获取，若当前为错误状态则返回静态哨兵值（T{}）。
+         *          调用方应在调用前通过 is_success() 检查，否则返回的哨兵值可能无意义。
+         *          要求 T 必须可默认构造，若 T 不可默认构造请使用 value_pointer() 替代。
          * @return const value_type& 成功值
          */
-        const value_type& value() const noexcept { return std::get<value_type>(value_or_error_); }
+        const value_type& value() const noexcept {
+            static_assert(std::is_default_constructible_v<value_type>,
+                          "result_t::value() requires T to be default-constructible. "
+                          "Use value_pointer() for non-default-constructible types.");
+            auto* ptr = std::get_if<value_type>(&value_or_error_);
+            if (ptr) {
+                return *ptr;
+            }
+            static const value_type sentinel{};
+            return sentinel;
+        }
 
         /**
-         * @brief 获取成功值（不安全，仅在 is_success() 时调用）
+         * @brief 获取成功值（可变引用）
+         * @details 使用 std::get_if 安全获取，若当前为错误状态则返回静态哨兵值（T{}）。
+         *          调用方应在调用前通过 is_success() 检查，否则返回的哨兵值可能无意义。
          * @return value_type& 成功值
          */
-        value_type& value() noexcept { return std::get<value_type>(value_or_error_); }
+        value_type& value() noexcept {
+            static_assert(std::is_default_constructible_v<value_type>,
+                          "result_t::value() requires T to be default-constructible. "
+                          "Use value_pointer() for non-default-constructible types.");
+            auto* ptr = std::get_if<value_type>(&value_or_error_);
+            if (ptr) {
+                return *ptr;
+            }
+            static value_type sentinel{};
+            return sentinel;
+        }
 
         /**
          * @brief 安全获取成功值指针
          * @return const value_type* 成功值指针，如果为错误则返回 nullptr
          */
-        const value_type* value_pointer() const noexcept {
-            return is_success() ? &std::get<value_type>(value_or_error_) : nullptr;
-        }
+        const value_type* value_pointer() const noexcept { return std::get_if<value_type>(&value_or_error_); }
 
         /**
          * @brief 安全获取成功值指针
          * @return value_type* 成功值指针，如果为错误则返回 nullptr
          */
-        value_type* value_pointer() noexcept { return is_success() ? &std::get<value_type>(value_or_error_) : nullptr; }
+        value_type* value_pointer() noexcept { return std::get_if<value_type>(&value_or_error_); }
 
         /**
          * @brief 安全获取成功值，失败时返回默认值
-         * @param default_value 默认值
-         * @return value_type 成功值或默认值
-         */
-        value_type value_or(value_type default_value) const noexcept {
-            return is_success() ? std::get<value_type>(value_or_error_) : std::move(default_value);
-        }
-
-        /**
-         * @brief 安全获取成功值，失败时返回默认值
-         * @param default_value 默认值
-         * @return const value_type& 成功值或默认值
+         * @param default_value 默认值引用，调用方保证其生命周期
+         * @return const value_type& 成功值或默认值引用
          */
         const value_type& value_or(const value_type& default_value) const noexcept {
-            return is_success() ? std::get<value_type>(value_or_error_) : default_value;
+            auto* ptr = std::get_if<value_type>(&value_or_error_);
+            return ptr ? *ptr : default_value;
         }
 
         /**
@@ -150,6 +176,31 @@ namespace error_system::core {
          * @return bool 如果结果为成功则返回 true
          */
         explicit operator bool() const noexcept { return is_success(); }
+
+        /**
+         * @brief 断言获取成功值（带自定义消息）
+         * @details 若当前为成功状态则返回值的只读引用；若为错误状态，在 Debug 模式下触发断言失败，
+         *          在 Release 模式下返回静态哨兵值（T{}）。适用于调用方已确认不会出错的场景。
+         *          要求 T 必须可默认构造。
+         * @param msg 断言失败时的提示消息
+         * @return const value_type& 成功值引用
+         *
+         * @example
+         * auto result = compute();
+         * int value = result.expect("compute() should never fail here");
+         */
+        const value_type& expect(const char* msg) const noexcept {
+            static_assert(std::is_default_constructible_v<value_type>,
+                          "result_t::expect() requires T to be default-constructible. "
+                          "Use value_pointer() for non-default-constructible types.");
+            auto* ptr = std::get_if<value_type>(&value_or_error_);
+            assert(ptr && msg);
+            if (ptr) {
+                return *ptr;
+            }
+            static const value_type sentinel{};
+            return sentinel;
+        }
 
         /**
          * @brief 对成功值进行映射转换
@@ -339,6 +390,21 @@ namespace error_system::core {
          * @return bool 如果结果为成功则返回true
          */
         bool is_success() const noexcept { return !is_error(); }
+
+        /**
+         * @brief 断言当前结果为成功（带自定义消息）
+         * @details 若当前为错误状态，在 Debug 模式下触发断言失败并输出 msg。
+         *          在 Release 模式下为无操作。适用于 void 返回类型中确认不会出错的场景。
+         * @param msg 断言失败时的提示消息
+         *
+         * @example
+         * auto result = do_something();
+         * result.expect("do_something() should never fail here");
+         */
+        void expect(const char* msg) const noexcept {
+            assert(is_success() && msg);
+            (void)msg;
+        }
 
         /**
          * @brief 获取错误上下文
