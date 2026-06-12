@@ -359,6 +359,5 @@ namespace error_system::core {
  *     "连接管理")
  */
 #define DEFINE_ERROR_CODE(NAME, LEVEL, SYSTEM, SUBSYS, MODULE, NUMBER, DESC, SUBSYS_NAME, MODULE_NAME)                  \
-    constexpr ::error_system::core::error_code_t NAME =                                                                \
-        ::error_system::core::error_builder_t::make_error_code(LEVEL, SYSTEM, SUBSYS, MODULE, NUMBER);                 \
+    constexpr ::error_system::core::error_code_t NAME(LEVEL, SYSTEM, SUBSYS, MODULE, NUMBER);                           \
     inline const ::error_system::core::error_registrar_t NAME##_registrar_(NAME, #NAME, DESC, SUBSYS_NAME, MODULE_NAME);

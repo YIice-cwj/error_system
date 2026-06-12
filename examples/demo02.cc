@@ -52,7 +52,7 @@ int main() {
     auto result3 = query_order(123).and_then([](int amount) -> result_t<std::string> {
         if (amount > 5000) {
             return result_t<std::string>(error_context_t(
-                error_builder_t::make_error_code(error_level_t::warn, system_domain_t::application, 0, 0, 1),
+                error_code_t(error_level_t::warn, system_domain_t::application, 0, 0, 1),
                 "订单金额超过限额: {}",
                 amount));
         }
@@ -88,7 +88,7 @@ int main() {
             .or_else([](const error_context_t& err) -> result_t<std::string> {
                 std::cout << "流程失败: " << err.to_string() << std::endl;
                 return result_t<std::string>(error_context_t(
-                    error_builder_t::make_error_code(error_level_t::error, system_domain_t::application, 0, 0, 2),
+                    error_code_t(error_level_t::error, system_domain_t::application, 0, 0, 2),
                     "交易流程失败"));
             });
 

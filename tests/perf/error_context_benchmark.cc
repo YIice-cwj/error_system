@@ -1,5 +1,4 @@
 #include "error_system/config/error_config.h"
-#include "error_system/core/error_builder.h"
 #include "error_system/core/error_context.h"
 #include "error_system/core/error_registry.h"
 #include "error_system/domain/system_domain.h"
@@ -23,7 +22,7 @@ constexpr int kMeasureIterations = 200000;
 constexpr double kTask2BaselineNsPerOp = 4591.1;
 
 error_code_t make_benchmark_code() noexcept {
-    return error_builder_t::make_error_code(error_level_t::error, system_domain_t::database, 1, 1, 1);
+    return error_code_t(error_level_t::error, system_domain_t::database, 1, 1, 1);
 }
 
 void prepare_registry() noexcept {

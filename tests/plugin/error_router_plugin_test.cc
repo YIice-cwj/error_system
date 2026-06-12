@@ -1,4 +1,3 @@
-#include "error_system/core/error_builder.h"
 #include "error_system/plugin/error_router_plugin.h"
 #include <gtest/gtest.h>
 
@@ -47,7 +46,7 @@ namespace error_system::plugin {
             domain::system_domain_t::database,
             [&handler_called](const core::error_context_t&) { handler_called = true; });
 
-        auto code = core::error_builder_t::make_error_code(
+        auto code = core::error_code_t(
             core::error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
 
         // Use default constructed context and set code directly
@@ -100,7 +99,7 @@ namespace error_system::plugin {
 
         error_router_plugin_t::instance().unregister_handler_by_domain(domain::system_domain_t::middleware);
 
-        auto code = core::error_builder_t::make_error_code(
+        auto code = core::error_code_t(
             core::error_level_t::error, domain::system_domain_t::middleware, 1, 1, 1);
 
         // Use default constructed context and set code directly
@@ -116,7 +115,7 @@ namespace error_system::plugin {
         bool code_handler_called = false;
         bool domain_handler_called = false;
 
-        auto code = core::error_builder_t::make_error_code(
+        auto code = core::error_code_t(
             core::error_level_t::error, domain::system_domain_t::application, 1, 1, 1);
 
         error_router_plugin_t::instance().register_handler_by_domain(

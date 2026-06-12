@@ -1,4 +1,3 @@
-#include "error_system/core/error_builder.h"
 #include "error_system/core/error_registry.h"
 #include "error_system/domain/system_domain.h"
 #include <chrono>
@@ -38,7 +37,7 @@ dataset_t build_dataset() {
     data.description_views.reserve(kBatchSize);
 
     for (std::size_t i = 0; i < kBatchSize; ++i) {
-        data.codes.push_back(error_builder_t::make_error_code(
+        data.codes.push_back(error_code_t(
             error_level_t::error, system_domain_t::database, 2, static_cast<uint16_t>((i / 128) + 1), static_cast<uint16_t>(i + 1)));
         data.names.push_back("ERR_PERF_REGISTRY_" + std::to_string(i));
         data.descriptions.push_back("registry benchmark item " + std::to_string(i));
