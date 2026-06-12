@@ -9,10 +9,10 @@ using namespace error_system::domain;
 // 模拟订单查询
 result_t<int> query_order(int order_id) {
     if (order_id <= 0) {
-        return result_t<int>(error_context_t(biz::trade_errors::ERR_ORDER_NOT_FOUND, "无效的订单ID: {}", order_id));
+        return result_t<int>(error_context_t(biz::trade_errors::ERR_ORDER_NOT_FOUND, "无效的订单ID"));
     }
     if (order_id == 404) {
-        return result_t<int>(error_context_t(biz::trade_errors::ERR_ORDER_NOT_FOUND, "订单不存在: {}", order_id));
+        return result_t<int>::make_error(biz::trade_errors::ERR_ORDER_NOT_FOUND, "订单不存在");
     }
     return result_t<int>(order_id * 1000);  // 返回订单金额
 }
@@ -20,12 +20,12 @@ result_t<int> query_order(int order_id) {
 // 模拟支付处理
 result_t<std::string> process_payment(int user_id, int amount) {
     if (amount <= 0) {
-        return result_t<std::string>(
-            error_context_t(biz::payment_errors::ERR_INSUFFICIENT_BALANCE, "无效的支付金额: {}", amount));
+        return result_t<std::string>::make_error(
+            biz::payment_errors::ERR_INSUFFICIENT_BALANCE, "无效的支付金额");
     }
     if (user_id == 999) {
-        return result_t<std::string>(
-            error_context_t(biz::payment_errors::ERR_ACCOUNT_FROZEN, "用户账户已被冻结: {}", user_id));
+        return result_t<std::string>::make_error(
+            biz::payment_errors::ERR_ACCOUNT_FROZEN, "用户账户已被冻结");
     }
     return result_t<std::string>(std::string("PAY_") + std::to_string(user_id) + "_" + std::to_string(amount));
 }
@@ -51,10 +51,9 @@ int main() {
     std::cout << "\n--- 3. and_then 链式操作 ---" << std::endl;
     auto result3 = query_order(123).and_then([](int amount) -> result_t<std::string> {
         if (amount > 5000) {
-            return result_t<std::string>(error_context_t(
+            return result_t<std::string>::make_error(
                 error_code_t(error_level_t::warn, system_domain_t::application, 0, 0, 1),
-                "订单金额超过限额: {}",
-                amount));
+                "订单金额超过限额");
         }
         return result_t<std::string>(std::string("订单金额正常: " + std::to_string(amount)));
     });
@@ -70,12 +69,78 @@ int main() {
     auto result4 = query_order(404).or_else([](const error_context_t& err) -> result_t<int> {
         std::cout << "捕获错误: " << err.message << std::endl;
         std::cout << "返回默认值 0" << std::endl;
-        return result_t<int>(0);  // 返回默认值
+        return result_t<int>(0);
     });
     std::cout << "最终结果: " << result4.value() << std::endl;
 
-    // 5. 复杂链式操作
-    std::cout << "\n--- 5. 复杂链式操作: 下单 -> 支付 ---" << std::endl;
+    // 5. expect() 断言取值（已确认成功的场景）
+    std::cout << "\n--- 5. expect() 断言取值 ---" << std::endl;
+    auto result5 = query_order(456);
+    int amount5 = result5.expect("query_order(456) should always succeed");
+    std::cout << "expect 取值: " << amount5 << " (断言通过)" << std::endl;
+
+    // 6. operator bool() 条件判断
+    std::cout << "\n--- 6. operator bool() 条件判断 ---" << std::endl;
+    auto result6 = query_order(789);
+    if (result6) {
+        std::cout << "operator bool: 成功, value = " << result6.value() << std::endl;
+    }
+
+    auto result6b = query_order(404);
+    if (!result6b) {
+        std::cout << "operator bool: 失败, error = " << result6b.error().message << std::endl;
+    }
+
+    // 7. value_pointer() 安全指针访问
+    std::cout << "\n--- 7. value_pointer() 安全指针访问 ---" << std::endl;
+    auto result7 = query_order(123);
+    if (auto* val = result7.value_pointer()) {
+        std::cout << "value_pointer 取值: " << *val << std::endl;
+    }
+
+    auto result7b = query_order(404);
+    if (result7b.value_pointer() == nullptr) {
+        std::cout << "value_pointer 返回 nullptr (错误状态)" << std::endl;
+    }
+
+    // 8. value_or() 提供默认值
+    std::cout << "\n--- 8. value_or() 提供默认值 ---" << std::endl;
+    auto result8 = query_order(123);
+    int default_val = -1;
+    std::cout << "成功: value_or(-1) = " << result8.value_or(default_val) << std::endl;
+
+    auto result8b = query_order(404);
+    std::cout << "失败: value_or(-1) = " << result8b.value_or(default_val) << " (使用默认值)" << std::endl;
+
+    // 9. map() 值映射转换
+    std::cout << "\n--- 9. map() 值映射转换 ---" << std::endl;
+    auto result9 = query_order(100)
+        .map([](int amount) -> std::string {
+            return "金额: " + std::to_string(amount) + " 元";
+        });
+    std::cout << "map 结果: " << result9.value() << std::endl;
+
+    auto result9b = query_order(404)
+        .map([](int amount) -> std::string {
+            return "金额: " + std::to_string(amount) + " 元";
+        });
+    if (result9b.is_error()) {
+        std::cout << "map 传递错误: " << result9b.error().message << std::endl;
+    }
+
+    // 10. map_error() 错误映射转换
+    std::cout << "\n--- 10. map_error() 错误映射转换 ---" << std::endl;
+    auto result10 = query_order(404)
+        .map_error([](const error_context_t& ctx) -> error_context_t {
+            error_context_t wrapped(biz::trade_errors::ERR_CART_IS_EMPTY, "下游订单服务故障");
+            wrapped.with("cause", ctx.message)
+                .with("original_code", std::to_string(ctx.code.get_code()));
+            return wrapped;
+        });
+    std::cout << "map_error 包装后: " << result10.error().to_string() << std::endl;
+
+    // 11. 复杂链式操作: 下单 -> 支付
+    std::cout << "\n--- 11. 复杂链式操作: 下单 -> 支付 ---" << std::endl;
     int user_id = 100;
     int order_id = 123;
 
@@ -87,26 +152,30 @@ int main() {
             })
             .or_else([](const error_context_t& err) -> result_t<std::string> {
                 std::cout << "流程失败: " << err.to_string() << std::endl;
-                return result_t<std::string>(error_context_t(
+                return result_t<std::string>::make_error(
                     error_code_t(error_level_t::error, system_domain_t::application, 0, 0, 2),
-                    "交易流程失败"));
+                    "交易流程失败");
             });
 
     if (final_result.is_success()) {
         std::cout << "支付成功，流水号: " << final_result.value() << std::endl;
     }
 
-    // 6. void result 特化
-    std::cout << "\n--- 6. void result 特化 ---" << std::endl;
-    result_t<void> void_result;  // 成功
-    if (void_result.is_success()) {
-        std::cout << "void result 成功" << std::endl;
+    // 12. result_t<void> 空值结果
+    std::cout << "\n--- 12. result_t<void> 空值结果 ---" << std::endl;
+    result_t<void> void_ok;  // 默认构造 = 成功
+    if (void_ok.is_success()) {
+        std::cout << "void result 成功 (默认构造)" << std::endl;
     }
 
-    result_t<void> void_error = result_t<void>(error_context_t(biz::trade_errors::ERR_CART_IS_EMPTY, "购物车为空"));
-    if (void_error.is_error()) {
-        std::cout << "void result 错误: " << void_error.error().message << std::endl;
+    result_t<void> void_err = result_t<void>::make_error(biz::trade_errors::ERR_CART_IS_EMPTY, "购物车为空");
+    if (void_err.is_error()) {
+        std::cout << "void result 错误: " << void_err.error().message << std::endl;
     }
+
+    // void result 的 expect()
+    void_ok.expect("void_ok should not be error");
+    std::cout << "void expect 通过" << std::endl;
 
     return 0;
 }
