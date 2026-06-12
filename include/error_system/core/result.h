@@ -82,14 +82,6 @@ namespace error_system::core {
          */
         explicit result_t(const error_context_t& error_context) noexcept : value_or_error_(error_context) {}
 
-        /**
-         * @brief 构造函数
-         * @param code 错误码
-         * @param message 错误信息
-         */
-        explicit result_t(error_code_t code, const std::string& message = "") noexcept
-            : value_or_error_(error_context_t{code, message}) {}
-
         public:
         /**
          * @brief 检查结果是否为错误
@@ -151,6 +143,66 @@ namespace error_system::core {
          */
         const value_type& value_or(const value_type& default_value) const noexcept {
             return is_success() ? std::get<value_type>(value_or_error_) : default_value;
+        }
+
+        /**
+         * @brief 布尔转换运算符
+         * @return bool 如果结果为成功则返回 true
+         */
+        explicit operator bool() const noexcept { return is_success(); }
+
+        /**
+         * @brief 对成功值进行映射转换
+         * @tparam Function 映射函数
+         * @param function 映射函数，接受 value_type 返回新类型
+         * @return result_t 转换后的结果，错误时传递错误上下文
+         */
+        template <typename Function>
+        auto map(Function&& function) const& -> result_t<decltype(std::invoke(std::forward<Function>(function),
+                                                                               std::declval<const value_type&>()))> {
+            using new_type = decltype(std::invoke(std::forward<Function>(function), std::declval<const value_type&>()));
+            if (is_error()) {
+                return result_t<new_type>(error());
+            }
+            return result_t<new_type>(std::invoke(std::forward<Function>(function), value()));
+        }
+
+        /**
+         * @brief 对成功值进行映射转换（移动语义）
+         */
+        template <typename Function>
+        auto map(Function&& function) && -> result_t<decltype(std::invoke(std::forward<Function>(function),
+                                                                           std::move(value())))> {
+            using new_type = decltype(std::invoke(std::forward<Function>(function), std::move(value())));
+            if (is_error()) {
+                return result_t<new_type>(std::move(error()));
+            }
+            return result_t<new_type>(std::invoke(std::forward<Function>(function), std::move(value())));
+        }
+
+        /**
+         * @brief 对错误上下文进行映射转换
+         * @tparam Function 映射函数
+         * @param function 映射函数，接受 error_context_t 返回新的 error_context_t
+         * @return result_t 映射后的结果，成功时保持不变
+         */
+        template <typename Function>
+        result_t<value_type> map_error(Function&& function) const& {
+            if (is_error()) {
+                return result_t<value_type>(std::invoke(std::forward<Function>(function), error()));
+            }
+            return result_t<value_type>(value());
+        }
+
+        /**
+         * @brief 对错误上下文进行映射转换（移动语义）
+         */
+        template <typename Function>
+        result_t<value_type> map_error(Function&& function) && {
+            if (is_error()) {
+                return result_t<value_type>(std::invoke(std::forward<Function>(function), std::move(error())));
+            }
+            return std::move(*this);
         }
 
         /**
@@ -236,19 +288,45 @@ namespace error_system::core {
         result_t() noexcept : error_context_{} {}
 
         /**
+         * @brief 错误构造工厂函数
+         * @param code 错误码
+         * @param message 错误信息，默认为空
+         * @return result_t<void> 包装了错误的结果对象
+         */
+        static result_t<void> make_error(error_code_t code, const std::string& message = "") noexcept {
+            return result_t<void>(error_context_t{code, message});
+        }
+
+        /**
+         * @brief 错误构造工厂函数（移动消息版本）
+         * @param code 错误码
+         * @param message 错误信息
+         * @return result_t<void> 包装了错误的结果对象
+         */
+        static result_t<void> make_error(error_code_t code, std::string&& message) noexcept {
+            return result_t<void>(error_context_t{code, std::move(message)});
+        }
+
+        /**
+         * @brief 错误构造工厂函数（从已有 error_context_t）
+         * @param ctx 错误上下文
+         * @return result_t<void> 包装了错误的结果对象
+         */
+        static result_t<void> make_error(const error_context_t& ctx) noexcept {
+            return result_t<void>(ctx);
+        }
+
+        /**
          * @brief 构造函数
          * @param error_context 错误上下文
          */
         explicit result_t(const error_context_t& error_context) noexcept : error_context_(error_context) {}
 
         /**
-         * @brief 构造函数
-         * @param code 错误码
-         * @param message 错误信息
+         * @brief 布尔转换运算符
+         * @return bool 如果结果为成功则返回 true
          */
-        template <typename... Args>
-        explicit result_t(error_code_t code, const std::string_view message_format, Args... args) noexcept
-            : error_context_(code, message_format, args...) {}
+        explicit operator bool() const noexcept { return is_success(); }
 
         /**
          * @brief 检查结果是否为错误
