@@ -77,6 +77,11 @@ namespace error_system::core {
 #endif
         private:
         /**
+         * @brief 缓存的元数据指针
+         * @details 构造时从 error_registry_t 查询并缓存，避免 to_string/to_json 重复加锁查询
+         */
+        const error_metadata_t* metadata_{nullptr};
+        /**
          * @brief 执行运行时特性初始化
          * @details 根据全局配置依次完成：错误码校验 → 堆栈捕获 → 源位置记录 → 插件通知
          */
@@ -125,7 +130,8 @@ namespace error_system::core {
         template <typename... Args>
         error_context_t(error_code_t code, std::string message_format = "", Args&&... args) noexcept
             : code(code),
-              message(utils::string_utils_t::format(message_format, std::forward<Args>(args)...)) {
+              message(utils::string_utils_t::format(message_format, std::forward<Args>(args)...)),
+              metadata_(error_registry_t::instance().get_info(code) /* 缓存元数据，避免 to_string 重复查询 */) {
 #ifdef ERROR_SYSTEM_ENABLE_LOCATION
             source_location_ = utils::source_location_t::current();
 #endif
@@ -193,6 +199,21 @@ namespace error_system::core {
          * @return error_context_t& 当前对象引用，支持链式调用
          */
         error_context_t& with(std::string&& key, std::string&& value) noexcept;
+
+        /**
+         * @brief 批量添加负载字段
+         * @details 使用 initializer_list 一次性添加多个 key-value 对，减少链式调用
+         * @param items 键值对列表
+         * @return error_context_t& 当前对象引用，支持链式调用
+         *
+         * @example
+         * ctx.with_batch({
+         *     {"host", "192.168.1.1"},
+         *     {"port", "3306"},
+         *     {"db_name", "users"}
+         * });
+         */
+        error_context_t& with_batch(std::initializer_list<std::pair<const std::string, std::string>> items) noexcept;
 
         /**
          * @brief 添加多类型负载字段（模板版本）
