@@ -178,18 +178,22 @@ namespace error_system::core {
 
         /**
          * @brief 注销错误码
+         * @details 按错误码值注销，若不存在则静默忽略（无错误返回）
          * @param code 错误码
          */
         void unregister_error(const error_code_t code) noexcept;
 
         /**
          * @brief 注销错误码
+         * @details 按名称注销，若不存在则静默忽略
          * @param name 错误码宏名称
          */
         void unregister_error(const std::string_view name) noexcept;
 
         /**
          * @brief 注销模块组的所有错误码
+         * @details 同步清除 code_index_/name_index_/module_index_ 中该模块的所有条目，
+         *          已注册的错误码数量不影响性能（O(模块内错误数)）
          * @param module_group_id 模块组 ID
          */
         void unregister_module(const module_group_id_t module_group_id) noexcept;

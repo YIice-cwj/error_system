@@ -149,6 +149,11 @@ std::string json = ctx.to_json();
 
 // 序列化为二进制（高效紧凑）
 std::string binary = ctx.to_binary();
+
+// 比较两个错误上下文
+if (ctx1 == ctx2) {
+    // 错误码、消息、负载完全一致
+}
 ```
 
 ### 4. 使用 result_t 进行错误传递
@@ -207,7 +212,25 @@ try {
 }
 ```
 
-### 6. 使用 DEFINE_ERROR_CODE 宏定义错误码
+### 6. try/catch 异常转错误码
+
+`try_catch_or_error` 自动将异常转换为 `result_t`，消除样板代码：
+
+```cpp
+#include "error_system/core/try_catch.h"
+
+// 有返回值
+auto result = try_catch_or_error(db_errors::ERR_TIMEOUT, []() {
+    return database.query("SELECT * FROM users");
+});
+
+// void 版本
+auto result = try_catch_or_error(db_errors::ERR_FLUSH, []() {
+    database.flush_logs();
+});
+```
+
+### 7. 使用 DEFINE_ERROR_CODE 宏定义错误码
 
 使用宏可以方便地定义错误码并自动注册到错误码注册表：
 
