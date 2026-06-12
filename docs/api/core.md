@@ -12,7 +12,7 @@
 
 | 位域 | 位数 | 说明 |
 |------|------|------|
-| Sign | 1 bit | 符号位（0=成功，1=错误） |
+| Sign | 1 bit | 符号位（0=错误，1=成功） |
 | Reserved | 3 bits | 保留位 |
 | Level | 4 bits | 错误等级（debug/info/warn/error/fatal） |
 | System Domain | 8 bits | 系统域（none/system/middleware/database/application/third_party） |
@@ -53,17 +53,13 @@ public:
 ### 构造方式
 
 ```cpp
-// 方式 1：便捷构造函数（推荐，v2.0 新增）
+// 方式 1：便捷构造函数（推荐，5参数）
 error_code_t code(error_level_t::error, system_domain_t::database, 1, 2, 0x0010);
 
-// 方式 2：使用 error_builder_t（兼容旧代码）
-auto code2 = error_builder_t::make_error_code(
-    error_level_t::error, system_domain_t::database, 1, 1, 1);
-
-// 方式 3：从原始 64 位值构造
+// 方式 2：从原始 64 位值构造
 error_code_t code3(0x8000000001010001ULL);
 
-// 方式 4：使用 DEFINE_ERROR_CODE 宏（自动注册）
+// 方式 3：使用 DEFINE_ERROR_CODE 宏（自动注册）
 DEFINE_ERROR_CODE(ERR_DB_FAIL,
     error_level_t::error, system_domain_t::database,
     1, 1, 0x0010, "数据库操作失败",
@@ -165,6 +161,14 @@ struct error_context_t {
     template <typename T>
     error_context_t& with(const std::string& key, T value) noexcept;
 
+    // with_batch: 批量添加 payload（v2.1 新增）
+    error_context_t& with_batch(
+        std::initializer_list<std::pair<const std::string, std::string>> items) noexcept;
+
+    // compare operators (v2.1)
+    bool operator==(const error_context_t& other) const noexcept;
+    bool operator!=(const error_context_t& other) const noexcept;
+
     // 因果链
     error_context_t wrap(const error_context_t& underlying) const noexcept;
     error_context_t wrap(error_context_t&& underlying) const noexcept;
@@ -173,8 +177,8 @@ struct error_context_t {
     bool is_error() const noexcept;
 
     std::string to_string() const noexcept;
-    std::string to_json() const noexcept;
-    std::string to_binary() const noexcept;
+    std::string to_json() const noexcept;   // code 字段使用 identity_code，含因果链递归输出
+    std::string to_binary() const noexcept; // v2.1 新增因果链标志位 + 递归序列化
 
     const std::unordered_map<std::string, std::string>& get_payload() const noexcept;
     const char* what() const noexcept;
@@ -238,7 +242,7 @@ error_config_t::set_per_code_stacktrace_level(
 
 | 测试文件 | 用例数 | 覆盖内容 |
 |----------|--------|----------|
-| `tests/core/error_context_test.cc` | 5 | 构造、多类型 payload、序列化、含子系统/模块名称输出 |
+| `tests/core/error_context_test.cc` | 7 | 构造、多类型 payload、序列化（含 to_binary 因果链）、with_batch、compare operators、含子系统/模块名称输出 |
 
 ---
 
@@ -271,7 +275,7 @@ public:
 
     // v2.0 新增：按子系统 ID 查询该子系统下所有错误码
     std::vector<std::reference_wrapper<const error_metadata_t>>
-    get_errors_by_subsystem(uint16_t subsys_id) const noexcept;
+    get_errors_by_subsystem(uint16_t subsys_id) const noexcept; // v2.1 subsystem_index_ O(1) 索引优化
 
     std::vector<std::reference_wrapper<const error_metadata_t>>
     get_errors_by_module(module_group_id_t module_group_id) const noexcept;
@@ -320,13 +324,13 @@ if (found.has_value()) {
 
 | 测试文件 | 用例数 | 覆盖内容 |
 |----------|--------|----------|
-| `tests/core/error_registry_test.cc` | 24 | 注册、查询、get_errors_by_subsystem、find_by_name、并发安全 |
+| `tests/core/error_registry_test.cc` | 26 | 注册、查询、get_errors_by_subsystem（含 subsystem_index_ 清理）、find_by_name、并发安全 |
 
 ---
 
 ## result_t\<T\>
 
-类 Rust Result，用于无异常的错误传递。内部使用 `std::variant<T, error_context_t>` 存储。
+类 Rust Result，零异常错误传递。内部使用 `std::variant<T, error_context_t>`，全部 `std::get` 已替换为 `std::get_if` + 静态哨兵值，确保永不抛异常。
 
 ### 核心 API
 
@@ -340,24 +344,37 @@ public:
     // 错误构造（接受 error_context_t）
     explicit result_t(const error_context_t& ctx) noexcept;
 
-    // v2.0 工厂函数（推荐，避免构造函数重载混淆）
+    // 工厂函数
     static result_t make_error(error_code_t code, const std::string& message = "") noexcept;
     static result_t make_error(error_code_t code, std::string&& message) noexcept;
     static result_t make_error(const error_context_t& ctx) noexcept;
 
+    // 状态检查
     bool is_success() const noexcept;
     bool is_error() const noexcept;
+    explicit operator bool() const noexcept;
 
-    T& value();
+    // 值访问（v2.1 零异常：所有方法失败返回哨兵/指针，不抛异常）
+    T& value();                             // 失败返回静态哨兵 T{}，要求 T 可默认构造
     const T& value() const;
+    T* value_pointer();                     // 失败返回 nullptr
+    const T* value_pointer() const;
+    T value_or(T default_value) const;      // 失败返回默认值
+    const T& expect(const char* msg) const; // Debug 断言失败 + Release 返回哨兵
+
+    // 错误访问（v2.1 零异常：成功时返回空 error_context_t 哨兵）
     error_context_t& error();
     const error_context_t& error() const;
 
-    // 链式操作（移动语义）
+    // 链式操作（v2.1 全部基于 std::get_if，零异常）
     result_t and_then(std::function<result_t(T)> fn) &&;
     result_t or_else(std::function<result_t(const error_context_t&)> fn) &&;
     result_t and_then(std::function<result_t(T)> fn) const&;
     result_t or_else(std::function<result_t(const error_context_t&)> fn) const&;
+    result_t map(std::function<auto(T)->U> fn) &&;                    // v2.1 成功值类型转换
+    result_t map(std::function<auto(T)->U> fn) const&;
+    result_t map_error(std::function<auto(const error_context_t)->ER> fn) &&;  // v2.1 错误类型转换
+    result_t map_error(std::function<auto(const error_context_t)->ER> fn) const&;
 };
 ```
 
@@ -374,13 +391,23 @@ return result_t<int>::make_error(ERR_DB_FAIL, "数据库操作失败");
 error_context_t ctx(ERR_DB_FAIL, "失败");
 return result_t<int>(ctx);
 
-// 链式操作
-auto final = query_order(123)
-    .and_then([](int amount) { return process_payment(amount); })
-    .or_else([](const error_context_t& err) {
-        log_error(err);
-        return result_t<std::string>::make_error(ERR_FLOW_FAIL, "流程失败");
-    });
+// 链式操作（v2.1 新增 map/map_error）
+auto final = fetch()
+    .map([](auto& d) { return d.name; })           // 成功值类型转换
+    .map_error([](const auto& e) { return process(e); });  // 错误类型转换
+
+// 状态检查（v2.1 operator bool）
+if (result) {
+    int value = result.value();
+}
+
+// 断言获取（v2.1 expect）
+int value = result.expect("should never fail here");
+
+// 安全获取（v2.1 value_pointer）
+if (auto* ptr = result.value_pointer()) {
+    // 安全使用 *ptr，无需检查 is_success()
+}
 
 // void 特化
 result_t<void> ok;
@@ -391,7 +418,7 @@ result_t<void> fail(error_context_t(ERR_FAIL, "失败"));
 
 | 测试文件 | 用例数 | 覆盖内容 |
 |----------|--------|----------|
-| `tests/core/result_test.cc` | 15+ | 构造、make_error、链式操作、void 特化 |
+| `tests/core/result_test.cc` | 20+ | 构造、make_error、expect、value()/error() 哨兵、value_pointer、map/map_error、链式操作、void 特化 |
 
 ---
 

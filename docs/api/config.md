@@ -47,6 +47,10 @@ public:
     static void set_notify_mode(notify_mode_t mode) noexcept;
     static notify_mode_t get_notify_mode() noexcept;
 
+    // 异步队列背压控制（v2.1 新增）
+    static void set_max_queue_size(size_t size) noexcept;
+    static size_t get_max_queue_size() noexcept;
+
     // 重置所有配置为默认值
     static void reset_to_defaults() noexcept;
 };
@@ -64,6 +68,7 @@ public:
 | `enable_short_filename_` | `true` | 短文件名模式（仅显示文件名，不含路径） |
 | `enable_text_output_` | `true` | 文本输出模式（false 时输出数字 ID） |
 | `notify_mode_` | `sync` | 插件通知模式（sync：同步，async_queue：异步队列） |
+| `max_queue_size_` | `0`（无限制） | 异步队列最大容量（v2.1），超过后新通知丢弃 |
 | `custom_formatter_` | `nullptr` | 自定义格式化回调 |
 
 ### 使用示例
@@ -99,6 +104,10 @@ error_config_t::set_enable_text_output(true);
 // 切换为异步插件通知（v2.0 新增）
 error_config_t::set_notify_mode(error_config_t::notify_mode_t::async_queue);
 // error_context_t 构造时不再阻塞在插件 I/O 上
+
+// v2.1：设置异步队列最大容量（背压保护）
+error_config_t::set_max_queue_size(10000);
+// 队列满时新通知将被丢弃，避免内存无限增长
 
 // 设置自定义格式化器
 error_config_t::set_custom_formatter([](const error_context_t& ctx) {
@@ -163,6 +172,7 @@ error_config_t::set_enable_text_output(true);
 
 // 低延迟服务：使用异步插件通知
 error_config_t::set_notify_mode(error_config_t::notify_mode_t::async_queue);
+error_config_t::set_max_queue_size(10000);   // v2.1 背压保护
 ```
 
 ### 3. 高性能场景配置
@@ -173,6 +183,7 @@ error_config_t::set_enable_source_location(false);
 error_config_t::set_enable_validation(false);
 error_config_t::set_enable_text_output(false);  // 数字 ID 输出（更快）
 error_config_t::set_notify_mode(error_config_t::notify_mode_t::async_queue);
+error_config_t::set_max_queue_size(0);  // v2.1 无限制（默认）
 ```
 
 ### 4. 差异化堆栈策略

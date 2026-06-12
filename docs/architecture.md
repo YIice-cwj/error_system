@@ -57,7 +57,7 @@ Domain             Plugin 层监听（同步或异步）
 | `error_builder.h` | `error_builder_t` | 编译期错误码构建工厂 |
 | `error_context.h` | `error_context_t` | 错误上下文（直接接受 error_code_t，多类型 payload，因果链，堆栈，源位置） |
 | `error_registry.h` | `error_registry_t` | 错误码注册表（按子系统/模块组索引，按名查找） |
-| `result.h` | `result_t<T>` | 类 Rust Result（含 v2.0 `make_error()` 工厂函数） |
+| `result.h` | `result_t<T>` | 类 Rust Result（`make_error`/`map`/`map_error`/`expect`/`operator bool`，零异常） |
 | `error_exception.h` | `error_exception_t` | 基于 `std::exception` 的异常封装 |
 
 ### Domain 层 (`include/error_system/domain/`)
@@ -97,7 +97,7 @@ Domain             Plugin 层监听（同步或异步）
 
 ```cpp
 class error_code_t {
-    code_t code_{0};
+    code_t code_{1ULL << SIGN_SHIFT};  // 默认 sign=1（成功）
 
     static constexpr uint32_t LEVEL_SHIFT = 56;
     static constexpr uint64_t LEVEL_MASK = 0xFULL;
@@ -173,11 +173,22 @@ error_config_t::set_notify_mode(error_config_t::notify_mode_t::async_queue);
 - `plugin_registry_t` 析构时自动停止线程，等待队列排空
 - 通过 `pending_notifications()` 查询队列积压
 
-### 8. result_t\<T\> 无异常错误传递
+### 8. result_t\<T\> 零异常错误传递
 
 ```cpp
 // v2.0 推荐使用工厂函数，语义清晰，避免构造函数重载混淆
 return result_t<Data>::make_error(ERR_FAIL, "原因");
+
+// expect(): Debug 模式下断言，Release 返回哨兵值
+int value = result.expect("should never fail here");
+
+// value_pointer(): 安全获取（失败返回 nullptr）
+if (auto* ptr = result.value_pointer()) { /* 安全使用 */ }
+
+// value() / error(): 使用 std::get_if 内部实现，误调用返回静态哨兵值，永不抛异常
+
+// map() / map_error(): 类型转换链式操作
+auto str_result = result.map([](int v) { return std::to_string(v); });
 
 // 链式操作
 auto final = fetch()
@@ -188,20 +199,30 @@ auto final = fetch()
     });
 ```
 
-### 9. 对象池优化因果链
+### 9. 子系统索引优化（v2.1）
+
+`error_registry_t` 新增 `subsystem_index_`（`unordered_map<uint16_t, vector<module_group_id_t>>`），将 `get_errors_by_subsystem` 从 O(n) 遍历全部模块组优化为 O(1) 索引查找 + O(k) 遍历该子系统模块组。
+
+索引维护：
+- **register_error**: 首次注册某子系统下的模块组时，将该 `module_group_id` 加入索引
+- **unregister_error**: 模块组内全部错误码注销后，自动级联清理 `subsystem_index_`
+- **unregister_module**: 直接移除 `subsystem_index_` 中对应条目
+- **unregister_all**: 一并清空所有索引
+
+### 10. JSON 与二进制序列化（v2.1 增强）
+
+- **`to_json()`**: `code` 字段使用 `identity_code`（与 `to_string()` 一致），含因果链递归输出
+- **`to_binary()`**: 紧凑二进制格式，末尾新增 `has_cause` 标志 + 因果链递归序列化
+
+### 11. 对象池优化因果链
 
 `error_context_t::wrap()` 使用线程局部对象池分配 cause 节点，仅在池满时才回退到 `std::make_shared`，显著降低高频错误链场景下的堆分配压力。
 
-### 10. JSON 与二进制序列化
-
-- **`to_json()`**: 生成人类可读的 JSON 字符串
-- **`to_binary()`**: 生成紧凑的二进制格式，适合高性能 RPC 或持久化存储
-
-### 11. 源位置追踪
+### 12. 源位置追踪
 
 `error_context_t` 构造时自动将 `source_location_t::current()` 捕获到 `source_location_` 私有成员中，`fill_source_location()` 从中提取文件名、函数名和行号。支持完整路径和短文件名两种模式。
 
-### 12. 自动堆栈跟踪 + Per-Code 覆盖（v2.0）
+### 13. 自动堆栈跟踪 + Per-Code 覆盖（v2.0）
 
 ```
 优先级链: is_stacktrace_enabled → per-code 覆盖 → 全局阈值
@@ -220,11 +241,11 @@ error_config_t::set_per_code_stacktrace_level(
     ERR_RATE_LIMIT.get_identity_code(), error_level_t::fatal);
 ```
 
-### 13. 错误码验证
+### 14. 错误码验证
 
 若 `is_validation_enabled()` 为 `true` 且错误码未在 `error_registry_t` 中注册，则 `error_context_t` 构造时自动将错误码替换为 `fatal` 级别的未注册错误码。
 
-### 14. 全局错误配置
+### 15. 全局错误配置
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
@@ -238,7 +259,7 @@ error_config_t::set_per_code_stacktrace_level(
 | `notify_mode_` | `sync` | 插件通知模式 |
 | `custom_formatter_` | `nullptr` | 自定义格式化回调 |
 
-### 15. DEFINE_ERROR_CODE 宏（v2.0 扩展）
+### 16. DEFINE_ERROR_CODE 宏（v2.0 扩展）
 
 ```cpp
 // v2.0 签名：新增子系统/模块名称参数
@@ -253,15 +274,15 @@ DEFINE_ERROR_CODE(
 // to_string() 输出: [ERROR][数据库服务][连接管理][1] 数据库连接超时
 ```
 
-### 16. 查询 API 简化（v2.0）
+### 17. 查询 API 简化（v2.0）
 
 | 方法 | v1.x | v2.0 |
 |------|------|------|
 | `get_info()` | `optional<reference_wrapper<metadata>>` | `const metadata_t*`（nullptr = 未注册） |
-| `get_errors_by_subsystem()` | 不存在 | 按子系统 ID 查询所有错误码 |
+| `get_errors_by_subsystem()` | 不存在 | 按子系统 ID 查询所有错误码（v2.1 引入 subsystem_index_ O(1) 索引） |
 | `find_by_name()` | 不存在 | 按名称查找错误码 |
 
-### 17. error_code_t 便捷构造函数（v2.0）
+### 18. error_code_t 便捷构造函数（v2.0）
 
 ```cpp
 // 替代 error_builder_t::make_error_code()
@@ -269,7 +290,7 @@ error_code_t code(error_level_t::error, system_domain_t::database, 1, 2, 0x0010)
 ```
 `constexpr` 支持编译期常量构造，零运行时开销。
 
-### 18. 代码生成工具
+### 19. 代码生成工具
 
 ```
 script/script_py/
@@ -343,13 +364,13 @@ JSON 配置格式示例：
 
 | 模块 | 测试文件数 | 测试用例数 | 测试文件 |
 |------|-----------|-----------|----------|
-| Core 层 | 7 | 85+ | `tests/core/*_test.cc` |
+| Core 层 | 7 | 100+ | `tests/core/*_test.cc` |
 | Plugin 层 | 2 | 20 | `tests/plugin/*_test.cc` |
 | Memory 层 | 1 | 10 | `tests/memory/*_test.cc` |
 | Utils 层 | 4 | 37+ | `tests/utils/*_test.cc` |
 | Config 层 | 1 | 11 | `tests/config/*_test.cc` |
 | Domain 层 | 1 | 3 | `tests/domain/*_test.cc` |
-| **总计** | **16** | **238** | - |
+| **总计** | **16** | **247** | - |
 
 ### 运行测试
 

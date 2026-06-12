@@ -15,6 +15,9 @@ public:
 
     virtual void on_error(const error_context_t& context) noexcept = 0;
     virtual std::string_view name() const noexcept = 0;
+
+    // v2.1 新增：插件关心的最低错误等级，低于此等级的 error_context_t 不会通知到此插件
+    virtual core::error_level_t min_level() const noexcept { return core::error_level_t::debug; }
 };
 ```
 
@@ -24,6 +27,7 @@ public:
 |------|------|
 | `on_error()` | 错误事件回调，每当 `error_context_t` 构造时触发 |
 | `name()` | 返回插件名称，用于标识和注销 |
+| `min_level()` | v2.1 新增：插件关心的最低错误等级，默认 debug（接收所有） |
 
 ---
 
@@ -47,6 +51,7 @@ public:
     void notify_error(const core::error_context_t& context) noexcept;
 
     // 异步入队（v2.0 新增）：将 error_context_t 副本推入后台队列
+    // v2.1：超过 max_queue_size 时静默丢弃，避免内存无限增长
     void enqueue_notification(const core::error_context_t& context) noexcept;
 
     size_t size() const noexcept;
@@ -69,12 +74,14 @@ public:
 
 ```
 error_context_t 构造
-  → enqueue_notification(ctx)           // 复制 ctx → shared_ptr → push 队列
-  → queue_cv_.notify_one()              // 唤醒工作线程
+  → notify_error(ctx)                     // 仅通知 min_level() <= ctx 等级的插件
+  → enqueue_notification(ctx)             // 复制 ctx → shared_ptr
+  → 检查 max_queue_size：若队列满 → 丢弃   // v2.1 背压保护
+  → push 队列 → cv.notify_one()           // 唤醒工作线程
 
 async_worker_loop()
-  → wait(queue_cv_)                     // 阻塞等待
-  → pop 队列 → notify_error(ctx)        // 依次调用插件 on_error()
+  → wait(queue_cv_)                       // 阻塞等待
+  → pop 队列 → notify_error(ctx)          // 依次调用插件 on_error()
 ```
 
 - 工作线程首次 `enqueue_notification()` 调用时自动启动
@@ -209,16 +216,15 @@ public:
 
 - **同步模式**：避免在 `on_error()` 中执行耗时操作（如网络 I/O），插件回调不应阻塞错误处理流程
 - **异步模式**：切换 `notify_mode` 为 `async_queue`，通知与调用方解耦，但插件 `on_error()` 仍在工作线程中同步执行
-- **快速过滤**：在 `on_error()` 开头根据错误等级或错误码快速返回，减少不必要处理
+- **快速过滤**：重写 `min_level()` 或在 `on_error()` 开头根据错误等级或错误码快速返回，减少不必要处理
 
 ```cpp
 class efficient_plugin_t : public i_error_plugin_t {
 public:
+    // v2.1：框架级过滤，低于 error 等级的 error_context_t 不会调用 on_error()
+    core::error_level_t min_level() const noexcept override { return core::error_level_t::error; }
+
     void on_error(const error_context_t& context) noexcept override {
-        // 快速过滤：仅处理 ERROR 及以上
-        if (context.code.get_level() < error_level_t::error) {
-            return;
-        }
         // 异步上报
         report_queue_.enqueue(context.to_json());
     }

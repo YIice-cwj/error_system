@@ -32,7 +32,7 @@
 *   **插件系统 (Plugin)**: 支持同步/异步通知模式，插件级别过滤，异步队列背压控制，解耦插件 I/O。
 *   **代码生成工具**: 提供 Python 脚本从 JSON 配置自动生成错误码定义头文件，含 ID 冲突检测。
 *   **对象池优化**: `error_context_t` 的因果链包装使用线程局部对象池，减少高频场景下的堆分配开销。
-*   **完备的测试**: 深度集成 GoogleTest，16 个测试文件 238 个用例覆盖所有核心模块，确保逻辑坚如磐石。
+*   **完备的测试**: 深度集成 GoogleTest，16 个测试文件 247 个用例覆盖所有核心模块，确保逻辑坚如磐石。
 
 ---
 
@@ -143,11 +143,11 @@ const char* desc = ctx.what();
 // 输出完整错误信息（含堆栈和负载）
 std::cout << ctx.to_string() << "\n";
 
-// 序列化为 JSON（便于网络传输或日志存储）
+// 序列化为 JSON（便于网络传输或日志存储，含因果链）
 std::string json = ctx.to_json();
 // {"code":...,"message":"数据库连接失败: timeout","payload":{"host":"192.168.1.100",...}}
 
-// 序列化为二进制（高效紧凑）
+// 序列化为二进制（高效紧凑，含因果链）
 std::string binary = ctx.to_binary();
 
 // 比较两个错误上下文
@@ -158,7 +158,7 @@ if (ctx1 == ctx2) {
 
 ### 4. 使用 result_t 进行错误传递
 
-`result_t<T>` 提供类似 Rust Result 的类型安全错误处理，无需异常：
+`result_t<T>` 提供类似 Rust Result 的类型安全错误处理，零异常：
 
 ```cpp
 #include "error_system/core/result.h"
@@ -181,6 +181,17 @@ if (result) {  // operator bool: 成功为 true
 } else {
     std::cerr << result.error().to_string() << "\n";
 }
+
+// expect(): 断言成功，Debug 下失败会触发断言，Release 返回哨兵值
+int value = result.expect("divide should never fail here");
+
+// value_pointer(): 安全获取成功值指针（失败返回 nullptr）
+if (auto* ptr = result.value_pointer()) {
+    // 安全使用 *ptr
+}
+
+// value(): 获取成功值（失败返回 T{} 哨兵，要求 T 可默认构造）
+int v = result.value();  // 失败时返回 0
 
 // map() 转换成功值类型，错误保持不变
 auto str_result = divide(100, 3)
@@ -358,7 +369,7 @@ error_context_t ctx{db_error_code, "连接超时"};  // 触发数据库域处理
 │  ├── error_level_t   (错误等级枚举)                          │
 │  ├── error_context_t (错误上下文：码+消息+因果链+多类型负载) │
 │  ├── error_registry_t(错误码注册表：按子系统查询、按名查找)  │
-│  ├── result_t<T>     (make_error/map/map_error/operator bool) │
+│  ├── result_t<T>     (make_error/map/map_error/expect/operator bool) │
 │  └── error_exception_t (异常封装)                            │
 ├─────────────────────────────────────────────────────────────┤
 │  Domain Layer                                                │
@@ -479,13 +490,13 @@ ctest --output-on-failure
 
 | 模块 | 测试文件数 | 测试用例数 |
 |------|-----------|-----------|
-| Core 层 | 7 | 85+ |
+| Core 层 | 7 | 100+ |
 | Plugin 层 | 2 | 20 |
 | Memory 层 | 1 | 10 |
 | Utils 层 | 4 | 37+ |
 | Config 层 | 1 | 11 |
 | Domain 层 | 1 | 3 |
-| **总计** | **16** | **238** |
+| **总计** | **16** | **247** |
 
 > 注：测试发现超时已调整为 30 秒（`DISCOVERY_TIMEOUT 30`），确保在复杂环境下测试稳定运行。
 
