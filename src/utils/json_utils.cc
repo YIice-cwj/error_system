@@ -4,7 +4,7 @@
 
 namespace error_system::utils {
     namespace {
-        using namespace detail;
+        using json_lexer_t = detail::json_lexer_t;
         /**
          * @brief 解析状态枚举
          * @details 定义JSON解析器的解析状态，用于标识当前解析位置

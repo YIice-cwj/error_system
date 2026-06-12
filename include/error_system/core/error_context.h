@@ -1,6 +1,5 @@
 #pragma once
 #include "error_system/config/error_config.h"
-#include "error_system/core/error_builder.h"
 #include "error_system/core/error_code.h"
 #include "error_system/core/error_level.h"
 #include "error_system/core/error_registry.h"
@@ -46,7 +45,7 @@ namespace error_system::core {
      * @details 封装完整的错误上下文信息，提供字段解析、序列化和因果链包装功能。
      *          构造时自动根据全局配置完成：错误码校验、堆栈捕获、源位置记录和插件通知。
      *
-     * @note 构造成功码（sign=0）的上下文时，跳过所有运行时特性以提升性能。
+     * @note 构造成功码（sign=1）的上下文时，跳过所有运行时特性以提升性能。
      *
      * @example 基础用法
      * error_context_t ctx(ERR_DB_TIMEOUT, "连接超时: {}ms", 3000);
@@ -115,7 +114,7 @@ namespace error_system::core {
          *          1. 格式化消息字符串
          *          2. 捕获源位置（文件名、函数名、行号），由 source_location_t::current() 提供
          *          3. 根据全局配置校验错误码、抓取堆栈、通知插件
-         *          若错误码 sign=0（成功），则跳过步骤 3
+         *          若错误码 sign=1（成功），则跳过步骤 3
          * @param code 错误码
          * @param message_format 错误信息格式化字符串（支持 {} 占位符）
          * @param args 格式化参数列表
@@ -143,13 +142,13 @@ namespace error_system::core {
 
         /**
          * @brief 检查错误上下文是否表示成功
-         * @return bool 若 sign 位为 0（成功码）则返回 true
+         * @return bool 若 sign 位为 1（成功码）则返回 true
          */
         bool is_success() const noexcept;
 
         /**
          * @brief 检查错误上下文是否包含错误
-         * @return bool 若 sign 位为 1（错误码）则返回 true
+         * @return bool 若 sign 位为 0（错误码）则返回 true
          */
         bool is_error() const noexcept;
 

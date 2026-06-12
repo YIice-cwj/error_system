@@ -1,7 +1,7 @@
 #include "error_system/core/error_context.h"
 #include "error_system/plugin/plugin_registry.h"
 
-using namespace error_system::config;
+using error_system::config::error_config_t;
 
 /**
  * @file error_context.h
@@ -326,7 +326,7 @@ namespace error_system::core {
 
         append_separator();
         json.append("\"code\":");
-        append_decimal(json, code.get_code());
+        append_decimal(json, code.get_identity_code());
         json.append(",\"message\":");
         append_escaped_json_string(json, message);
 
@@ -401,6 +401,14 @@ namespace error_system::core {
         for (const auto& [key, value] : payload) {
             write_string(key);
             write_string(value);
+        }
+
+        if (cause) {
+            buf.push_back(1);
+            std::string cause_binary = cause->to_binary();
+            write_string(cause_binary);
+        } else {
+            buf.push_back(0);
         }
 
         return buf;
