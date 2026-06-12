@@ -1,4 +1,5 @@
 #include "error_system/plugin/plugin_registry.h"
+#include "error_system/config/error_config.h"
 
 namespace error_system::plugin {
 
@@ -39,6 +40,7 @@ namespace error_system::plugin {
 
     /**
      * @brief 通知所有插件发生了错误事件
+     * @details 仅通知 min_level() <= context.code.get_level() 的插件
      */
     void plugin_registry_t::notify_error(const core::error_context_t& context) noexcept {
         std::vector<i_error_plugin_t*> snapshot;
@@ -47,7 +49,11 @@ namespace error_system::plugin {
             std::shared_lock<std::shared_mutex> lock(plugins_mutex_);
             snapshot = plugins_;
         }
+        const auto ctx_level = context.code.get_level();
         for (auto* registered_plugin : snapshot) {
+            if (ctx_level < registered_plugin->min_level()) {
+                continue;  // 插件不关心此级别
+            }
             try {
                 registered_plugin->on_error(context);
             } catch (...) {
@@ -93,7 +99,8 @@ namespace error_system::plugin {
     /**
      * @brief 异步入队错误通知
      * @details 将 error_context_t 复制到 shared_ptr 后推入队列，
-     *          首次调用时自动启动后台工作线程
+     *          首次调用时自动启动后台工作线程。
+     *          若配置了 max_queue_size 且队列已满，新通知将被丢弃。
      */
     void plugin_registry_t::enqueue_notification(const core::error_context_t& context) noexcept {
         if (!worker_running_.load(std::memory_order_acquire)) {
@@ -102,6 +109,10 @@ namespace error_system::plugin {
         auto copy = std::make_shared<core::error_context_t>(context);
         {
             std::lock_guard<std::mutex> lock(queue_mutex_);
+            const size_t max_size = config::error_config_t::get_max_queue_size();
+            if (max_size > 0 && async_queue_.size() >= max_size) {
+                return;  // 队列已满，丢弃通知
+            }
             async_queue_.push(std::move(copy));
         }
         queue_cv_.notify_one();
