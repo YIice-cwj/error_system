@@ -26,10 +26,10 @@
 *   **现代 C++17**: 大量使用 `constexpr`，支持编译期错误码构建，提供极致性能。
 *   **零开销位移封装**: 采用明确的位移和掩码操作实现 64 位错误码字段拆解，100% 避免严格别名规则与位域排布未定义行为。
 *   **丰富的错误上下文**: 统一的 64 位错误码结构，包含了等级（Level）、系统域（Domain）、子系统（Subsystem）、模块（Module）和错误编号（Number），轻松实现问题的快速定位。
-*   **结构化负载 (Payload)**: `error_context_t::with()` 支持 int、bool、double 等多类型值，方便附加任意调试信息。
+*   **结构化负载 (Payload)**: `error_context_t::with()` 支持 int、bool、double 等多类型值；`with_batch()` 支持批量添加。方便附加任意调试信息。
 *   **自动堆栈跟踪 + Per-Code 覆盖**: 可配置的全局错误等级阈值，支持按错误码粒度覆盖堆栈触发策略。
 *   **源位置追踪**: 自动记录错误发生的文件名、函数名和行号，支持完整路径或短文件名模式。
-*   **插件系统 (Plugin)**: 支持同步/异步通知模式，异步模式通过后台工作线程解耦插件 I/O。
+*   **插件系统 (Plugin)**: 支持同步/异步通知模式，插件级别过滤，异步队列背压控制，解耦插件 I/O。
 *   **代码生成工具**: 提供 Python 脚本从 JSON 配置自动生成错误码定义头文件，含 ID 冲突检测。
 *   **对象池优化**: `error_context_t` 的因果链包装使用线程局部对象池，减少高频场景下的堆分配开销。
 *   **完备的测试**: 深度集成 GoogleTest，16 个测试文件 238 个用例覆盖所有核心模块，确保逻辑坚如磐石。
@@ -42,7 +42,7 @@
 
 | 位区间 (Bits) | 长度 (Bits) | 字段名 (Field) | 描述 (Description) |
 | :--- | :--- | :--- | :--- |
-| `63` | 1 | `sign` | 符号位（0=成功，1=错误） |
+| `63` | 1 | `sign` | 符号位（0=失败/错误，1=成功） |
 | `60-62` | 3 | `reserved` | 预留位，供未来扩展使用 |
 | `56-59` | 4 | `level` | 错误等级（如 debug, info, warn, error, fatal） |
 | `48-55` | 8 | `system` | 系统域（区分 none, system, middleware, database, application, third_party 等） |
@@ -58,10 +58,10 @@
 
 ### 1. 构建错误码
 
-系统提供了 `error_builder_t` 作为工厂类来构建错误码：
+使用 `error_code_t` 便捷构造函数直接构建：
 
 ```cpp
-#include "error_system/core/error_builder.h"
+#include "error_system/core/error_code.h"
 #include "error_system/core/error_level.h"
 #include "error_system/domain/system_domain.h"
 
@@ -76,6 +76,19 @@ constexpr auto db_err = error_code_t(
     200,                       // 模块ID
     404                        // 错误编号
 );
+```
+
+如需编译期类型安全，可使用 `error_builder_t` 枚举模板版本：
+
+```cpp
+#include "error_system/core/error_builder.h"
+
+enum class subsys_t : uint16_t { payment = 100 };
+enum class module_t : uint16_t { db = 200 };
+
+constexpr auto safe_err = error_builder_t::make_error_code(
+    error_level_t::fatal, system_domain_t::database,
+    subsys_t::payment, module_t::db, 404);
 ```
 
 ### 2. 解析错误码
@@ -158,11 +171,15 @@ result_t<int> divide(int a, int b) {
 
 // 使用
 auto result = divide(10, 0);
-if (result.is_error()) {
-    std::cerr << result.error().to_string() << "\n";
-} else {
+if (result) {  // operator bool: 成功为 true
     std::cout << "结果: " << result.value() << "\n";
+} else {
+    std::cerr << result.error().to_string() << "\n";
 }
+
+// map() 转换成功值类型，错误保持不变
+auto str_result = divide(100, 3)
+    .map([](int v) { return std::to_string(v); });
 ```
 
 ### 5. 使用异常传递错误 (error_exception_t)
@@ -175,7 +192,7 @@ if (result.is_error()) {
 using namespace error_system::core;
 
 void may_throw() {
-    auto code = error_builder_t::make_error_code(
+    auto code = error_code_t(
         error_level_t::error, domain::system_domain_t::application, 0, 0, 2);
     error_context_t ctx(code, "操作失败");
     throw error_exception_t(std::move(ctx));
@@ -336,7 +353,7 @@ error_context_t ctx{db_error_code, "连接超时"};  // 触发数据库域处理
 │  ├── error_level_t   (错误等级枚举)                          │
 │  ├── error_context_t (错误上下文：码+消息+因果链+多类型负载) │
 │  ├── error_registry_t(错误码注册表：按子系统查询、按名查找)  │
-│  ├── result_t<T>     (类Rust Result，含 make_error() 工厂)    │
+│  ├── result_t<T>     (make_error/map/map_error/operator bool) │
 │  └── error_exception_t (异常封装)                            │
 ├─────────────────────────────────────────────────────────────┤
 │  Domain Layer                                                │
