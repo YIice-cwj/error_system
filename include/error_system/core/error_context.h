@@ -216,6 +216,23 @@ namespace error_system::core {
         error_context_t& with_batch(std::initializer_list<std::pair<const std::string, std::string>> items) noexcept;
 
         /**
+         * @brief 相等比较运算符
+         * @details 比较错误码、消息和负载是否完全一致
+         * @param other 另一个错误上下文
+         * @return bool 是否相等
+         */
+        bool operator==(const error_context_t& other) const noexcept {
+            return code.get_code() == other.code.get_code() && message == other.message && payload == other.payload;
+        }
+
+        /**
+         * @brief 不等比较运算符
+         * @param other 另一个错误上下文
+         * @return bool 是否不等
+         */
+        bool operator!=(const error_context_t& other) const noexcept { return !(*this == other); }
+
+        /**
          * @brief 添加多类型负载字段（模板版本）
          * @details 根据 T 的类型自动选择转换方式：
          *          - bool → "true"/"false"
