@@ -177,4 +177,44 @@ namespace error_system::core {
         EXPECT_EQ(result.error().message, "from context");
     }
 
+    // ========== expect() 测试 ==========
+
+    TEST_F(result_test, expect_on_success_returns_value) {
+        result_t<int> result(42);
+        EXPECT_EQ(result.expect("should not fail"), 42);
+    }
+
+    TEST_F(result_test, void_expect_on_success_no_op) {
+        result_t<void> result;
+        EXPECT_TRUE(result.is_success());
+        result.expect("void should be success");
+        EXPECT_TRUE(result.is_success());
+    }
+
+    TEST_F(result_test, expect_with_string_value) {
+        result_t<std::string> result(std::string("hello"));
+        EXPECT_EQ(result.expect("should be hello"), "hello");
+    }
+
+    // ========== value()/error() 哨兵测试（零异常保证） ==========
+
+    TEST_F(result_test, value_on_error_returns_sentinel_not_throw) {
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
+        error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
+
+        error_context_t ctx(code, "error");
+        result_t<int> result(ctx);
+        EXPECT_TRUE(result.is_error());
+        // 不应抛异常，返回 {0}
+        EXPECT_EQ(result.value(), 0);
+    }
+
+    TEST_F(result_test, error_on_success_returns_sentinel_not_throw) {
+        result_t<int> result(42);
+        EXPECT_TRUE(result.is_success());
+        // 不应抛异常，返回哨兵 error_context_t（is_error() == false）
+        const auto& err = result.error();
+        EXPECT_FALSE(err.is_error());
+    }
+
 }  // namespace error_system::core

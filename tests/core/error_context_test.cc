@@ -112,4 +112,31 @@ namespace error_system::core {
         EXPECT_NE(json.find("\"message\":\"serialize me\""), std::string::npos);
         EXPECT_NE(json.find("\"user\":\"alice\""), std::string::npos);
     }
+
+    // ========== to_binary() 因果链测试 ==========
+
+    TEST_F(error_context_test, to_binary_includes_cause_chain) {
+        error_context_t cause_ctx(registered_code_, "root cause");
+        error_context_t ctx(registered_code_, "wrapper error");
+        ctx.wrap(cause_ctx);
+
+        std::string binary_with_cause = ctx.to_binary();
+
+        // 不带 cause 的二进制应小于带 cause 的
+        error_context_t ctx_no_cause(registered_code_, "no cause");
+        std::string binary_no_cause = ctx_no_cause.to_binary();
+
+        EXPECT_GT(binary_with_cause.size(), binary_no_cause.size());
+    }
+
+    TEST_F(error_context_test, to_binary_without_cause_has_zero_flag) {
+        error_context_t ctx(registered_code_, "no cause");
+
+        std::string binary = ctx.to_binary();
+        EXPECT_GT(binary.size(), 0);
+
+        // 无 cause 时最后 1 字节为 has_cause 标志，值为 0
+        EXPECT_EQ(static_cast<uint8_t>(binary.back()), 0x00);
+    }
+
 }  // namespace error_system::core

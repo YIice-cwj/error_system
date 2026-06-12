@@ -83,6 +83,44 @@ namespace error_system::core {
         EXPECT_FALSE(error_registry_t::instance().is_registered(code2));
     }
 
+    TEST_F(error_registry_test, unregister_module_clears_subsystem_index) {
+        auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code2 = error_code_t(error_level_t::warn, domain::system_domain_t::database, 1, 1, 2);
+
+        error_registry_t::instance().register_error(code1, "ERR_1", "Error 1");
+        error_registry_t::instance().register_error(code2, "ERR_2", "Error 2");
+
+        // 注销前子系统 1 应有 2 个错误码
+        auto errors = error_registry_t::instance().get_errors_by_subsystem(1);
+        EXPECT_EQ(errors.size(), 2);
+
+        // 注销整个模块组
+        error_registry_t::instance().unregister_module(code1.get_module_group_id());
+
+        // 子系统 1 应变为空
+        auto errors_after = error_registry_t::instance().get_errors_by_subsystem(1);
+        EXPECT_TRUE(errors_after.empty());
+    }
+
+    TEST_F(error_registry_test, get_errors_by_subsystem_after_unregister_error) {
+        auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code2 = error_code_t(error_level_t::warn, domain::system_domain_t::database, 1, 1, 2);
+
+        error_registry_t::instance().register_error(code1, "ERR_1", "Error 1");
+        error_registry_t::instance().register_error(code2, "ERR_2", "Error 2");
+
+        // 只注销一个错误码，子系统索引仍保留
+        error_registry_t::instance().unregister_error(code1);
+        auto errors = error_registry_t::instance().get_errors_by_subsystem(1);
+        EXPECT_EQ(errors.size(), 1);
+        EXPECT_EQ(errors[0].get().name, "ERR_2");
+
+        // 注销最后一个错误码，子系统索引应清空
+        error_registry_t::instance().unregister_error(code2);
+        auto errors_after = error_registry_t::instance().get_errors_by_subsystem(1);
+        EXPECT_TRUE(errors_after.empty());
+    }
+
     TEST_F(error_registry_test, get_info_returns_nullptr_for_unregistered) {
         auto code =
             error_code_t(error_level_t::error, domain::system_domain_t::database, 99, 99, 99);
@@ -295,8 +333,8 @@ namespace error_system::core {
     TEST_F(error_registry_test, duplicate_warn_callback_can_be_set_and_get) {
         auto& registry = error_registry_t::instance();
 
-        // 默认应该有回调
-        EXPECT_TRUE(registry.get_duplicate_warn_callback());
+        // 默认无回调（nullptr）
+        EXPECT_FALSE(registry.get_duplicate_warn_callback());
 
         // 设置为 nullptr
         registry.set_duplicate_warn_callback(nullptr);
