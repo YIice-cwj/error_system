@@ -1,5 +1,4 @@
 #include "error_system/config/error_config.h"
-#include "error_system/core/error_builder.h"
 #include "error_system/core/error_context.h"
 #include "error_system/core/error_registry.h"
 #include "error_system/plugin/plugin_registry.h"
@@ -9,7 +8,7 @@
 namespace error_system::core {
     namespace {
         error_code_t make_code(uint16_t number) noexcept {
-            return error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::database, 9, 9, number);
+            return error_code_t(error_level_t::error, domain::system_domain_t::database, 9, 9, number);
         }
     }  // namespace
 

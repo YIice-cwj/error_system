@@ -1,4 +1,3 @@
-#include "error_system/core/error_builder.h"
 #include "error_system/core/error_exception.h"
 #include "error_system/core/error_registry.h"
 #include <gtest/gtest.h>
@@ -13,7 +12,7 @@ namespace error_system::core {
     };
 
     TEST_F(error_exception_test, exception_stores_context) {
-        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::none, 0, 0, 42);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 42);
         error_registry_t::instance().register_error(code, "ERR_42", "Test error 42");
 
         error_context_t ctx(code, "test message");
@@ -23,7 +22,7 @@ namespace error_system::core {
     }
 
     TEST_F(error_exception_test, exception_inherits_from_std_exception) {
-        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
         error_context_t ctx(code, "error");
@@ -35,7 +34,7 @@ namespace error_system::core {
     }
 
     TEST_F(error_exception_test, context_returns_original_context) {
-        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::none, 0, 0, 100);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 100);
         error_registry_t::instance().register_error(code, "ERR_100", "Error 100");
 
         error_context_t ctx(code, "original");
@@ -46,7 +45,7 @@ namespace error_system::core {
     }
 
     TEST_F(error_exception_test, move_context_into_exception) {
-        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::none, 0, 0, 200);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 200);
         error_registry_t::instance().register_error(code, "ERR_200", "Error 200");
 
         error_context_t ctx(code, "moved");

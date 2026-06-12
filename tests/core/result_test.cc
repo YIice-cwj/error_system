@@ -1,4 +1,3 @@
-#include "error_system/core/error_builder.h"
 #include "error_system/core/error_registry.h"
 #include "error_system/core/result.h"
 #include <gtest/gtest.h>
@@ -20,7 +19,7 @@ namespace error_system::core {
     }
 
     TEST_F(result_test, error_result_with_context) {
-        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
         error_registry_t::instance().register_error(code, "ERR_1", "Test error 1");
 
         error_context_t ctx(code, "test error");
@@ -31,7 +30,7 @@ namespace error_system::core {
     }
 
     TEST_F(result_test, error_result_with_code_and_message) {
-        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::none, 0, 0, 100);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 100);
         error_registry_t::instance().register_error(code, "ERR_100", "Error 100");
 
         error_context_t ctx(code, "error message");
@@ -53,7 +52,7 @@ namespace error_system::core {
     }
 
     TEST_F(result_test, and_then_preserves_error) {
-        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
         error_context_t ctx(code, "error");
@@ -68,7 +67,7 @@ namespace error_system::core {
     }
 
     TEST_F(result_test, or_else_handles_error) {
-        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
         error_context_t ctx(code, "error");
@@ -98,7 +97,7 @@ namespace error_system::core {
     }
 
     TEST_F(result_test, void_error_result) {
-        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
         error_context_t ctx(code, "error");
@@ -119,7 +118,7 @@ namespace error_system::core {
     }
 
     TEST_F(result_test, void_or_else_handles_error) {
-        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
         error_context_t ctx(code, "error");
@@ -137,7 +136,7 @@ namespace error_system::core {
     }
 
     TEST_F(result_test, lvalue_or_else_works) {
-        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
         error_context_t ctx(code, "error");
@@ -148,7 +147,7 @@ namespace error_system::core {
     }
 
     TEST_F(result_test, make_error_with_code_and_message) {
-        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
         auto result = result_t<int>::make_error(code, "factory error");
@@ -158,7 +157,7 @@ namespace error_system::core {
     }
 
     TEST_F(result_test, make_error_with_code_only) {
-        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
         auto result = result_t<int>::make_error(code);
@@ -168,7 +167,7 @@ namespace error_system::core {
     }
 
     TEST_F(result_test, make_error_from_context) {
-        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
         error_context_t ctx(code, "from context");

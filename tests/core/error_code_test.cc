@@ -1,4 +1,3 @@
-#include "error_system/core/error_builder.h"
 #include "error_system/core/error_code.h"
 #include <gtest/gtest.h>
 
@@ -8,8 +7,8 @@ namespace error_system::core {
 
     TEST_F(error_code_test, default_constructor_creates_success_code) {
         error_code_t code;
-        EXPECT_EQ(code.get_code(), 0ULL);
-        EXPECT_EQ(code.get_sign(), 0);
+        EXPECT_EQ(code.get_code(), 0x8000000000000000ULL);
+        EXPECT_EQ(code.get_sign(), 1);  // sign=1 = true = 成功
         EXPECT_EQ(code.get_level(), error_level_t::debug);
         EXPECT_EQ(code.get_system(), domain::system_domain_t::none);
         EXPECT_EQ(code.get_subsys(), 0);
@@ -30,7 +29,7 @@ namespace error_system::core {
     }
 
     TEST_F(error_code_test, get_module_group_id_extracts_correct_bits) {
-        auto code = error_builder_t::make_error_code(error_level_t::error, domain::system_domain_t::system, 2, 3, 4);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::system, 2, 3, 4);
         auto group_id = code.get_module_group_id();
         EXPECT_NE(group_id, 0ULL);
         EXPECT_EQ(group_id & 0xFFFFULL, 0ULL);
@@ -62,19 +61,12 @@ namespace error_system::core {
             0x0506   // number
         );
 
-        EXPECT_EQ(code.get_sign(), 1);  // always 1 for error
+        EXPECT_EQ(code.get_sign(), 0);  // sign=0 = false = 错误
         EXPECT_EQ(code.get_level(), error_level_t::error);
         EXPECT_EQ(code.get_system(), domain::system_domain_t::database);
         EXPECT_EQ(code.get_subsys(), 0x0102);
         EXPECT_EQ(code.get_module(), 0x0304);
         EXPECT_EQ(code.get_number(), 0x0506);
-
-        // 对比 error_builder_t 结果是否一致
-        const auto builder_code = error_builder_t::make_error_code(
-            error_level_t::error,
-            domain::system_domain_t::database,
-            0x0102, 0x0304, 0x0506);
-        EXPECT_EQ(code.get_code(), builder_code.get_code());
     }
 
     TEST_F(error_code_test, constexpr_five_parameter_constructor) {
