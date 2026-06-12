@@ -53,8 +53,9 @@ namespace error_system::core {
         public:
         /**
          * @brief 默认构造函数
+         * @details 默认构造为成功码（sign=1），所有字段为 0
          */
-        constexpr error_code_t() noexcept = default;
+        constexpr error_code_t() noexcept : code_(1ULL << SIGN_SHIFT) {}
 
         /**
          * @brief 使用原始错误码构造
@@ -63,9 +64,9 @@ namespace error_system::core {
         constexpr explicit error_code_t(code_t code) noexcept : code_(code) {}
 
         /**
-         * @brief 便捷构造函数（通过位域值构造完整错误码）
+         * @brief 便捷构造函数（通过位域值构造错误码，sign=0 表示错误）
          * @details 直接传入 level、system、subsys、module、number 五个段，内部通过位运算组装。
-         *          替代 error_builder_t::make_error_code()，减少中间层调用。
+         *          sign 位默认为 0（false = 错误），符合计算机 0=false/1=true 语义。
          * @param level 错误等级 (bits 59-56)
          * @param system 系统域 (bits 55-48)
          * @param subsys 子系统 ID (bits 47-32)
@@ -73,13 +74,11 @@ namespace error_system::core {
          * @param number 错误编号 (bits 15-0)
          *
          * @example
-         * // 替代 error_builder_t::make_error_code(...)
          * error_code_t code(error_level_t::error, system_domain_t::database, 1, 2, 0x0010);
          */
         constexpr error_code_t(error_level_t level, domain::system_domain_t system,
                                uint16_t subsys, uint16_t module, uint16_t number) noexcept
-            : code_((1ULL << SIGN_SHIFT)  // sign = 1 (错误)
-                    | (static_cast<code_t>(level) << LEVEL_SHIFT)
+            : code_((static_cast<code_t>(level) << LEVEL_SHIFT)
                     | (static_cast<code_t>(system) << SYSTEM_SHIFT)
                     | (static_cast<code_t>(subsys) << SUBSYS_SHIFT)
                     | (static_cast<code_t>(module) << MODULE_SHIFT)
@@ -93,13 +92,13 @@ namespace error_system::core {
 
         /**
          * @brief 获取符号位
-         * @return uint8_t 符号位 (bit 63)
+         * @return uint8_t 符号位 (bit 63)，0 = 错误(false)，1 = 成功(true)
          */
         constexpr uint8_t get_sign() const noexcept { return static_cast<uint8_t>((code_ >> SIGN_SHIFT) & SIGN_MASK); }
 
         /**
          * @brief 设置符号位
-         * @param sign 符号位值 (0 表示成功，1 表示错误)
+         * @param sign 符号位值 (0 = 错误，1 = 成功)
          */
         constexpr void set_sign(uint8_t sign) noexcept {
             code_ = (code_ & ~SIGN_MASK) | (static_cast<code_t>(sign) << SIGN_SHIFT);

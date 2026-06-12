@@ -129,7 +129,8 @@ namespace error_system::core {
 
         payload.insert_or_assign("illegal_raw_code", std::to_string(code.get_code()));
         message.insert(0, "[UNREGISTERED CODE] ");
-        code = error_builder_t::make_error_code(error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFF);
+        code = error_code_t(error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFF);
+        metadata_ = error_registry_t::instance().get_info(code);  // 同步更新缓存
     }
 
     void error_context_t::fill_stacktrace() noexcept {
@@ -150,11 +151,11 @@ namespace error_system::core {
     }
 
     bool error_context_t::is_error() const noexcept {
-        return code.get_sign();
+        return !code.get_sign();  // sign=0 = false = 错误
     }
 
     bool error_context_t::is_success() const noexcept {
-        return !code.get_sign();
+        return code.get_sign();  // sign=1 = true = 成功
     }
 
     error_context_t error_context_t::wrap(const error_context_t& underlying) const noexcept {
@@ -212,13 +213,21 @@ namespace error_system::core {
         return *this;
     }
 
+    error_context_t& error_context_t::with_batch(
+        std::initializer_list<std::pair<const std::string, std::string>> items) noexcept {
+        for (const auto& [key, value] : items) {
+            payload.insert_or_assign(key, value);
+        }
+        return *this;
+    }
+
     std::string error_context_t::to_string() const noexcept {
         if (const auto& formatter = error_config_t::get_custom_formatter()) {
             return formatter(*this);
         }
 
         auto& registry = error_system::core::error_registry_t::instance();
-        const error_metadata_t* info = registry.get_info(code);
+        const error_metadata_t* info = metadata_;  // 使用构造时缓存的元数据，避免重复加锁查询
         const std::string& desc = info ? info->description : "未注册的未知错误";
         const std::string& name = info ? info->name : "UNKNOWN_ERR_CODE";
 
