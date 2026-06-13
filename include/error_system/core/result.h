@@ -104,6 +104,7 @@ namespace error_system::core {
          * @return const error_context_t& 错误上下文
          */
         const error_context_t& error() const noexcept {
+            assert(is_error() && "result_t::error() called on a success result");
             auto* ptr = std::get_if<error_context_t>(&value_or_error_);
             if (ptr) {
                 return *ptr;
@@ -123,6 +124,7 @@ namespace error_system::core {
             static_assert(std::is_default_constructible_v<value_type>,
                           "result_t::value() requires T to be default-constructible. "
                           "Use value_pointer() for non-default-constructible types.");
+            assert(is_success() && "result_t::value() called on an error result");
             auto* ptr = std::get_if<value_type>(&value_or_error_);
             if (ptr) {
                 return *ptr;
@@ -141,6 +143,7 @@ namespace error_system::core {
             static_assert(std::is_default_constructible_v<value_type>,
                           "result_t::value() requires T to be default-constructible. "
                           "Use value_pointer() for non-default-constructible types.");
+            assert(is_success() && "result_t::value() called on an error result");
             auto* ptr = std::get_if<value_type>(&value_or_error_);
             if (ptr) {
                 return *ptr;
