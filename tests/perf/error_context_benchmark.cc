@@ -41,7 +41,7 @@ std::size_t run_loop(int iterations) noexcept {
     for (int i = 0; i < iterations; ++i) {
         error_context_t context({code}, "benchmark {}", i);
         checksum += context.message.size();
-        checksum += static_cast<std::size_t>(context.code.get_number());
+        checksum += static_cast<std::size_t>(context.get_code().get_number());
     }
     return checksum;
 }

@@ -41,7 +41,7 @@ namespace error_system::core {
         error_exception_t ex(ctx);
 
         const auto& retrieved = ex.context();
-        EXPECT_EQ(retrieved.code.get_code(), code.get_code());
+        EXPECT_EQ(retrieved.get_code().get_code(), code.get_code());
     }
 
     TEST_F(error_exception_test, move_context_into_exception) {

@@ -28,7 +28,12 @@ namespace error_system::plugin {
 
     class plugin_registry_test : public ::testing::Test {
         protected:
-        void SetUp() override { plugin_registry_t::instance().clear(); }
+        void SetUp() override {
+            plugin_registry_t::instance().clear();
+            // 注册测试用错误码，防止 fill_validation_fields 替换为哨兵值
+            error_system::core::error_registry_t::instance().register_error(
+                error_system::core::error_code_t(42), "TEST_CODE_42", "test");
+        }
 
         void TearDown() override { plugin_registry_t::instance().clear(); }
     };
@@ -113,13 +118,11 @@ namespace error_system::plugin {
         mock_plugin_t plugin("test");
         plugin_registry_t::instance().register_plugin(&plugin);
 
-        // Create context with code 0 to avoid auto-notification
-        core::error_context_t ctx;
-        ctx.code = core::error_code_t(42);
-        ctx.message = "test message";
+        // Create context with code 42 and test message
+        core::error_context_t ctx(core::error_code_t(42), "test message");
         plugin_registry_t::instance().notify_error(ctx);
 
-        EXPECT_EQ(plugin.last_context_->code.get_code(), 42ULL);
+        EXPECT_EQ(plugin.last_context_->get_code().get_code(), 42ULL);
     }
 
     TEST_F(plugin_registry_test, concurrent_register_and_notify) {
@@ -132,8 +135,7 @@ namespace error_system::plugin {
         for (int i = 0; i < 10; ++i) {
             threads.emplace_back([&]() {
                 for (int j = 0; j < 100; ++j) {
-                    core::error_context_t ctx;
-                    ctx.code = core::error_code_t(42);
+                    core::error_context_t ctx(core::error_code_t(42));
                     plugin_registry_t::instance().notify_error(ctx);
                     notify_count.fetch_add(1);
                 }
@@ -183,9 +185,7 @@ namespace error_system::plugin {
         std::thread notifier([&]() {
             notification_started.store(true);
             for (int i = 0; i < 2000; ++i) {
-                core::error_context_t ctx;
-                ctx.code = core::error_code_t(42);
-                ctx.message = "stress";
+                core::error_context_t ctx(core::error_code_t(42), "stress");
                 plugin_registry_t::instance().notify_error(ctx);
             }
         });
@@ -226,8 +226,7 @@ namespace error_system::plugin {
 
         std::thread notifier([&]() {
             for (int i = 0; i < 30; ++i) {
-                core::error_context_t ctx;
-                ctx.code = core::error_code_t(42);
+                core::error_context_t ctx(core::error_code_t(42));
                 plugin_registry_t::instance().notify_error(ctx);
             }
         });
