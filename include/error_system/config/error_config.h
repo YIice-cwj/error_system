@@ -1,13 +1,11 @@
 #pragma once
 #include "error_system/core/error_level.h"
 #include <atomic>
-// IWYU pragma: begin_exports
 #include <functional>
 #include <mutex>
-#include <string>
-// IWYU pragma: end_exports
-#include <optional>
 #include <shared_mutex>
+#include <string>
+#include <optional>
 #include <unordered_map>
 
 /**
@@ -122,12 +120,11 @@ namespace error_system::config {
         }
 
         /**
-         * @brief 获取自定义格式化函数
-         * @details 保护全局配置项并发访问的互斥锁
-         * @return const formatter_callback_t& 自定义格式化函数引用
-         * @note 调用方需在持有锁期间使用返回值
+         * @brief 获取自定义格式化函数副本
+         * @details 返回格式化函数的线程安全拷贝，调用方无需持有锁即可安全调用
+         * @return formatter_callback_t 格式化函数副本
          */
-        static const formatter_callback_t& get_custom_formatter() noexcept {
+        static formatter_callback_t get_custom_formatter() noexcept {
             std::shared_lock<std::shared_mutex> lock(__get_formatter_mutex());
             return __get_custom_formatter();
         }

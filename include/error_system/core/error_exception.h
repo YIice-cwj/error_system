@@ -25,6 +25,14 @@ namespace error_system::core {
         explicit error_exception_t(error_context_t context) noexcept
             : context_(std::move(context)), cached_message_(context_.to_string()) {}
 
+        error_exception_t(const error_exception_t&) = default;
+
+        error_exception_t& operator=(const error_exception_t&) = default;
+
+        error_exception_t(error_exception_t&&) = delete;
+        
+        error_exception_t& operator=(error_exception_t&&) = delete;
+
         /**
          * @brief 实现 std::exception 接口
          * @return const char* 返回完整的错误详情字符串
