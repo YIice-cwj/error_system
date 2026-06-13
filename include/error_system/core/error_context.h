@@ -56,7 +56,15 @@ namespace error_system::core {
     struct error_context_t {
         using object_pool_t = memory::object_pool_t<error_context_t, ERROR_CONTEXT_POOL_SIZE>;
 
-        error_code_t code{};
+        private:
+        error_code_t code_{};
+        /**
+         * @brief 缓存的元数据指针
+         * @details 构造时从 error_registry_t 查询并缓存，避免 to_string/to_json 重复加锁查询
+         */
+        const error_metadata_t* metadata_{nullptr};
+
+        public:
         std::string message{};
         std::unordered_map<std::string, std::string> payload{};
         std::shared_ptr<error_context_t> cause{nullptr};
@@ -74,12 +82,7 @@ namespace error_system::core {
          */
         utils::source_location_t source_location_{};
 #endif
-        private:
-        /**
-         * @brief 缓存的元数据指针
-         * @details 构造时从 error_registry_t 查询并缓存，避免 to_string/to_json 重复加锁查询
-         */
-        const error_metadata_t* metadata_{nullptr};
+
         /**
          * @brief 执行运行时特性初始化
          * @details 根据全局配置依次完成：错误码校验 → 堆栈捕获 → 源位置记录 → 插件通知
@@ -128,9 +131,9 @@ namespace error_system::core {
          */
         template <typename... Args>
         error_context_t(error_code_t code, std::string message_format = "", Args&&... args) noexcept
-            : code(code),
-              message(utils::string_utils_t::format(message_format, std::forward<Args>(args)...)),
-              metadata_(error_registry_t::instance().get_info(code) /* 缓存元数据，避免 to_string 重复查询 */) {
+            : code_(code),
+              metadata_(error_registry_t::instance().get_info(code)),
+              message(utils::string_utils_t::format(message_format, std::forward<Args>(args)...)) {
 #ifdef ERROR_SYSTEM_ENABLE_LOCATION
             source_location_ = utils::source_location_t::current();
 #endif
@@ -139,6 +142,12 @@ namespace error_system::core {
             }
             finalize_runtime_features();
         }
+
+        /**
+         * @brief 获取错误码的只读引用
+         * @return const error_code_t& 错误码只读引用
+         */
+        const error_code_t& get_code() const noexcept { return code_; }
 
         /**
          * @brief 检查错误上下文是否表示成功
@@ -221,7 +230,7 @@ namespace error_system::core {
          * @return bool 是否相等
          */
         bool operator==(const error_context_t& other) const noexcept {
-            return code.get_code() == other.code.get_code() && message == other.message && payload == other.payload;
+            return code_.get_code() == other.code_.get_code() && message == other.message && payload == other.payload;
         }
 
         /**

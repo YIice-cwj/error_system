@@ -40,7 +40,7 @@ namespace error_system::plugin {
 
     /**
      * @brief 通知所有插件发生了错误事件
-     * @details 仅通知 min_level() <= context.code.get_level() 的插件
+     * @details 仅通知 min_level() <= context.get_code().get_level() 的插件
      */
     void plugin_registry_t::notify_error(const core::error_context_t& context) noexcept {
         std::vector<i_error_plugin_t*> snapshot;
@@ -49,10 +49,10 @@ namespace error_system::plugin {
             std::shared_lock<std::shared_mutex> lock(plugins_mutex_);
             snapshot = plugins_;
         }
-        const auto ctx_level = context.code.get_level();
+        const auto ctx_level = context.get_code().get_level();
         for (auto* registered_plugin : snapshot) {
             if (ctx_level < registered_plugin->min_level()) {
-                continue;  // 插件不关心此级别
+                continue;
             }
             try {
                 registered_plugin->on_error(context);

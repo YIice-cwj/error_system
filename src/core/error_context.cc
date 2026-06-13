@@ -87,7 +87,7 @@ namespace error_system::core {
         // 优先使用 per-code 堆栈等级覆盖，否则使用全局配置
         auto stacktrace_level = stacktrace_enabled ? error_config_t::get_stacktrace_level() : error_level_t::warn;
         if (stacktrace_enabled) {
-            const auto per_code_level = error_config_t::get_per_code_stacktrace_level(code.get_identity_code());
+            const auto per_code_level = error_config_t::get_per_code_stacktrace_level(code_.get_identity_code());
             if (per_code_level.has_value()) {
                 stacktrace_level = per_code_level.value();
             }
@@ -103,7 +103,7 @@ namespace error_system::core {
         }
 
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
-        if (stacktrace_enabled && code.get_level() >= stacktrace_level) {
+        if (stacktrace_enabled && code_.get_level() >= stacktrace_level) {
             fill_stacktrace();
         }
 #endif
@@ -123,14 +123,14 @@ namespace error_system::core {
     }
 
     void error_context_t::fill_validation_fields() noexcept {
-        if (error_registry_t::instance().is_registered(code)) {
+        if (error_registry_t::instance().is_registered(code_)) {
             return;
         }
 
-        payload.insert_or_assign("illegal_raw_code", std::to_string(code.get_code()));
+        payload.insert_or_assign("illegal_raw_code", std::to_string(code_.get_code()));
         message.insert(0, "[UNREGISTERED CODE] ");
-        code = error_code_t(error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFF);
-        metadata_ = error_registry_t::instance().get_info(code);  // 同步更新缓存
+        code_ = error_code_t(error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFF);
+        metadata_ = error_registry_t::instance().get_info(code_);  // 同步更新缓存
     }
 
     void error_context_t::fill_stacktrace() noexcept {
@@ -151,11 +151,11 @@ namespace error_system::core {
     }
 
     bool error_context_t::is_error() const noexcept {
-        return !code.get_sign();  // sign=0 = false = 错误
+        return code_.is_error_code(); 
     }
 
     bool error_context_t::is_success() const noexcept {
-        return code.get_sign();  // sign=1 = true = 成功
+        return code_.is_success_code();
     }
 
     error_context_t error_context_t::wrap(const error_context_t& underlying) const noexcept {
@@ -233,15 +233,15 @@ namespace error_system::core {
 
         std::string subsys_module_str;
         if (error_config_t::is_text_output_enabled()) {
-            const auto& sm_info = registry.get_subsystem_module_info(code.get_subsys(), code.get_module());
+            const auto& sm_info = registry.get_subsystem_module_info(code_.get_subsys(), code_.get_module());
             subsys_module_str.reserve(sm_info.subsystem_name.size() + sm_info.module_name.size() + 3);
             subsys_module_str.append(sm_info.subsystem_name).append(" / ").append(sm_info.module_name);
         } else {
             subsys_module_str.reserve(32);
             subsys_module_str.append("SubSys: ");
-            append_decimal(subsys_module_str, code.get_subsys());
+            append_decimal(subsys_module_str, code_.get_subsys());
             subsys_module_str.append(", Module: ");
-            append_decimal(subsys_module_str, code.get_module());
+            append_decimal(subsys_module_str, code_.get_module());
         }
 
         std::string result;
@@ -258,13 +258,13 @@ namespace error_system::core {
         result.append("[Sign: ")
             .append(is_error() ? "Error" : "Success")
             .append(" Level: ")
-            .append(core::to_string(code.get_level()))
+            .append(core::to_string(code_.get_level()))
             .append(", System: ")
-            .append(domain::to_string(code.get_system()))
+            .append(domain::to_string(code_.get_system()))
             .append(", ")
             .append(subsys_module_str)
             .append("] Code: ");
-        append_decimal(result, code.get_number());
+        append_decimal(result, code_.get_number());
         result.append(" (").append(name).append(") - ").append(message).append(": ").append(desc);
 
         if (!payload.empty()) {
@@ -326,7 +326,7 @@ namespace error_system::core {
 
         append_separator();
         json.append("\"code\":");
-        append_decimal(json, code.get_identity_code());
+        append_decimal(json, code_.get_identity_code());
         json.append(",\"message\":");
         append_escaped_json_string(json, message);
 
@@ -378,7 +378,7 @@ namespace error_system::core {
             buf.append(str.data(), len);
         };
 
-        write_little_endian(buf, code.get_code());
+        write_little_endian(buf, code_.get_code());
         write_string(message);
 
 #ifdef ERROR_SYSTEM_ENABLE_LOCATION

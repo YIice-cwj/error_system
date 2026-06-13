@@ -22,12 +22,12 @@ namespace error_system::plugin {
         {
             std::shared_lock<std::shared_mutex> lock(mutex_);
 
-            if (auto it = specific_handlers_.find(context.code.get_code()); it != specific_handlers_.end()) {
+            if (auto it = specific_handlers_.find(context.get_code().get_code()); it != specific_handlers_.end()) {
                 handler = it->second;
-            } else if (auto it = module_group_handlers_.find(context.code.get_module_group_id());
+            } else if (auto it = module_group_handlers_.find(context.get_code().get_module_group_id());
                        it != module_group_handlers_.end()) {
                 handler = it->second;
-            } else if (auto it = domain_handlers_.find(context.code.get_system());
+            } else if (auto it = domain_handlers_.find(context.get_code().get_system());
                        it != domain_handlers_.end()) {
                 handler = it->second;
             }

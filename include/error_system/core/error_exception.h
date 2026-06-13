@@ -41,7 +41,7 @@ namespace error_system::core {
          * @brief 获取原始错误码
          * @return error_code_t 错误码
          */
-        error_code_t code() const noexcept { return context_.code; }
+        error_code_t code() const noexcept { return context_.get_code(); }
     };
 
 }  // namespace error_system::core
