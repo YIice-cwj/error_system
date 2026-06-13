@@ -134,7 +134,7 @@ int main() {
         .map_error([](const error_context_t& ctx) -> error_context_t {
             error_context_t wrapped(biz::trade_errors::ERR_CART_IS_EMPTY, "下游订单服务故障");
             wrapped.with("cause", ctx.message)
-                .with("original_code", std::to_string(ctx.code.get_code()));
+                .with("original_code", std::to_string(ctx.get_code().get_code()));
             return wrapped;
         });
     std::cout << "map_error 包装后: " << result10.error().to_string() << std::endl;

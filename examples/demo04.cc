@@ -64,8 +64,8 @@ int main() {
     } catch (const error_exception_t& e) {
         std::cout << "异常信息:" << std::endl;
         std::cout << "  消息: " << e.context().message << std::endl;
-        std::cout << "  等级: " << static_cast<int>(e.context().code.get_level()) << std::endl;
-        std::cout << "  系统: " << static_cast<int>(e.context().code.get_system()) << std::endl;
+        std::cout << "  等级: " << static_cast<int>(e.context().get_code().get_level()) << std::endl;
+        std::cout << "  系统: " << static_cast<int>(e.context().get_code().get_system()) << std::endl;
         std::cout << "  JSON: " << e.context().to_json() << std::endl;
     }
 

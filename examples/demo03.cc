@@ -20,7 +20,7 @@ public:
     }
 
     void on_error(const error_context_t& ctx) noexcept override {
-        std::cerr << "[LOG] [" << to_string(ctx.code.get_level()) << "] "
+        std::cerr << "[LOG] [" << to_string(ctx.get_code().get_level()) << "] "
                   << ctx.to_string() << std::endl;
     }
 
@@ -44,7 +44,7 @@ public:
     }
 
     void on_error(const error_context_t& ctx) noexcept override {
-        ++counters_[ctx.code.get_code()];
+        ++counters_[ctx.get_code().get_code()];
     }
 
     int count(uint64_t code) const noexcept {
