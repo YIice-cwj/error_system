@@ -91,18 +91,22 @@ namespace error_system::core {
         constexpr code_t get_code() const noexcept { return code_; }
 
         /**
+         * @brief 判断错误码是否表示错误
+         * @return bool sign=0（false）时为错误，sign=1（true）时为成功
+         */
+        constexpr bool is_error_code() const noexcept { return get_sign() == 0; }
+
+        /**
+         * @brief 判断错误码是否表示成功
+         * @return bool sign=1（true）时为成功
+         */
+        constexpr bool is_success_code() const noexcept { return get_sign() == 1; }
+
+        /**
          * @brief 获取符号位
          * @return uint8_t 符号位 (bit 63)，0 = 错误(false)，1 = 成功(true)
          */
         constexpr uint8_t get_sign() const noexcept { return static_cast<uint8_t>((code_ >> SIGN_SHIFT) & SIGN_MASK); }
-
-        /**
-         * @brief 设置符号位
-         * @param sign 符号位值 (0 = 错误，1 = 成功)
-         */
-        constexpr void set_sign(uint8_t sign) noexcept {
-            code_ = (code_ & ~SIGN_MASK) | (static_cast<code_t>(sign) << SIGN_SHIFT);
-        }
 
         /**
          * @brief 获取预留位
@@ -110,6 +114,15 @@ namespace error_system::core {
          */
         constexpr uint8_t get_reserved() const noexcept {
             return static_cast<uint8_t>((code_ >> RESERVED_SHIFT) & RESERVED_MASK);
+        }
+
+        private:
+        /**
+         * @brief 设置符号位
+         * @param sign 符号位值 (0 = 错误，1 = 成功)
+         */
+        constexpr void set_sign(uint8_t sign) noexcept {
+            code_ = (code_ & ~SIGN_MASK) | (static_cast<code_t>(sign) << SIGN_SHIFT);
         }
 
         /**
@@ -120,6 +133,7 @@ namespace error_system::core {
             code_ = (code_ & ~RESERVED_MASK) | (static_cast<code_t>(reserved) << RESERVED_SHIFT);
         }
 
+        public:
         /**
          * @brief 获取错误等级
          * @return error_level_t 错误等级 (bits 59-56)
@@ -161,8 +175,8 @@ namespace error_system::core {
         }
 
         /**
-         * @brief 获取模块的聚合隔离 ID
-         * @details 直接通过位掩码，高8位(Sign+Reserved+Level)和低16位(Number)置零，只保留系统与模块信息
+         * @brief 获取模块组ID（子系统+模块）
+         * @details 直接通过位掩码，高16位(Sign+Reserved+Level+System)和低16位(Number)置零，只保留子系统与模块信息
          * @return uint64_t 模块的聚合隔离 ID
          */
         constexpr module_group_id_t get_module_group_id() const noexcept { return code_ & 0x0000FFFFFFFF0000ULL; }
