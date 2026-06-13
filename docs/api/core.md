@@ -36,6 +36,8 @@ public:
 
     constexpr code_t get_code() const noexcept;
     constexpr uint8_t get_sign() const noexcept;
+    constexpr bool is_error_code() const noexcept;
+    constexpr bool is_success_code() const noexcept;
     constexpr error_level_t get_level() const noexcept;
     constexpr domain::system_domain_t get_system() const noexcept;
     constexpr uint16_t get_subsys() const noexcept;
@@ -126,7 +128,7 @@ public:
 };
 ```
 
-> **注意**: 自 v2.0 起，推荐使用 `error_code_t` 的五参数便捷构造函数作为更简洁的替代。
+> **注意**: v2.2 起标记为兼容层，推荐直接使用 `error_code_t` 五参数构造函数。
 
 ---
 
@@ -140,7 +142,8 @@ public:
 
 ```cpp
 struct error_context_t {
-    error_code_t code{};
+    // error_code_t code_{};  // 私有成员，通过 get_code() 访问
+    const error_code_t& get_code() const noexcept;  // v2.2 只读访问器
     std::string message{};
     std::unordered_map<std::string, std::string> payload{};
     std::shared_ptr<error_context_t> cause{nullptr};
@@ -418,7 +421,7 @@ result_t<void> fail(error_context_t(ERR_FAIL, "失败"));
 
 | 测试文件 | 用例数 | 覆盖内容 |
 |----------|--------|----------|
-| `tests/core/result_test.cc` | 20+ | 构造、make_error、expect、value()/error() 哨兵、value_pointer、map/map_error、链式操作、void 特化 |
+| `tests/core/result_test.cc` | 18+ | 构造、make_error、expect、value()/error() 哨兵、value_pointer、map/map_error、链式操作、void 特化 |
 
 ---
 
@@ -476,9 +479,8 @@ DEFINE_ERROR_CODE(
 宏展开后等价于：
 
 ```cpp
-constexpr error_code_t ERR_DB_CONNECTION_TIMEOUT =
-    error_builder_t::make_error_code(
-        error_level_t::error, system_domain_t::database, 1, 1, 0x0001);
+constexpr error_code_t ERR_DB_CONNECTION_TIMEOUT(
+    error_level_t::error, system_domain_t::database, 1, 1, 0x0001);
 
 inline const error_registrar_t ERR_DB_CONNECTION_TIMEOUT_registrar_(
     ERR_DB_CONNECTION_TIMEOUT, "ERR_DB_CONNECTION_TIMEOUT",

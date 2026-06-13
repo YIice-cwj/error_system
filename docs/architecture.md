@@ -52,12 +52,12 @@ Domain             Plugin 层监听（同步或异步）
 
 | 文件 | 类/结构 | 职责 |
 |------|---------|------|
-| `error_code.h` | `error_code_t` | 64 位错误码的存储与字段解析（含 v2.0 五参便捷构造函数） |
+| `error_code.h` | `error_code_t` | 64 位错误码的存储与字段解析（含五参便捷构造函数、is_error_code/is_success_code 语义方法、set_sign/set_reserved 私有化） |
 | `error_level.h` | `error_level_t` | 错误等级枚举及转换函数 |
-| `error_builder.h` | `error_builder_t` | 编译期错误码构建工厂 |
-| `error_context.h` | `error_context_t` | 错误上下文（直接接受 error_code_t，多类型 payload，因果链，堆栈，源位置） |
+| `error_builder.h` | `error_builder_t` | 编译期错误码构建工厂（v2.2 标记为兼容层，推荐使用 error_code_t 五参构造） |
+| `error_context.h` | `error_context_t` | 错误上下文（code 私有化 + get_code() 只读访问，多类型 payload，因果链，堆栈，源位置） |
 | `error_registry.h` | `error_registry_t` | 错误码注册表（按子系统/模块组索引，按名查找） |
-| `result.h` | `result_t<T>` | 类 Rust Result（`make_error`/`map`/`map_error`/`expect`/`operator bool`，零异常） |
+| `result.h` | `result_t<T>` | 类 Rust Result（`make_error`/`map`/`map_error`/`expect`/`operator bool`/assert 防误用，零异常） |
 | `error_exception.h` | `error_exception_t` | 基于 `std::exception` 的异常封装 |
 
 ### Domain 层 (`include/error_system/domain/`)
@@ -370,7 +370,7 @@ JSON 配置格式示例：
 | Utils 层 | 4 | 37+ | `tests/utils/*_test.cc` |
 | Config 层 | 1 | 11 | `tests/config/*_test.cc` |
 | Domain 层 | 1 | 3 | `tests/domain/*_test.cc` |
-| **总计** | **16** | **247** | - |
+| **总计** | **16** | **245** | - |
 
 ### 运行测试
 

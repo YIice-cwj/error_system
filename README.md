@@ -32,7 +32,7 @@
 *   **插件系统 (Plugin)**: 支持同步/异步通知模式，插件级别过滤，异步队列背压控制，解耦插件 I/O。
 *   **代码生成工具**: 提供 Python 脚本从 JSON 配置自动生成错误码定义头文件，含 ID 冲突检测。
 *   **对象池优化**: `error_context_t` 的因果链包装使用线程局部对象池，减少高频场景下的堆分配开销。
-*   **完备的测试**: 深度集成 GoogleTest，16 个测试文件 247 个用例覆盖所有核心模块，确保逻辑坚如磐石。
+*   **完备的测试**: 深度集成 GoogleTest，16 个测试文件 245 个用例覆盖所有核心模块，确保逻辑坚如磐石。
 
 ---
 
@@ -78,17 +78,9 @@ constexpr auto db_err = error_code_t(
 );
 ```
 
-如需编译期类型安全，可使用 `error_builder_t` 枚举模板版本：
-
 ```cpp
-#include "error_system/core/error_builder.h"
-
-enum class subsys_t : uint16_t { payment = 100 };
-enum class module_t : uint16_t { db = 200 };
-
-constexpr auto safe_err = error_builder_t::make_error_code(
-    error_level_t::fatal, system_domain_t::database,
-    subsys_t::payment, module_t::db, 404);
+// error_code_t 五参便捷构造函数在编译期即完成所有计算：
+static_assert(error_code_t(error_level_t::error, system_domain_t::database, 100, 200, 404).get_level() == error_level_t::error);
 ```
 
 ### 2. 解析错误码
@@ -98,7 +90,8 @@ constexpr auto safe_err = error_builder_t::make_error_code(
 ```cpp
 error_code_t code = db_err;
 
-if (code.get_sign() == 1) { // 判断是否为错误
+// 判断是否为错误（sign=0=错误，sign=1=成功）
+if (code.is_error_code()) {
     auto level  = code.get_level();  // 获取错误等级
     auto system = code.get_system(); // 获取系统域
     auto module = code.get_module(); // 获取模块编号
@@ -129,6 +122,9 @@ auto code = error_code_t(
 error_context_t ctx(code, "数据库连接失败: {}", "timeout");
 
 // 添加多类型结构化负载（v2.0：支持 int、bool、double 等）
+// 只读访问错误码
+auto code = ctx.get_code();  // const error_code_t&
+
 ctx.with("host", "192.168.1.100")
    .with("port", 3306)
    .with("retry", true)
@@ -365,11 +361,11 @@ error_context_t ctx{db_error_code, "连接超时"};  // 触发数据库域处理
 ├─────────────────────────────────────────────────────────────┤
 │  Core Layer                                                  │
 │  ├── error_code_t    (64位错误码，5 参便捷构造)               │
-│  ├── error_builder_t (兼容旧代码：编译期构建)                 │
+│  ├── error_code_t    (64位错误码，is_error_code/is_success_code)│
 │  ├── error_level_t   (错误等级枚举)                          │
 │  ├── error_context_t (错误上下文：码+消息+因果链+多类型负载) │
 │  ├── error_registry_t(错误码注册表：按子系统查询、按名查找)  │
-│  ├── result_t<T>     (make_error/map/map_error/expect/operator bool) │
+│  ├── result_t<T>     (make_error/map/map_error/expect/operator bool/assert) │
 │  └── error_exception_t (异常封装)                            │
 ├─────────────────────────────────────────────────────────────┤
 │  Domain Layer                                                │
@@ -496,7 +492,7 @@ ctest --output-on-failure
 | Utils 层 | 4 | 37+ |
 | Config 层 | 1 | 11 |
 | Domain 层 | 1 | 3 |
-| **总计** | **16** | **247** |
+| **总计** | **16** | **245** |
 
 > 注：测试发现超时已调整为 30 秒（`DISCOVERY_TIMEOUT 30`），确保在复杂环境下测试稳定运行。
 

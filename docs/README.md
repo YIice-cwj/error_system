@@ -51,6 +51,6 @@ ctest --output-on-failure
 | Utils 层 | 4 | 37+ |
 | Config 层 | 1 | 11 |
 | Domain 层 | 1 | 3 |
-| **总计** | **16** | **247** |
+| **总计** | **16** | **245** |
 
 > 另含 `tests/perf/` 下 3 个性能基线 benchmark 程序。
