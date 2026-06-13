@@ -3,7 +3,6 @@
 #include "error_system/core/error_code.h"
 #include "error_system/core/error_level.h"
 #include "error_system/core/error_registry.h"
-#include "error_system/memory/object_pool.h"
 #include "error_system/utils/source_location.h"
 #include "error_system/utils/stack_trace_utils.h"
 #include "error_system/utils/string_utils.h"
@@ -28,12 +27,6 @@ namespace error_system::plugin {
  */
 namespace error_system::core {
     /**
-     * @brief 错误上下文对象池大小
-     * @details 用于优化因果链节点的内存分配和释放，避免频繁的堆分配
-     */
-    constexpr size_t ERROR_CONTEXT_POOL_SIZE = 128;
-
-    /**
      * @brief 通知所有已注册插件
      * @details 实现在 plugin_registry_t::notify_error()
      * @param context 错误上下文
@@ -54,8 +47,6 @@ namespace error_system::core {
      * std::cout << ctx.to_string() << "\n";
      */
     struct error_context_t {
-        using object_pool_t = memory::object_pool_t<error_context_t, ERROR_CONTEXT_POOL_SIZE>;
-
         private:
         error_code_t code_{};
         /**

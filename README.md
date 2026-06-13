@@ -376,9 +376,6 @@ error_context_t ctx{db_error_code, "连接超时"};  // 触发数据库域处理
 │  ├── plugin_registry_t  (单例注册表，支持同步/异步通知)       │
 │  └── error_router_plugin_t (错误路由插件，按码/域分发)       │
 ├─────────────────────────────────────────────────────────────┤
-│  Memory Layer                                                │
-│  └── object_pool_t<T>   (线程局部对象池，优化高频分配)       │
-├─────────────────────────────────────────────────────────────┤
 │  Utils Layer                                                 │
 │  ├── string_utils_t     (字符串处理: hash, trim, format...) │
 │  ├── json_utils_t       (JSON解析与字典)                     │
@@ -575,8 +572,6 @@ error_system/
 │   │   └── result.h            # 类Rust Result
 │   ├── domain/                 # 系统域定义
 │   │   └── system_domain.h     # 6大系统域
-│   ├── memory/                 # 内存管理
-│   │   └── object_pool.h       # 线程局部对象池
 │   ├── plugin/                 # 插件系统接口
 │   │   ├── error_router_plugin.h
 │   │   ├── i_error_plugin.h

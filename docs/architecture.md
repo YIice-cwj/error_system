@@ -16,9 +16,6 @@
 │  Domain 层                                                       │
 │  预定义的 6 大系统域                                             │
 ├──────────────────────────────────────────────────────────────────┤
-│  Memory 层                                                       │
-│  线程局部对象池 (object_pool_t)，优化高频内存分配                │
-├──────────────────────────────────────────────────────────────────┤
 │  Utils 层                                                        │
 │  通用工具 (字符串、JSON、文件、堆栈跟踪、源位置等)               │
 └──────────────────────────────────────────────────────────────────┘
@@ -71,12 +68,6 @@ Domain             Plugin 层监听（同步或异步）
 | `i_error_plugin.h` | `i_error_plugin_t` | 插件抽象接口 |
 | `plugin_registry.h` | `plugin_registry_t` | 插件单例注册表（支持同步/异步通知模式） |
 | `error_router_plugin.h` | `error_router_plugin_t` | 错误路由插件，按码/域/模块组分发 |
-
-### Memory 层 (`include/error_system/memory/`)
-
-| 文件 | 类 | 职责 |
-|------|----|------|
-| `object_pool.h` | `object_pool_t<T, Capacity>` | 线程局部对象池，减少高频堆分配 |
 
 ### Utils 层 (`include/error_system/utils/`)
 

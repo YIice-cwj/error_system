@@ -28,7 +28,6 @@
 - **Result 错误传递** → [Core API: result_t](api/core.md#result_t)
 - **全局配置** → [Config API](api/config.md)
 - **异步插件通知** → [Plugin API](api/plugin.md)
-- **对象池优化** → [Memory API: object_pool_t](api/memory.md)
 - **字符串格式化** → [Utils API: string_utils_t](api/utils.md)
 - **代码生成工具** → [架构设计：代码生成](architecture.md#18-代码生成工具)
 
