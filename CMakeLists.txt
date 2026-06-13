@@ -14,16 +14,17 @@ project(${PROJECT_NAME} VERSION ${VERSION_STRING} DESCRIPTION ${DESCRIPTION_STRI
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON) 
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(ERROR_SYSTEM_ENABLE_STACKTRACE "是否编译堆栈追踪功能 (关闭可减小体积，免链接 OS 底层库)" ON)
 option(ERROR_SYSTEM_ENABLE_VALIDATION "是否编译严格的错误码验证器" ON)
 option(ERROR_SYSTEM_ENABLE_LOCATION "是否编译源位置宏" ON)
-option(ERROR_SYSTEM_ENABLE_LTO "Enable LTO/IPO" OFF)
-option(ERROR_SYSTEM_ENABLE_PGO_GENERATE "Enable PGO generate phase" OFF)
-option(ERROR_SYSTEM_ENABLE_PGO_USE "Enable PGO use phase" OFF)
-option(ERROR_SYSTEM_ENABLE_ASAN "Enable AddressSanitizer" OFF)
-option(ERROR_SYSTEM_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
-option(ERROR_SYSTEM_WARNINGS_AS_ERRORS "Treat warnings as errors" ON)
+option(ERROR_SYSTEM_ENABLE_LTO "启用 LTO/IPO" OFF)
+option(ERROR_SYSTEM_ENABLE_PGO_GENERATE "启用 PGO 生成阶段" OFF)
+option(ERROR_SYSTEM_ENABLE_PGO_USE "启用 PGO 使用阶段" OFF)
+option(ERROR_SYSTEM_ENABLE_ASAN "启用地址安全检查器" OFF)
+option(ERROR_SYSTEM_ENABLE_UBSAN "启用未定义行为检测器" OFF)
+option(ERROR_SYSTEM_WARNINGS_AS_ERRORS "将警告视为错误" ON)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ErrorSystemPerformance.cmake)
 find_package(Python3 COMPONENTS Interpreter QUIET)
@@ -79,7 +80,7 @@ else()
         "    struct subsystem_module_registrar_t {\n"
         "        subsystem_module_registrar_t() {}\n"
         "    };\n"
-        "    inline subsystem_module_registrar_t g_subsystem_module_registrar_{};\n"
+        "    inline subsystem_module_registrar_t global_subsystem_module_registrar_{};\n"
         "}\n"
     )
 endif()

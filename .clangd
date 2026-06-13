@@ -1,6 +1,7 @@
 CompileFlags:
-  Add: 
-  - "-std=c++17"
-  - "-I./include"
-  - "-I./include/generated"
+  Add:
+    - "-std=c++17"
+    - "-I./include"
+    - "-I./build/generated_errors/include"
+    - "-Wno-pragma-once-outside-header"
   CompilationDatabase: build/
