@@ -58,6 +58,17 @@ namespace error_system::core {
         constexpr error_code_t() noexcept : code_(1ULL << SIGN_SHIFT) {}
 
         /**
+         * @brief 创建成功码的工厂方法
+         * @details 语义清晰的构造成功码方式，等价于默认构造函数。
+         *          适用于返回默认成功状态的场景。
+         * @return error_code_t sign=1 的成功码
+         *
+         * @example
+         * return error_code_t::make_success();
+         */
+        static constexpr error_code_t make_success() noexcept { return error_code_t{}; }
+
+        /**
          * @brief 使用原始错误码构造
          * @param code 64位无符号整型错误码
          */
@@ -175,11 +186,11 @@ namespace error_system::core {
         }
 
         /**
-         * @brief 获取模块组ID（子系统+模块）
-         * @details 直接通过位掩码，高16位(Sign+Reserved+Level+System)和低16位(Number)置零，只保留子系统与模块信息
+         * @brief 获取模块组ID（系统域+子系统+模块）
+         * @details 高8位(Sign+Reserved+Level)和低16位(Number)置零，保留系统域(8位)、子系统(16位)和模块(16位)
          * @return uint64_t 模块的聚合隔离 ID
          */
-        constexpr module_group_id_t get_module_group_id() const noexcept { return code_ & 0x0000FFFFFFFF0000ULL; }
+        constexpr module_group_id_t get_module_group_id() const noexcept { return code_ & 0x00FFFFFFFFFF0000ULL; }
 
         /**
          * @brief 获取清除符号位和预留位后的错误码

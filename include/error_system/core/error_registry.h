@@ -10,6 +10,7 @@
 #include <shared_mutex>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 /**
@@ -82,9 +83,9 @@ namespace error_system::core {
 
         /**
          * @brief 子系统索引，根据子系统 ID 快速查找其下所有模块组
-         * @details key = subsys_id，value = 该子系统下的所有 module_group_id
+         * @details key = subsys_id，value = 该子系统下的所有 module_group_id（去重）
          */
-        std::unordered_map<uint16_t, std::vector<module_group_id_t>> subsystem_index_;
+        std::unordered_map<uint16_t, std::unordered_set<module_group_id_t>> subsystem_index_;
 
         /**
          * @brief 索引互斥锁，保护索引的并发访问

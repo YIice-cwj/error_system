@@ -91,9 +91,8 @@ namespace error_system::core {
         if (it == subsystem_index_.end()) {
             return;
         }
-        auto& vec = it->second;
-        vec.erase(std::remove(vec.begin(), vec.end(), module_group_id), vec.end());
-        if (vec.empty()) {
+        it->second.erase(module_group_id);
+        if (it->second.empty()) {
             subsystem_index_.erase(it);
         }
     }
@@ -163,11 +162,7 @@ namespace error_system::core {
         module_index_[code.get_module_group_id()].push_back(identity_code);
         {
             uint16_t subsys_id = code.get_subsys();
-            auto& subsys_vec = subsystem_index_[subsys_id];
-            auto module_group_id = code.get_module_group_id();
-            if (std::find(subsys_vec.begin(), subsys_vec.end(), module_group_id) == subsys_vec.end()) {
-                subsys_vec.push_back(module_group_id);
-            }
+            subsystem_index_[subsys_id].insert(code.get_module_group_id());
         }
     }
 
@@ -218,11 +213,7 @@ namespace error_system::core {
             module_index_[codes[i].get_module_group_id()].push_back(identity_code);
             {
                 uint16_t subsys_id = codes[i].get_subsys();
-                auto& subsys_vec = subsystem_index_[subsys_id];
-                auto mg_id = codes[i].get_module_group_id();
-                if (std::find(subsys_vec.begin(), subsys_vec.end(), mg_id) == subsys_vec.end()) {
-                    subsys_vec.push_back(mg_id);
-                }
+                subsystem_index_[subsys_id].insert(codes[i].get_module_group_id());
             }
 
             ++registered_count;

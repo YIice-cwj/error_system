@@ -293,6 +293,22 @@ namespace error_system::core {
         }
 
         /**
+         * @brief 对结果进行链式操作（const 左值引用版本）
+         * @param function 要执行的操作函数
+         * @return decltype(std::invoke(std::forward<Function>(function), value())) 操作结果
+         * @details 如果当前结果为成功，则调用 function 处理值并返回其结果；
+         *          如果当前结果为错误，则返回包含当前错误的新结果
+         */
+        template <typename Function>
+        auto and_then(Function&& function) const& -> decltype(std::invoke(std::forward<Function>(function), value())) {
+            using return_type = decltype(std::invoke(std::forward<Function>(function), value()));
+            if (is_error()) {
+                return return_type(error());
+            }
+            return std::invoke(std::forward<Function>(function), value());
+        }
+
+        /**
          * @brief 对错误结果进行链式操作（右值引用版本）
          * @param function 要执行的操作函数
          * @return result_t<value_type> 操作结果
