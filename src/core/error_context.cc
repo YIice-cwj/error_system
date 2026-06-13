@@ -160,37 +160,13 @@ namespace error_system::core {
 
     error_context_t error_context_t::wrap(const error_context_t& underlying) const noexcept {
         error_context_t new_code_context = *this;
-
-        object_pool_t& object_pool = object_pool_t::instance_thread_local();
-        error_context_t* context_pointer = object_pool.acquire();
-        if (context_pointer) {
-            *context_pointer = underlying;
-            new_code_context.cause = std::shared_ptr<error_context_t>(
-                context_pointer, [&object_pool](error_context_t* context_pointer) -> void {
-                    *context_pointer = error_context_t{};
-                    object_pool.release(context_pointer);
-                });
-        } else {
-            new_code_context.cause = std::make_shared<error_context_t>(underlying);
-        }
+        new_code_context.cause = std::make_shared<error_context_t>(underlying);
         return new_code_context;
     }
 
     error_context_t error_context_t::wrap(error_context_t&& underlying) const noexcept {
         error_context_t new_code_context = *this;
-
-        object_pool_t& object_pool = object_pool_t::instance_thread_local();
-        error_context_t* context_pointer = object_pool.acquire();
-        if (context_pointer) {
-            *context_pointer = std::move(underlying);
-            new_code_context.cause = std::shared_ptr<error_context_t>(
-                context_pointer, [&object_pool](error_context_t* context_pointer) -> void {
-                    *context_pointer = error_context_t{};
-                    object_pool.release(context_pointer);
-                });
-        } else {
-            new_code_context.cause = std::make_shared<error_context_t>(std::move(underlying));
-        }
+        new_code_context.cause = std::make_shared<error_context_t>(std::move(underlying));
         return new_code_context;
     }
 
@@ -222,7 +198,7 @@ namespace error_system::core {
     }
 
     std::string error_context_t::to_string() const noexcept {
-        if (const auto& formatter = error_config_t::get_custom_formatter()) {
+        if (auto formatter = error_config_t::get_custom_formatter()) {
             return formatter(*this);
         }
 
@@ -265,7 +241,11 @@ namespace error_system::core {
             .append(subsys_module_str)
             .append("] Code: ");
         append_decimal(result, code_.get_number());
-        result.append(" (").append(name).append(") - ").append(message).append(": ").append(desc);
+        result.append(" (").append(name).append(") - ");
+        if (!message.empty()) {
+            result.append(message).append(": ");
+        }
+        result.append(desc);
 
         if (!payload.empty()) {
             result.append(" {");
