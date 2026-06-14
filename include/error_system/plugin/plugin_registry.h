@@ -1,13 +1,10 @@
 #pragma once
 #include "error_system/plugin/i_error_plugin.h"
+#include "error_system/utils/async_queue.h"
 #include <atomic>
-#include <condition_variable>
 #include <memory>
-#include <mutex>
-#include <queue>
 #include <shared_mutex>
 #include <string_view>
-#include <thread>
 #include <vector>
 
 /**
@@ -16,8 +13,10 @@
  * @details 单例模式，管理所有已注册的错误系统插件，
  *          在错误事件发生时依次通知所有插件。
  *          支持同步（默认）和异步队列两种通知模式。
+ *          使用 RCU（Read-Copy-Update）快照机制，notify_error 热路径零拷贝无锁读取。
+ *          异步队列由 async_queue_t 模版类实现，自动管理后台线程生命周期。
  * @author yiice
- * @version 2.0.0
+ * @version 2.2.0
  * @date 2026-05-01
  * @copyright Copyright (c) 2026
  */
@@ -30,25 +29,38 @@ namespace error_system::plugin {
      */
     class plugin_registry_t {
         private:
-        std::vector<i_error_plugin_t*> plugins_;
+        /**
+         * @brief RCU 插件快照
+         * @details shared_ptr 保证旧快照在所有读者完成后安全释放。
+         *          register/unregister 时拷贝-修改-原子交换，
+         *          notify_error 直接 atomic_load 读取，无锁零拷贝。
+         */
+        std::shared_ptr<const std::vector<i_error_plugin_t*>> plugins_snapshot_{
+            std::make_shared<const std::vector<i_error_plugin_t*>>()};
         mutable std::shared_mutex plugins_mutex_;
 
         /**
-         * @brief 异步通知队列（仅在 async_queue 模式下使用）
-         * @details 存储 error_context_t 副本，由后台工作线程消费
+         * @brief 异步队列处理器
+         * @details 将 async_queue_t 出队的 shared_ptr<error_context_t> 转发给 notify_error
+         *          通过 instance() 获取单例，无需存储 this 指针
          */
-        std::queue<std::shared_ptr<core::error_context_t>> async_queue_;
-        mutable std::mutex queue_mutex_;
-        std::condition_variable queue_cv_;
-        std::thread async_worker_;
-        std::atomic<bool> worker_running_{false};
+        struct __context_processor_t {
+            void operator()(std::shared_ptr<core::error_context_t>& context) const noexcept {
+                plugin_registry_t::instance().notify_error(*context);
+            }
+        };
+
+        /**
+         * @brief 异步通知队列（仅在 async_queue 模式下使用）
+         * @details 基于 async_queue_t 模版类，自动管理后台线程生命周期。
+         *          元素类型为 shared_ptr<error_context_t>，避免拷贝。
+         */
+        utils::async_queue_t<std::shared_ptr<core::error_context_t>, __context_processor_t> async_queue_{{__context_processor_t{}}};
 
         private:
         plugin_registry_t() = default;
 
-        ~plugin_registry_t() {
-            stop_async_worker();
-        }
+        ~plugin_registry_t() = default;
 
         plugin_registry_t(const plugin_registry_t&) = delete;
 
@@ -59,23 +71,20 @@ namespace error_system::plugin {
         plugin_registry_t& operator=(plugin_registry_t&&) = delete;
 
         /**
-         * @brief 启动异步工作线程
-         * @details 首次调用 enqueue_notification 时自动启动，
-         *          线程循环从队列取出通知并调用 notify_error
+         * @brief 原子更新插件快照
+         * @details 在写锁保护下，基于当前快照创建新副本、修改后原子替换。
+         *          旧快照由 shared_ptr 自动管理生命周期。
+         * @param modifier 修改新副本的回调函数
          */
-        void start_async_worker() noexcept;
-
-        /**
-         * @brief 停止异步工作线程
-         * @details 析构时自动调用，等待队列中所有通知处理完毕
-         */
-        void stop_async_worker() noexcept;
-
-        /**
-         * @brief 异步工作线程主循环
-         * @details 阻塞等待队列有数据，取出后调用 notify_error 处理
-         */
-        void async_worker_loop() noexcept;
+        template <typename Modifier>
+        void __update_snapshot(Modifier&& modifier) noexcept {
+            std::unique_lock<std::shared_mutex> lock(plugins_mutex_);
+            auto old_snapshot = std::atomic_load(&plugins_snapshot_);
+            auto new_snapshot_ptr = std::make_shared<std::vector<i_error_plugin_t*>>(*old_snapshot);
+            modifier(*new_snapshot_ptr);
+            std::atomic_store(&plugins_snapshot_,
+                              std::static_pointer_cast<const std::vector<i_error_plugin_t*>>(new_snapshot_ptr));
+        }
 
         public:
         /**
@@ -95,8 +104,8 @@ namespace error_system::plugin {
 
         /**
          * @brief 同步通知所有插件发生了错误事件
-         * @details 依次调用每个插件的 on_error()，异常不会向外传播。
-         *          在 sync 模式下由 error_context_t 构造时直接调用。
+         * @details 通过 RCU 快照无锁读取插件列表，依次调用每个插件的 on_error()，
+         *          异常不会向外传播。在 sync 模式下由 error_context_t 构造时直接调用。
          * @param context 错误上下文
          */
         void notify_error(const core::error_context_t& context) noexcept;
