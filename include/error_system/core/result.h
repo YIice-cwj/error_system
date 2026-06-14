@@ -59,11 +59,11 @@ namespace error_system::core {
 
         /**
          * @brief 错误构造工厂函数（从已有 error_context_t）
-         * @param ctx 错误上下文
+         * @param context 错误上下文
          * @return result_t 包装了错误的结果对象
          */
-        static result_t make_error(const error_context_t& ctx) noexcept {
-            return result_t(ctx);
+        static result_t make_error(const error_context_t& context) noexcept {
+            return result_t(context);
         }
 
         /**
@@ -181,23 +181,22 @@ namespace error_system::core {
         explicit operator bool() const noexcept { return is_success(); }
 
         /**
-         * @brief 断言获取成功值（带自定义消息）
+         * @brief 断言获取成功值
          * @details 若当前为成功状态则返回值的只读引用；若为错误状态，在 Debug 模式下触发断言失败，
          *          在 Release 模式下返回静态哨兵值（T{}）。适用于调用方已确认不会出错的场景。
          *          要求 T 必须可默认构造。
-         * @param msg 断言失败时的提示消息
          * @return const value_type& 成功值引用
          *
          * @example
          * auto result = compute();
-         * int value = result.expect("compute() should never fail here");
+         * int value = result.expect();
          */
-        const value_type& expect(const char* msg) const noexcept {
+        const value_type& expect() const noexcept {
             static_assert(std::is_default_constructible_v<value_type>,
                           "result_t::expect() requires T to be default-constructible. "
                           "Use value_pointer() for non-default-constructible types.");
             auto* ptr = std::get_if<value_type>(&value_or_error_);
-            assert(ptr && msg);
+            assert(ptr);
             if (ptr) {
                 return *ptr;
             }
@@ -379,11 +378,11 @@ namespace error_system::core {
 
         /**
          * @brief 错误构造工厂函数（从已有 error_context_t）
-         * @param ctx 错误上下文
+         * @param context 错误上下文
          * @return result_t<void> 包装了错误的结果对象
          */
-        static result_t<void> make_error(const error_context_t& ctx) noexcept {
-            return result_t<void>(ctx);
+        static result_t<void> make_error(const error_context_t& context) noexcept {
+            return result_t<void>(context);
         }
 
         /**
@@ -411,18 +410,16 @@ namespace error_system::core {
         bool is_success() const noexcept { return !is_error(); }
 
         /**
-         * @brief 断言当前结果为成功（带自定义消息）
-         * @details 若当前为错误状态，在 Debug 模式下触发断言失败并输出 msg。
+         * @brief 断言当前结果为成功
+         * @details 若当前为错误状态，在 Debug 模式下触发断言失败。
          *          在 Release 模式下为无操作。适用于 void 返回类型中确认不会出错的场景。
-         * @param msg 断言失败时的提示消息
          *
          * @example
          * auto result = do_something();
-         * result.expect("do_something() should never fail here");
+         * result.expect();
          */
-        void expect(const char* msg) const noexcept {
-            assert(is_success() && msg);
-            (void)msg;
+        void expect() const noexcept {
+            assert(is_success());
         }
 
         /**

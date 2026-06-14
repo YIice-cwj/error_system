@@ -27,7 +27,7 @@ namespace error_system::core {
 
         error_exception_t(const error_exception_t&) = default;
 
-        error_exception_t& operator=(const error_exception_t&) = default;
+        error_exception_t& operator=(const error_exception_t&) = delete;
 
         error_exception_t(error_exception_t&&) = delete;
         
