@@ -4,9 +4,10 @@
 using error_system::config::error_config_t;
 
 /**
- * @file error_context.h
+ * @file error_context.cc
  * @brief 错误上下文实现
- * @details 定义错误上下文的实现，包括通知插件、检查有效性和包装错误上下文等功能
+ * @details 定义错误上下文的实现，包括通知插件、检查有效性和包装错误上下文等功能。
+ *          payload 采用 SSO（Small Size Optimization），≤4 项时栈上存储零堆分配。
  * @author yiice
  * @version 1.0.0
  * @date 2026-04-27
@@ -39,9 +40,9 @@ namespace error_system::core {
                                         size_t subsys_module_size) noexcept {
             size_t capacity = 96 + name_size + desc_size + subsys_module_size + context.message.size();
 
-            for (const auto& [key, value] : context.payload) {
+            context.for_each_payload([&](const std::string& key, const std::string& value) {
                 capacity += key.size() + value.size() + 4;
-            }
+            });
 
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
             for (const auto& frame : context.stack_frames) {
@@ -58,9 +59,9 @@ namespace error_system::core {
         size_t estimate_json_capacity(const error_context_t& context) noexcept {
             size_t capacity = 64 + context.message.size();
 
-            for (const auto& [key, value] : context.payload) {
+            context.for_each_payload([&](const std::string& key, const std::string& value) {
                 capacity += key.size() + value.size() + 8;
-            }
+            });
 
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
             for (const auto& frame : context.stack_frames) {
@@ -79,7 +80,7 @@ namespace error_system::core {
         plugin::plugin_registry_t::instance().notify_error(context);
     }
 
-    void error_context_t::finalize_runtime_features() noexcept {
+    void error_context_t::__finalize_runtime_features() noexcept {
         const bool validation_enabled = error_config_t::is_validation_enabled();
         const bool stacktrace_enabled = error_config_t::is_stacktrace_enabled();
         const bool location_enabled = error_config_t::is_source_location_enabled();
@@ -99,18 +100,18 @@ namespace error_system::core {
 #endif
 
         if (validation_enabled) {
-            fill_validation_fields();
+            __fill_validation_fields();
         }
 
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
         if (stacktrace_enabled && code_.get_level() >= stacktrace_level) {
-            fill_stacktrace();
+            __fill_stacktrace();
         }
 #endif
 
 #ifdef ERROR_SYSTEM_ENABLE_LOCATION
         if (location_enabled) {
-            fill_source_location(short_filename_enabled);
+            __fill_source_location(short_filename_enabled);
         }
 #endif
 
@@ -122,24 +123,24 @@ namespace error_system::core {
         }
     }
 
-    void error_context_t::fill_validation_fields() noexcept {
+    void error_context_t::__fill_validation_fields() noexcept {
         if (error_registry_t::instance().is_registered(code_)) {
             return;
         }
 
-        payload.insert_or_assign("illegal_raw_code", std::to_string(code_.get_code()));
+        with("illegal_raw_code", std::to_string(code_.get_code()));
         message.insert(0, "[UNREGISTERED CODE] ");
         code_ = error_code_t(error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFF);
         metadata_ = error_registry_t::instance().get_info(code_);  // 同步更新缓存
     }
 
-    void error_context_t::fill_stacktrace() noexcept {
+    void error_context_t::__fill_stacktrace() noexcept {
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
         stack_frames = utils::stack_trace_utils_t::generate(1);
 #endif
     }
 
-    void error_context_t::fill_source_location(bool short_filename_enabled) noexcept {
+    void error_context_t::__fill_source_location(bool short_filename_enabled) noexcept {
 #ifdef ERROR_SYSTEM_ENABLE_LOCATION
         file_name = short_filename_enabled ? utils::extract_short_filename(source_location_.file_name())
                                            : source_location_.file_name();
@@ -171,7 +172,36 @@ namespace error_system::core {
     }
 
     error_context_t& error_context_t::with(const std::string& key, const std::string& value) noexcept {
-        payload.insert_or_assign(key, value);
+        // 查找 SSO 中是否已存在 key
+        const size_t sso_end = std::min<size_t>(payload_count_, PAYLOAD_SSO_CAPACITY);
+        for (size_t i = 0; i < sso_end; ++i) {
+            if (payload_small_[i].first == key) {
+                payload_small_[i].second = value;
+                return *this;
+            }
+        }
+
+        // 溢出 map 中查找
+        if (payload_overflow_) {
+            payload_overflow_->insert_or_assign(key, value);
+            return *this;
+        }
+
+        // 新增：还有 SSO 容量
+        if (payload_count_ < PAYLOAD_SSO_CAPACITY) {
+            payload_small_[payload_count_].first = key;
+            payload_small_[payload_count_].second = value;
+            ++payload_count_;
+            return *this;
+        }
+
+        // SSO 满了，创建溢出 map 并迁移
+        payload_overflow_ = std::make_unique<std::unordered_map<std::string, std::string>>();
+        for (size_t i = 0; i < PAYLOAD_SSO_CAPACITY; ++i) {
+            payload_overflow_->emplace(std::move(payload_small_[i].first),
+                                       std::move(payload_small_[i].second));
+        }
+        payload_overflow_->insert_or_assign(key, value);
         return *this;
     }
 
@@ -180,21 +210,77 @@ namespace error_system::core {
     }
 
     error_context_t& error_context_t::with(std::string_view key, std::string_view value) noexcept {
-        payload.insert_or_assign(std::string(key), std::string(value));
-        return *this;
+        return with(std::string(key), std::string(value));
     }
 
     error_context_t& error_context_t::with(std::string&& key, std::string&& value) noexcept {
-        payload.insert_or_assign(std::move(key), std::move(value));
+        // 查找 SSO 中是否已存在 key
+        const size_t sso_end = std::min<size_t>(payload_count_, PAYLOAD_SSO_CAPACITY);
+        for (size_t i = 0; i < sso_end; ++i) {
+            if (payload_small_[i].first == key) {
+                payload_small_[i].second = std::move(value);
+                return *this;
+            }
+        }
+
+        if (payload_overflow_) {
+            payload_overflow_->insert_or_assign(std::move(key), std::move(value));
+            return *this;
+        }
+
+        if (payload_count_ < PAYLOAD_SSO_CAPACITY) {
+            payload_small_[payload_count_].first = std::move(key);
+            payload_small_[payload_count_].second = std::move(value);
+            ++payload_count_;
+            return *this;
+        }
+
+        payload_overflow_ = std::make_unique<std::unordered_map<std::string, std::string>>();
+        for (size_t i = 0; i < PAYLOAD_SSO_CAPACITY; ++i) {
+            payload_overflow_->emplace(std::move(payload_small_[i].first),
+                                       std::move(payload_small_[i].second));
+        }
+        payload_overflow_->insert_or_assign(std::move(key), std::move(value));
         return *this;
     }
 
     error_context_t& error_context_t::with_batch(
         std::initializer_list<std::pair<const std::string, std::string>> items) noexcept {
         for (const auto& [key, value] : items) {
-            payload.insert_or_assign(key, value);
+            with(key, value);
         }
         return *this;
+    }
+
+    bool error_context_t::operator==(const error_context_t& other) const noexcept {
+        if (code_.get_code() != other.code_.get_code() || message != other.message) {
+            return false;
+        }
+        if (payload_count_ != other.payload_count_) {
+            return false;
+        }
+        // 构建临时 map 比较（payload 数量通常 ≤4，copy 开销极小）
+        auto this_payload = get_payload();
+        auto other_payload = other.get_payload();
+        for (const auto& this_pair : this_payload) {
+            const auto& key = this_pair.first;
+            const auto& value = this_pair.second;
+            auto it = std::find_if(other_payload.begin(), other_payload.end(),
+                                   [&key](const auto& pair) { return pair.first == key; });
+            if (it == other_payload.end() || it->second != value) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    std::vector<std::pair<std::string, std::string>> error_context_t::get_payload() const noexcept {
+        std::vector<std::pair<std::string, std::string>> result;
+        result.reserve(payload_count_);
+        for_each_payload([&](const std::string& key, const std::string& value) {
+            result.emplace_back(key, value);
+        });
+        return result;
     }
 
     std::string error_context_t::to_string() const noexcept {
@@ -247,16 +333,16 @@ namespace error_system::core {
         }
         result.append(desc);
 
-        if (!payload.empty()) {
+        if (payload_count_ > 0) {
             result.append(" {");
             bool first = true;
-            for (const auto& [key, value] : payload) {
+            for_each_payload([&](const std::string& key, const std::string& value) {
                 if (!first) {
                     result.append(", ");
                 }
                 result.append(key).append("=").append(value);
                 first = false;
-            }
+            });
             result.push_back('}');
         }
 
@@ -310,10 +396,10 @@ namespace error_system::core {
         json.append(",\"message\":");
         append_escaped_json_string(json, message);
 
-        if (!payload.empty()) {
+        if (payload_count_ > 0) {
             json.append(",\"payload\":{");
             bool first_payload = true;
-            for (const auto& [key, value] : payload) {
+            for_each_payload([&](const std::string& key, const std::string& value) {
                 if (!first_payload) {
                     json.push_back(',');
                 }
@@ -321,7 +407,7 @@ namespace error_system::core {
                 json.push_back(':');
                 append_escaped_json_string(json, value);
                 first_payload = false;
-            }
+            });
             json.push_back('}');
         }
 
@@ -350,7 +436,7 @@ namespace error_system::core {
 
     std::string error_context_t::to_binary() const noexcept {
         std::string buf;
-        buf.reserve(128 + message.size() + payload.size() * 24);
+        buf.reserve(128 + message.size() + payload_count_ * 24);
 
         auto write_string = [&buf](const std::string& str) {
             const uint32_t len = static_cast<uint32_t>(str.size());
@@ -377,11 +463,11 @@ namespace error_system::core {
         buf.push_back(0);
 #endif
 
-        write_little_endian(buf, static_cast<uint32_t>(payload.size()));
-        for (const auto& [key, value] : payload) {
+        write_little_endian(buf, static_cast<uint32_t>(payload_count_));
+        for_each_payload([&](const std::string& key, const std::string& value) {
             write_string(key);
             write_string(value);
-        }
+        });
 
         if (cause) {
             buf.push_back(1);
