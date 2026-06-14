@@ -35,7 +35,7 @@ namespace error_system::core {
 #endif
 
             registered_code_ = make_code(1);
-            registry.register_subsystem_module(registered_code_.get_subsys(), registered_code_.get_module(), "perf", "ctx");
+            registry.register_subsystem_module(registered_code_.get_subsys(), registered_code_.get_module(), "perf", "context");
             registry.register_error(registered_code_, "ERR_CTX_REGISTERED", "Registered error context");
         }
 
@@ -75,8 +75,14 @@ namespace error_system::core {
         EXPECT_NE(context.message.find("[UNREGISTERED CODE]"), std::string::npos);
 
         const auto& payload = context.get_payload();
-        ASSERT_EQ(payload.count("illegal_raw_code"), 1UL);
-        EXPECT_EQ(payload.at("illegal_raw_code"), std::to_string(unregistered_code.get_code()));
+        auto find_val = [&](const std::string& key) -> const std::string& {
+            static const std::string empty;
+            for (const auto& [k, v] : payload) {
+                if (k == key) return v;
+            }
+            return empty;
+        };
+        EXPECT_EQ(find_val("illegal_raw_code"), std::to_string(unregistered_code.get_code()));
     }
 
     TEST_F(error_context_test, with_string_view_inserts_payload_without_extra_overload_work) {
@@ -84,8 +90,14 @@ namespace error_system::core {
         context.with(std::string_view("user"), std::string_view("alice"));
 
         const auto& payload = context.get_payload();
-        ASSERT_EQ(payload.count("user"), 1UL);
-        EXPECT_EQ(payload.at("user"), "alice");
+        auto find_val = [&](const std::string& key) -> const std::string& {
+            static const std::string empty;
+            for (const auto& [k, v] : payload) {
+                if (k == key) return v;
+            }
+            return empty;
+        };
+        EXPECT_EQ(find_val("user"), "alice");
     }
 
     TEST_F(error_context_test, with_multiple_types_inserts_payload) {
@@ -95,9 +107,16 @@ namespace error_system::core {
                .with("double_val", 3.14);
 
         const auto& payload = context.get_payload();
-        EXPECT_EQ(payload.at("int_val"), "42");
-        EXPECT_EQ(payload.at("bool_val"), "true");
-        EXPECT_EQ(payload.at("double_val"), "3.140000");
+        auto find_val = [&](const std::string& key) -> const std::string& {
+            static const std::string empty;
+            for (const auto& [k, v] : payload) {
+                if (k == key) return v;
+            }
+            return empty;
+        };
+        EXPECT_EQ(find_val("int_val"), "42");
+        EXPECT_EQ(find_val("bool_val"), "true");
+        EXPECT_EQ(find_val("double_val"), "3.140000");
     }
 
     TEST_F(error_context_test, serialization_contains_registered_metadata_and_payload) {
@@ -116,11 +135,11 @@ namespace error_system::core {
     // ========== to_binary() 因果链测试 ==========
 
     TEST_F(error_context_test, to_binary_includes_cause_chain) {
-        error_context_t cause_ctx(registered_code_, "root cause");
-        error_context_t ctx(registered_code_, "wrapper error");
-        ctx.wrap(cause_ctx);
+        error_context_t cause_context(registered_code_, "root cause");
+        error_context_t context(registered_code_, "wrapper error");
+        context.wrap(cause_context);
 
-        std::string binary_with_cause = ctx.to_binary();
+        std::string binary_with_cause = context.to_binary();
 
         // 不带 cause 的二进制应小于带 cause 的
         error_context_t ctx_no_cause(registered_code_, "no cause");
@@ -130,9 +149,9 @@ namespace error_system::core {
     }
 
     TEST_F(error_context_test, to_binary_without_cause_has_zero_flag) {
-        error_context_t ctx(registered_code_, "no cause");
+        error_context_t context(registered_code_, "no cause");
 
-        std::string binary = ctx.to_binary();
+        std::string binary = context.to_binary();
         EXPECT_GT(binary.size(), 0);
 
         // 无 cause 时最后 1 字节为 has_cause 标志，值为 0

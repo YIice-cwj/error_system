@@ -10,8 +10,8 @@ using namespace error_system::domain;
 void process_order(int order_id) {
     if (order_id <= 0) {
         auto code = error_code_t(error_level_t::error, system_domain_t::application, 101, 1, 1);
-        error_context_t ctx(code, "无效的订单ID: {}", order_id);
-        throw error_exception_t(std::move(ctx));
+        error_context_t context(code, "无效的订单ID: {}", order_id);
+        throw error_exception_t(std::move(context));
     }
 
     if (order_id == 404) {

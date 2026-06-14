@@ -76,7 +76,7 @@ int main() {
     // 5. expect() 断言取值（已确认成功的场景）
     std::cout << "\n--- 5. expect() 断言取值 ---" << std::endl;
     auto result5 = query_order(456);
-    int amount5 = result5.expect("query_order(456) should always succeed");
+    int amount5 = result5.expect();
     std::cout << "expect 取值: " << amount5 << " (断言通过)" << std::endl;
 
     // 6. operator bool() 条件判断
@@ -131,10 +131,10 @@ int main() {
     // 10. map_error() 错误映射转换
     std::cout << "\n--- 10. map_error() 错误映射转换 ---" << std::endl;
     auto result10 = query_order(404)
-        .map_error([](const error_context_t& ctx) -> error_context_t {
+        .map_error([](const error_context_t& context) -> error_context_t {
             error_context_t wrapped(biz::trade_errors::ERR_CART_IS_EMPTY, "下游订单服务故障");
-            wrapped.with("cause", ctx.message)
-                .with("original_code", std::to_string(ctx.get_code().get_code()));
+            wrapped.with("cause", context.message)
+                .with("original_code", std::to_string(context.get_code().get_code()));
             return wrapped;
         });
     std::cout << "map_error 包装后: " << result10.error().to_string() << std::endl;
@@ -174,7 +174,7 @@ int main() {
     }
 
     // void result 的 expect()
-    void_ok.expect("void_ok should not be error");
+    void_ok.expect();
     std::cout << "void expect 通过" << std::endl;
 
     return 0;

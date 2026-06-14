@@ -22,8 +22,8 @@ namespace error_system::core {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
         error_registry_t::instance().register_error(code, "ERR_1", "Test error 1");
 
-        error_context_t ctx(code, "test error");
-        result_t<int> result(ctx);
+        error_context_t context(code, "test error");
+        result_t<int> result(context);
         EXPECT_FALSE(result.is_success());
         EXPECT_TRUE(result.is_error());
         EXPECT_EQ(result.error().get_code().get_code(), code.get_code());
@@ -33,8 +33,8 @@ namespace error_system::core {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 100);
         error_registry_t::instance().register_error(code, "ERR_100", "Error 100");
 
-        error_context_t ctx(code, "error message");
-        result_t<int> result(ctx);
+        error_context_t context(code, "error message");
+        result_t<int> result(context);
         EXPECT_TRUE(result.is_error());
         EXPECT_EQ(result.error().get_code().get_code(), code.get_code());
     }
@@ -55,8 +55,8 @@ namespace error_system::core {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
-        error_context_t ctx(code, "error");
-        result_t<int> result(ctx);
+        error_context_t context(code, "error");
+        result_t<int> result(context);
         bool called = false;
         auto new_result = std::move(result).and_then([&called](int val) -> result_t<int> {
             called = true;
@@ -70,8 +70,8 @@ namespace error_system::core {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
-        error_context_t ctx(code, "error");
-        result_t<int> result(ctx);
+        error_context_t context(code, "error");
+        result_t<int> result(context);
         auto new_result =
             std::move(result).or_else([](const error_context_t&) -> result_t<int> { return result_t<int>(42); });
         EXPECT_TRUE(new_result.is_success());
@@ -100,8 +100,8 @@ namespace error_system::core {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
-        error_context_t ctx(code, "error");
-        result_t<void> result(ctx);
+        error_context_t context(code, "error");
+        result_t<void> result(context);
         EXPECT_FALSE(result.is_success());
         EXPECT_TRUE(result.is_error());
     }
@@ -121,8 +121,8 @@ namespace error_system::core {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
-        error_context_t ctx(code, "error");
-        result_t<void> result(ctx);
+        error_context_t context(code, "error");
+        result_t<void> result(context);
         auto new_result =
             std::move(result).or_else([](const error_context_t&) -> result_t<void> { return result_t<void>(); });
         EXPECT_TRUE(new_result.is_success());
@@ -139,8 +139,8 @@ namespace error_system::core {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
-        error_context_t ctx(code, "error");
-        result_t<int> result(ctx);
+        error_context_t context(code, "error");
+        result_t<int> result(context);
         auto new_result = result.or_else([](const error_context_t&) -> result_t<int> { return result_t<int>(99); });
         EXPECT_TRUE(new_result.is_success());
         EXPECT_EQ(new_result.value(), 99);
@@ -170,8 +170,8 @@ namespace error_system::core {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::none, 0, 0, 1);
         error_registry_t::instance().register_error(code, "ERR_1", "Error 1");
 
-        error_context_t ctx(code, "from context");
-        auto result = result_t<int>::make_error(ctx);
+        error_context_t context(code, "from context");
+        auto result = result_t<int>::make_error(context);
         EXPECT_TRUE(result.is_error());
         EXPECT_EQ(result.error().get_code().get_code(), code.get_code());
         EXPECT_EQ(result.error().message, "from context");
@@ -181,19 +181,19 @@ namespace error_system::core {
 
     TEST_F(result_test, expect_on_success_returns_value) {
         result_t<int> result(42);
-        EXPECT_EQ(result.expect("should not fail"), 42);
+        EXPECT_EQ(result.expect(), 42);
     }
 
     TEST_F(result_test, void_expect_on_success_no_op) {
         result_t<void> result;
         EXPECT_TRUE(result.is_success());
-        result.expect("void should be success");
+        result.expect();
         EXPECT_TRUE(result.is_success());
     }
 
     TEST_F(result_test, expect_with_string_value) {
         result_t<std::string> result(std::string("hello"));
-        EXPECT_EQ(result.expect("should be hello"), "hello");
+        EXPECT_EQ(result.expect(), "hello");
     }
 
     }  // namespace error_system::core

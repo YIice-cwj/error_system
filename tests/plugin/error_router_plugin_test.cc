@@ -45,8 +45,8 @@ namespace error_system::plugin {
             target_code, [&handler_called](const core::error_context_t&) { handler_called = true; });
 
         // Use default constructed context and set code directly
-        core::error_context_t ctx(core::error_code_t(target_code), "test");
-        error_router_plugin_t::instance().on_error(ctx);
+        core::error_context_t context(core::error_code_t(target_code), "test");
+        error_router_plugin_t::instance().on_error(context);
 
         EXPECT_TRUE(handler_called);
     }
@@ -62,8 +62,8 @@ namespace error_system::plugin {
             core::error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
 
         // Use default constructed context and set code directly
-        core::error_context_t ctx(code, "test");
-        error_router_plugin_t::instance().on_error(ctx);
+        core::error_context_t context(code, "test");
+        error_router_plugin_t::instance().on_error(context);
 
         EXPECT_TRUE(handler_called);
     }
@@ -72,11 +72,11 @@ namespace error_system::plugin {
         core::code_t received_code = 0;
 
         error_router_plugin_t::instance().register_handler_by_code(
-            99999, [&received_code](const core::error_context_t& ctx) { received_code = ctx.get_code().get_code(); });
+            99999, [&received_code](const core::error_context_t& context) { received_code = context.get_code().get_code(); });
 
         // Use default constructed context and set code directly
-        core::error_context_t ctx(core::error_code_t(99999), "test");
-        error_router_plugin_t::instance().on_error(ctx);
+        core::error_context_t context(core::error_code_t(99999), "test");
+        error_router_plugin_t::instance().on_error(context);
 
         EXPECT_EQ(received_code, 99999ULL);
     }
@@ -90,8 +90,8 @@ namespace error_system::plugin {
         error_router_plugin_t::instance().unregister_handler_by_code(11111);
 
         // Use default constructed context and set code directly
-        core::error_context_t ctx(core::error_code_t(11111), "test");
-        error_router_plugin_t::instance().on_error(ctx);
+        core::error_context_t context(core::error_code_t(11111), "test");
+        error_router_plugin_t::instance().on_error(context);
 
         EXPECT_FALSE(handler_called);
     }
@@ -109,8 +109,8 @@ namespace error_system::plugin {
             core::error_level_t::error, domain::system_domain_t::middleware, 1, 1, 1);
 
         // Use default constructed context and set code directly
-        core::error_context_t ctx(code, "test");
-        error_router_plugin_t::instance().on_error(ctx);
+        core::error_context_t context(code, "test");
+        error_router_plugin_t::instance().on_error(context);
 
         EXPECT_FALSE(handler_called);
     }
@@ -130,17 +130,17 @@ namespace error_system::plugin {
             code.get_code(), [&code_handler_called](const core::error_context_t&) { code_handler_called = true; });
 
         // Use default constructed context and set code directly
-        core::error_context_t ctx(code, "test");
-        error_router_plugin_t::instance().on_error(ctx);
+        core::error_context_t context(code, "test");
+        error_router_plugin_t::instance().on_error(context);
 
         EXPECT_TRUE(code_handler_called);
     }
 
     TEST_F(error_router_plugin_test, no_handler_does_not_crash) {
         // Use default constructed context and set code directly
-        core::error_context_t ctx(core::error_code_t(12345), "test");
+        core::error_context_t context(core::error_code_t(12345), "test");
 
-        EXPECT_NO_THROW(error_router_plugin_t::instance().on_error(ctx));
+        EXPECT_NO_THROW(error_router_plugin_t::instance().on_error(context));
     }
 
 }  // namespace error_system::plugin

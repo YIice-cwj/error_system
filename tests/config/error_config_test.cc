@@ -21,8 +21,8 @@ namespace error_system::config {
         auto retrieved = error_config_t::get_custom_formatter();
 
         ASSERT_NE(retrieved, nullptr);
-        core::error_context_t ctx;
-        retrieved(ctx);
+        core::error_context_t context;
+        retrieved(context);
         EXPECT_TRUE(formatter_called);
     }
 
@@ -96,8 +96,8 @@ namespace error_system::config {
             });
         }
 
-        for (auto& t : threads) {
-            t.join();
+        for (auto& thread : threads) {
+            thread.join();
         }
 
         EXPECT_EQ(success_count.load(), 1000);

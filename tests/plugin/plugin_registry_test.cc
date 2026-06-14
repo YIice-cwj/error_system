@@ -88,8 +88,8 @@ namespace error_system::plugin {
         plugin_registry_t::instance().register_plugin(&plugin1);
         plugin_registry_t::instance().register_plugin(&plugin2);
 
-        core::error_context_t ctx;
-        plugin_registry_t::instance().notify_error(ctx);
+        core::error_context_t context;
+        plugin_registry_t::instance().notify_error(context);
 
         EXPECT_EQ(plugin1.call_count_.load(), 1);
         EXPECT_EQ(plugin2.call_count_.load(), 1);
@@ -119,8 +119,8 @@ namespace error_system::plugin {
         plugin_registry_t::instance().register_plugin(&plugin);
 
         // Create context with code 42 and test message
-        core::error_context_t ctx(core::error_code_t(42), "test message");
-        plugin_registry_t::instance().notify_error(ctx);
+        core::error_context_t context(core::error_code_t(42), "test message");
+        plugin_registry_t::instance().notify_error(context);
 
         EXPECT_EQ(plugin.last_context_->get_code().get_code(), 42ULL);
     }
@@ -135,15 +135,15 @@ namespace error_system::plugin {
         for (int i = 0; i < 10; ++i) {
             threads.emplace_back([&]() {
                 for (int j = 0; j < 100; ++j) {
-                    core::error_context_t ctx(core::error_code_t(42));
-                    plugin_registry_t::instance().notify_error(ctx);
+                    core::error_context_t context(core::error_code_t(42));
+                    plugin_registry_t::instance().notify_error(context);
                     notify_count.fetch_add(1);
                 }
             });
         }
 
-        for (auto& t : threads) {
-            t.join();
+        for (auto& thread : threads) {
+            thread.join();
         }
 
         EXPECT_EQ(notify_count.load(), 1000);
@@ -168,8 +168,8 @@ namespace error_system::plugin {
             });
         }
 
-        for (auto& t : threads) {
-            t.join();
+        for (auto& thread : threads) {
+            thread.join();
         }
 
         EXPECT_EQ(plugin_registry_t::instance().size(), 0UL);
@@ -185,8 +185,8 @@ namespace error_system::plugin {
         std::thread notifier([&]() {
             notification_started.store(true);
             for (int i = 0; i < 2000; ++i) {
-                core::error_context_t ctx(core::error_code_t(42), "stress");
-                plugin_registry_t::instance().notify_error(ctx);
+                core::error_context_t context(core::error_code_t(42), "stress");
+                plugin_registry_t::instance().notify_error(context);
             }
         });
 
@@ -226,8 +226,8 @@ namespace error_system::plugin {
 
         std::thread notifier([&]() {
             for (int i = 0; i < 30; ++i) {
-                core::error_context_t ctx(core::error_code_t(42));
-                plugin_registry_t::instance().notify_error(ctx);
+                core::error_context_t context(core::error_code_t(42));
+                plugin_registry_t::instance().notify_error(context);
             }
         });
 

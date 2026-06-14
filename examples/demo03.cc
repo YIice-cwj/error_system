@@ -19,9 +19,9 @@ public:
         return "logger";
     }
 
-    void on_error(const error_context_t& ctx) noexcept override {
-        std::cerr << "[LOG] [" << to_string(ctx.get_code().get_level()) << "] "
-                  << ctx.to_string() << std::endl;
+    void on_error(const error_context_t& context) noexcept override {
+        std::cerr << "[LOG] [" << to_string(context.get_code().get_level()) << "] "
+                  << context.to_string() << std::endl;
     }
 
     // 记录所有级别，不限制
@@ -43,8 +43,8 @@ public:
         return error_level_t::error;  // 只统计 Error 及更严重级别
     }
 
-    void on_error(const error_context_t& ctx) noexcept override {
-        ++counters_[ctx.get_code().get_code()];
+    void on_error(const error_context_t& context) noexcept override {
+        ++counters_[context.get_code().get_code()];
     }
 
     int count(uint64_t code) const noexcept {
@@ -72,9 +72,9 @@ public:
         return error_level_t::fatal;  // 只处理 Fatal 级别
     }
 
-    void on_error(const error_context_t& ctx) noexcept override {
+    void on_error(const error_context_t& context) noexcept override {
         std::cerr << "[ALERT] 严重错误需要立即处理!" << std::endl;
-        std::cerr << "        " << ctx.message << std::endl;
+        std::cerr << "        " << context.message << std::endl;
     }
 };
 
@@ -143,15 +143,15 @@ int main() {
 
     error_router_plugin_t::instance().register_handler_by_code(
         biz::trade_errors::ERR_ORDER_NOT_FOUND,
-        [](const error_context_t& ctx) {
-            std::cout << "[路由] 特定错误处理: " << ctx.message << std::endl;
+        [](const error_context_t& context) {
+            std::cout << "[路由] 特定错误处理: " << context.message << std::endl;
         }
     );
 
     error_router_plugin_t::instance().register_handler_by_domain(
         system_domain_t::middleware,
-        [](const error_context_t& ctx) {
-            std::cout << "[路由] 中间件域错误: " << ctx.to_string() << std::endl;
+        [](const error_context_t& context) {
+            std::cout << "[路由] 中间件域错误: " << context.to_string() << std::endl;
         }
     );
 

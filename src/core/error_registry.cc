@@ -78,9 +78,9 @@ namespace error_system::core {
             return;
         }
 
-        auto& vec = mod_it->second;
-        vec.erase(std::remove(vec.begin(), vec.end(), identity_code), vec.end());
-        if (vec.empty()) {
+        auto& error_list = mod_it->second;
+        error_list.erase(std::remove(error_list.begin(), error_list.end(), identity_code), error_list.end());
+        if (error_list.empty()) {
             module_index_.erase(mod_it);
         }
     }

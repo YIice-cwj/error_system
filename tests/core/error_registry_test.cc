@@ -394,8 +394,8 @@ namespace error_system::core {
             });
         }
 
-        for (auto& t : threads) {
-            t.join();
+        for (auto& thread : threads) {
+            thread.join();
         }
 
         EXPECT_EQ(success_count.load(), 1000);
@@ -418,8 +418,8 @@ namespace error_system::core {
             });
         }
 
-        for (auto& t : threads) {
-            t.join();
+        for (auto& thread : threads) {
+            thread.join();
         }
 
         EXPECT_EQ(success_count.load(), 100);

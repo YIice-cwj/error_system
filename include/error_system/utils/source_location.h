@@ -18,9 +18,9 @@ namespace error_system::utils {
      */
     constexpr const char* extract_short_filename(const char* path) noexcept {
         const char* short_name = path;
-        for (const char* p = path; *p != '\0'; ++p) {
-            if (*p == '/' || *p == '\\') {
-                short_name = p + 1;
+        for (const char* ptr = path; *ptr != '\0'; ++ptr) {
+            if (*ptr == '/' || *ptr == '\\') {
+                short_name = ptr + 1;
             }
         }
         return short_name;
