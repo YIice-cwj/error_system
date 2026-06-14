@@ -11,8 +11,7 @@
 | [Core 层](api/core.md) | `error_system::core` | 错误码、等级、上下文、Result、异常、注册表 |
 | [Config 层](api/config.md) | `error_system::config` | 全局配置、per-code 覆盖、通知模式、格式化器 |
 | [Plugin 层](api/plugin.md) | `error_system::plugin` | 插件系统（同步/异步）、路由分发 |
-| [Memory 层](api/memory.md) | `error_system::memory` | 对象池、内存管理优化 |
-| [Utils 层](api/utils.md) | `error_system::utils` | 字符串工具、JSON 解析、文件操作、堆栈跟踪 |
+| [Utils 层](api/utils.md) | `error_system::utils` | 字符串工具、JSON 解析、文件操作、异步队列、堆栈跟踪 |
 
 ## 设计文档
 
@@ -46,10 +45,9 @@ ctest --output-on-failure
 |------|-----------|-----------|
 | Core 层 | 7 | 100+ |
 | Plugin 层 | 2 | 20 |
-| Memory 层 | 1 | 10 |
 | Utils 层 | 4 | 37+ |
 | Config 层 | 1 | 11 |
 | Domain 层 | 1 | 3 |
-| **总计** | **16** | **245** |
+| **总计** | **15** | **234** |
 
 > 另含 `tests/perf/` 下 3 个性能基线 benchmark 程序。

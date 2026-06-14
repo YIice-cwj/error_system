@@ -36,6 +36,8 @@ public:
 插件单例注册表，负责管理所有插件的生命周期和错误事件广播。
 
 支持**同步**和**异步队列**两种通知模式，通过 `error_config_t::set_notify_mode()` 切换。
+内部使用 **RCU（Read-Copy-Update）快照**机制，`notify_error()` 热路径零拷贝无锁读取插件列表。
+异步模式基于 `async_queue_t` 模版类实现。
 
 ### 核心 API
 
@@ -47,11 +49,11 @@ public:
     void register_plugin(i_error_plugin_t* plugin) noexcept;
     void unregister_plugin(std::string_view name) noexcept;
 
-    // 同步通知：依次调用每个插件的 on_error()
+    // 同步通知：RCU 快照无锁读取，依次调用每个插件的 on_error()
     void notify_error(const core::error_context_t& context) noexcept;
 
-    // 异步入队（v2.0 新增）：将 error_context_t 副本推入后台队列
-    // v2.1：超过 max_queue_size 时静默丢弃，避免内存无限增长
+    // 异步入队（v2.0 新增）：将 error_context_t 副本推入 async_queue_t 后台队列
+    // v2.3：底层使用 async_queue_t 模版类，支持背压控制
     void enqueue_notification(const core::error_context_t& context) noexcept;
 
     size_t size() const noexcept;
@@ -67,26 +69,28 @@ public:
 
 | 模式 | 行为 | 适用场景 |
 |------|------|----------|
-| `sync`（默认） | `error_context_t` 构造时同步调用所有插件的 `on_error()` | 日志、指标等轻量插件 |
-| `async_queue` | 通知推入后台队列，独立工作线程异步消费 | 网络上报、持久化等可能阻塞的插件 |
+| `sync`（默认） | `error_context_t` 构造时同步调用所有插件 `on_error()`，RCU 快照零拷贝 | 日志、指标等轻量插件 |
+| `async_queue` | 通知推入 `async_queue_t` 后台队列，独立工作线程异步消费 | 网络上报、持久化等可能阻塞的插件 |
 
 ### 异步模式内部机制
 
 ```
 error_context_t 构造
-  → notify_error(ctx)                     // 仅通知 min_level() <= ctx 等级的插件
-  → enqueue_notification(ctx)             // 复制 ctx → shared_ptr
-  → 检查 max_queue_size：若队列满 → 丢弃   // v2.1 背压保护
-  → push 队列 → cv.notify_one()           // 唤醒工作线程
+  → notify_error(context)                     // 仅通知 min_level() <= context 等级的插件
+  → enqueue_notification(context)             // 复制 context → shared_ptr
+  → async_queue_.enqueue(copy)               // 推入 async_queue_t
+  → cv.notify_one()                          // 唤醒工作线程
 
-async_worker_loop()
-  → wait(queue_cv_)                       // 阻塞等待
-  → pop 队列 → notify_error(ctx)          // 依次调用插件 on_error()
+async_queue_t::__worker_loop()
+  → wait(cv)                                  // 阻塞等待
+  → pop 队列 → processor_(item)               // 调用 processor
+  → plugin_registry_t::instance().notify_error(*context)  // 异步通知
 ```
 
-- 工作线程首次 `enqueue_notification()` 调用时自动启动
-- `plugin_registry_t` 析构时自动停止工作线程，等待队列排空
-- 工作线程内 `notify_error()` 调用`仍为同步`（依次调用插件），但已与调用方解耦
+- 工作线程首次 `enqueue()` 时自动启动，`async_queue_t` 析构时自动 join
+- 支持 `set_max_size()` 背压控制，队列满时拒绝入队
+- 处理器异常被捕获隔离，工作线程不回退出
+- 工作线程内 `notify_error()` 调用仍为同步（依次调用插件），但已与调用方解耦
 
 ### 使用示例
 

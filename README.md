@@ -31,8 +31,7 @@
 *   **源位置追踪**: 自动记录错误发生的文件名、函数名和行号，支持完整路径或短文件名模式。
 *   **插件系统 (Plugin)**: 支持同步/异步通知模式，插件级别过滤，异步队列背压控制，解耦插件 I/O。
 *   **代码生成工具**: 提供 Python 脚本从 JSON 配置自动生成错误码定义头文件，含 ID 冲突检测。
-*   **对象池优化**: `error_context_t` 的因果链包装使用线程局部对象池，减少高频场景下的堆分配开销。
-*   **完备的测试**: 深度集成 GoogleTest，16 个测试文件 245 个用例覆盖所有核心模块，确保逻辑坚如磐石。
+*   **完备的测试**: 深度集成 GoogleTest，15 个测试文件 234 个用例覆盖所有核心模块，确保逻辑坚如磐石。
 
 ---
 
@@ -179,7 +178,7 @@ if (result) {  // operator bool: 成功为 true
 }
 
 // expect(): 断言成功，Debug 下失败会触发断言，Release 返回哨兵值
-int value = result.expect("divide should never fail here");
+int value = result.expect();
 
 // value_pointer(): 安全获取成功值指针（失败返回 nullptr）
 if (auto* ptr = result.value_pointer()) {
@@ -377,6 +376,7 @@ error_context_t ctx{db_error_code, "连接超时"};  // 触发数据库域处理
 │  └── error_router_plugin_t (错误路由插件，按码/域分发)       │
 ├─────────────────────────────────────────────────────────────┤
 │  Utils Layer                                                 │
+│  ├── async_queue_t       (异步队列模版类)                     │
 │  ├── string_utils_t     (字符串处理: hash, trim, format...) │
 │  ├── json_utils_t       (JSON解析与字典)                     │
 │  ├── file_utils         (文件读写操作)                       │
@@ -485,11 +485,10 @@ ctest --output-on-failure
 |------|-----------|-----------|
 | Core 层 | 7 | 100+ |
 | Plugin 层 | 2 | 20 |
-| Memory 层 | 1 | 10 |
 | Utils 层 | 4 | 37+ |
 | Config 层 | 1 | 11 |
 | Domain 层 | 1 | 3 |
-| **总计** | **16** | **245** |
+| **总计** | **15** | **234** |
 
 > 注：测试发现超时已调整为 30 秒（`DISCOVERY_TIMEOUT 30`），确保在复杂环境下测试稳定运行。
 
@@ -577,6 +576,7 @@ error_system/
 │   │   ├── i_error_plugin.h
 │   │   └── plugin_registry.h
 │  ├── utils/                  # 辅助工具
+│  │   ├── async_queue.h       # 异步队列模版类
 │  │   ├── error_formatter.h
 │  │   ├── file_utils.h         # 文件操作 (file_utils_t)
 │  │   ├── json_lexer.h

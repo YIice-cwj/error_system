@@ -4,6 +4,70 @@
 
 ---
 
+## async_queue_t\<T, Processor\>
+
+异步工作队列模版类，单生产者-单消费者模式。从 `plugin_registry_t` 抽离的通用并发工具。
+
+### 模版参数
+
+| 参数 | 说明 |
+|------|------|
+| `T` | 队列元素类型（必须可移动） |
+| `Processor` | 处理器类型（void(T&) noexcept 可调用对象） |
+
+### 核心 API
+
+```cpp
+template <typename T, typename Processor>
+class async_queue_t {
+public:
+    explicit async_queue_t(Processor processor) noexcept;
+
+    // 推入队列，首次调用自动启动工作线程。队列满时返回 false
+    bool enqueue(T item) noexcept;
+
+    // 背压控制：0 表示无限制
+    void set_max_size(size_t size) noexcept;
+
+    // 查询队列状态
+    size_t size() const noexcept;
+    bool empty() const noexcept;
+};
+```
+
+### 特性
+
+| 特性 | 说明 |
+|------|------|
+| 自动生命周期 | 首次 `enqueue()` 启动线程，析构自动 `join()` |
+| 死锁安全 | 先 `running_ = false` 再 `notify_all` 再 `join()` |
+| 异常隔离 | 处理器异常 catch 后继续，工作线程不回退出 |
+| 背压控制 | `set_max_size()` 限制队列容量，满时拒绝入队 |
+| 零 `std::function` | Processor 模版参数，编译期确定调用目标 |
+
+### 使用示例
+
+```cpp
+#include "error_system/utils/async_queue.h"
+
+using namespace error_system::utils;
+
+// 创建异步队列，传入处理函数
+async_queue_t<int, decltype([](int& v) noexcept { process(v); })> queue(
+    [](int& v) noexcept { process(v); }
+);
+
+// 推入任务
+queue.enqueue(42);
+
+// 设置背压
+queue.set_max_size(1000);
+
+// 析构时自动等待队列排空并停止工作线程
+```
+
+---
+
 ## string_utils_t
 
 字符串工具类，提供哈希、格式化、分割、修剪、JSON 转义等功能。

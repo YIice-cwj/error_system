@@ -66,13 +66,14 @@ Domain             Plugin 层监听（同步或异步）
 | 文件 | 类 | 职责 |
 |------|----|------|
 | `i_error_plugin.h` | `i_error_plugin_t` | 插件抽象接口 |
-| `plugin_registry.h` | `plugin_registry_t` | 插件单例注册表（支持同步/异步通知模式） |
+| `plugin_registry.h` | `plugin_registry_t` | 插件单例注册表（RCU 快照零拷贝读取，async_queue_t 异步通知） |
 | `error_router_plugin.h` | `error_router_plugin_t` | 错误路由插件，按码/域/模块组分发 |
 
 ### Utils 层 (`include/error_system/utils/`)
 
 | 文件 | 类/工具 | 职责 |
 |------|---------|------|
+| `async_queue.h` | `async_queue_t` | 异步工作队列模版类（自动启停、背压控制、异常隔离） |
 | `string_utils.h` | `string_utils_t` | 哈希、格式化、分割、修剪等 |
 | `json_utils.h` | `json_dict_t` | JSON 字典加载与点路径访问 |
 | `file_utils.h` | `file_utils` | 文件读写、创建、删除、存在性检查 |
@@ -155,14 +156,15 @@ ctx.with("retry_count", 3)        // int → "3"
 // 同步模式（默认）：error_context_t 构造时同步调用插件
 error_config_t::set_notify_mode(error_config_t::notify_mode_t::sync);
 
-// 异步队列模式：通知推入后台队列，独立工作线程消费
+// 异步队列模式：通知推入 async_queue_t 后台队列，独立工作线程消费
 error_config_t::set_notify_mode(error_config_t::notify_mode_t::async_queue);
 ```
 
 异步模式内部机制：
 - 首次 `enqueue_notification()` 调用时自动启动后台工作线程
-- `plugin_registry_t` 析构时自动停止线程，等待队列排空
+- `async_queue_t` 析构时自动停止线程，等待队列排空
 - 通过 `pending_notifications()` 查询队列积压
+- `async_queue_t` 支持 `set_max_size()` 背压控制，处理器异常自动隔离
 
 ### 8. result_t\<T\> 零异常错误传递
 
@@ -171,7 +173,7 @@ error_config_t::set_notify_mode(error_config_t::notify_mode_t::async_queue);
 return result_t<Data>::make_error(ERR_FAIL, "原因");
 
 // expect(): Debug 模式下断言，Release 返回哨兵值
-int value = result.expect("should never fail here");
+int value = result.expect();
 
 // value_pointer(): 安全获取（失败返回 nullptr）
 if (auto* ptr = result.value_pointer()) { /* 安全使用 */ }
@@ -205,15 +207,26 @@ auto final = fetch()
 - **`to_json()`**: `code` 字段使用 `identity_code`（与 `to_string()` 一致），含因果链递归输出
 - **`to_binary()`**: 紧凑二进制格式，末尾新增 `has_cause` 标志 + 因果链递归序列化
 
-### 11. 对象池优化因果链
+### 11. RCU 快照 + SSO 小负载优化（v2.3）
 
-`error_context_t::wrap()` 使用线程局部对象池分配 cause 节点，仅在池满时才回退到 `std::make_shared`，显著降低高频错误链场景下的堆分配压力。
+**RCU 快照**：`plugin_registry_t` 使用 `shared_ptr<const vector>` + `atomic_load/atomic_store` 实现零拷贝无锁热路径。`notify_error()` 直接 `atomic_load` 读取插件列表，无需拷贝 vector 或加读锁。`register/unregister` 时持写锁深拷贝-修改-原子交换。
 
-### 12. 源位置追踪
+**SSO 小负载**：`error_context_t` 载荷使用 `array<pair<string,string>, 4>` 栈上存储 + `unique_ptr<unordered_map>` 惰性溢出。≤4 项 payload 完全零堆分配。
+
+### 12. 异步队列模版类 async_queue_t（v2.3）
+
+从 `plugin_registry_t` 抽离的通用单生产者-单消费者异步队列：
+- **模版参数**：`T`（队列元素类型）+ `Processor`（void(T&) 可调用对象）
+- **自动生命周期**：首次 `enqueue()` 启动线程，析构 `join()` 等待
+- **死锁安全**：先 `running_ = false` 再 `notify_all` 再 `join()`
+- **背压控制**：`set_max_size()` 限制队列容量
+- **异常隔离**：处理器异常 catch 后继续，工作线程不回退出
+
+### 13. 源位置追踪
 
 `error_context_t` 构造时自动将 `source_location_t::current()` 捕获到 `source_location_` 私有成员中，`fill_source_location()` 从中提取文件名、函数名和行号。支持完整路径和短文件名两种模式。
 
-### 13. 自动堆栈跟踪 + Per-Code 覆盖（v2.0）
+### 14. 自动堆栈跟踪 + Per-Code 覆盖（v2.0）
 
 ```
 优先级链: is_stacktrace_enabled → per-code 覆盖 → 全局阈值
@@ -232,11 +245,11 @@ error_config_t::set_per_code_stacktrace_level(
     ERR_RATE_LIMIT.get_identity_code(), error_level_t::fatal);
 ```
 
-### 14. 错误码验证
+### 15. 错误码验证
 
 若 `is_validation_enabled()` 为 `true` 且错误码未在 `error_registry_t` 中注册，则 `error_context_t` 构造时自动将错误码替换为 `fatal` 级别的未注册错误码。
 
-### 15. 全局错误配置
+### 16. 全局错误配置
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
@@ -250,7 +263,7 @@ error_config_t::set_per_code_stacktrace_level(
 | `notify_mode_` | `sync` | 插件通知模式 |
 | `custom_formatter_` | `nullptr` | 自定义格式化回调 |
 
-### 16. DEFINE_ERROR_CODE 宏（v2.0 扩展）
+### 17. DEFINE_ERROR_CODE 宏（v2.0 扩展）
 
 ```cpp
 // v2.0 签名：新增子系统/模块名称参数
@@ -265,7 +278,7 @@ DEFINE_ERROR_CODE(
 // to_string() 输出: [ERROR][数据库服务][连接管理][1] 数据库连接超时
 ```
 
-### 17. 查询 API 简化（v2.0）
+### 18. 查询 API 简化（v2.0）
 
 | 方法 | v1.x | v2.0 |
 |------|------|------|
@@ -273,7 +286,7 @@ DEFINE_ERROR_CODE(
 | `get_errors_by_subsystem()` | 不存在 | 按子系统 ID 查询所有错误码（v2.1 引入 subsystem_index_ O(1) 索引） |
 | `find_by_name()` | 不存在 | 按名称查找错误码 |
 
-### 18. error_code_t 便捷构造函数（v2.0）
+### 19. error_code_t 便捷构造函数（v2.0）
 
 ```cpp
 // 替代 error_builder_t::make_error_code()
@@ -281,7 +294,7 @@ error_code_t code(error_level_t::error, system_domain_t::database, 1, 2, 0x0010)
 ```
 `constexpr` 支持编译期常量构造，零运行时开销。
 
-### 19. 代码生成工具
+### 20. 代码生成工具
 
 ```
 script/script_py/
@@ -349,7 +362,7 @@ JSON 配置格式示例：
 
 - **测试框架**: GoogleTest
 - **测试文件数**: 16 个
-- **测试覆盖模块**: Core, Plugin, Memory, Utils, Config, Domain
+- **测试覆盖模块**: Core, Plugin, Utils, Config, Domain
 
 ### 测试覆盖
 
@@ -357,11 +370,10 @@ JSON 配置格式示例：
 |------|-----------|-----------|----------|
 | Core 层 | 7 | 100+ | `tests/core/*_test.cc` |
 | Plugin 层 | 2 | 20 | `tests/plugin/*_test.cc` |
-| Memory 层 | 1 | 10 | `tests/memory/*_test.cc` |
 | Utils 层 | 4 | 37+ | `tests/utils/*_test.cc` |
 | Config 层 | 1 | 11 | `tests/config/*_test.cc` |
 | Domain 层 | 1 | 3 | `tests/domain/*_test.cc` |
-| **总计** | **16** | **245** | - |
+| **总计** | **15** | **234** | - |
 
 ### 运行测试
 
