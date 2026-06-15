@@ -1,4 +1,5 @@
 #include "error_system/plugin/error_router_plugin.h"
+#include <cstdio>
 
 namespace error_system::plugin {
 
@@ -37,6 +38,7 @@ namespace error_system::plugin {
             try {
                 handler(context);
             } catch (...) {
+                std::fprintf(stderr, "[error_router_plugin] handler exception caught and ignored\n");
             }
         }
     }

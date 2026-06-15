@@ -85,7 +85,6 @@ namespace error_system::core {
         const bool stacktrace_enabled = error_config_t::is_stacktrace_enabled();
         const bool location_enabled = error_config_t::is_source_location_enabled();
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
-        // 优先使用 per-code 堆栈等级覆盖，否则使用全局配置
         auto stacktrace_level = stacktrace_enabled ? error_config_t::get_stacktrace_level() : error_level_t::warn;
         if (stacktrace_enabled) {
             const auto per_code_level = error_config_t::get_per_code_stacktrace_level(code_.get_identity_code());
@@ -115,7 +114,6 @@ namespace error_system::core {
         }
 #endif
 
-        // 根据通知模式选择同步或异步
         if (error_config_t::get_notify_mode() == error_config_t::notify_mode_t::async_queue) {
             plugin::plugin_registry_t::instance().enqueue_notification(*this);
         } else {
@@ -159,20 +157,23 @@ namespace error_system::core {
         return code_.is_success_code();
     }
 
-    error_context_t error_context_t::wrap(const error_context_t& underlying) const {
+    error_context_t error_context_t::wrap(const error_context_t& underlying) const noexcept {
         error_context_t new_code_context = *this;
-        new_code_context.cause = std::make_shared<error_context_t>(underlying);
+        try {
+            new_code_context.cause = std::make_shared<error_context_t>(underlying);
+        } catch (...) {}
         return new_code_context;
     }
 
-    error_context_t error_context_t::wrap(error_context_t&& underlying) const {
+    error_context_t error_context_t::wrap(error_context_t&& underlying) const noexcept {
         error_context_t new_code_context = *this;
-        new_code_context.cause = std::make_shared<error_context_t>(std::move(underlying));
+        try {
+            new_code_context.cause = std::make_shared<error_context_t>(std::move(underlying));
+        } catch (...) {}
         return new_code_context;
     }
 
     error_context_t& error_context_t::with(const std::string& key, const std::string& value) noexcept {
-        // 查找 SSO 中是否已存在 key
         const size_t sso_end = std::min<size_t>(payload_count_, PAYLOAD_SSO_CAPACITY);
         for (size_t i = 0; i < sso_end; ++i) {
             if (payload_small_[i].first == key) {
@@ -181,13 +182,11 @@ namespace error_system::core {
             }
         }
 
-        // 溢出 map 中查找
         if (payload_overflow_) {
             payload_overflow_->insert_or_assign(key, value);
             return *this;
         }
 
-        // 新增：还有 SSO 容量
         if (payload_count_ < PAYLOAD_SSO_CAPACITY) {
             payload_small_[payload_count_].first = key;
             payload_small_[payload_count_].second = value;
@@ -195,13 +194,18 @@ namespace error_system::core {
             return *this;
         }
 
-        // SSO 满了，创建溢出 map 并迁移
-        payload_overflow_ = std::make_unique<std::unordered_map<std::string, std::string>>();
-        for (size_t i = 0; i < PAYLOAD_SSO_CAPACITY; ++i) {
-            payload_overflow_->emplace(std::move(payload_small_[i].first),
-                                       std::move(payload_small_[i].second));
-        }
-        payload_overflow_->insert_or_assign(key, value);
+        try {
+            auto overflow = std::make_unique<std::unordered_map<std::string, std::string>>();
+            for (size_t i = 0; i < PAYLOAD_SSO_CAPACITY; ++i) {
+                overflow->emplace(payload_small_[i].first, payload_small_[i].second);
+            }
+            overflow->insert_or_assign(key, value);
+            payload_overflow_ = std::move(overflow);
+            for (size_t i = 0; i < PAYLOAD_SSO_CAPACITY; ++i) {
+                payload_small_[i] = {};
+            }
+            payload_count_ = 0;
+        } catch (...) {}
         return *this;
     }
 
@@ -214,7 +218,6 @@ namespace error_system::core {
     }
 
     error_context_t& error_context_t::with(std::string&& key, std::string&& value) noexcept {
-        // 查找 SSO 中是否已存在 key
         const size_t sso_end = std::min<size_t>(payload_count_, PAYLOAD_SSO_CAPACITY);
         for (size_t i = 0; i < sso_end; ++i) {
             if (payload_small_[i].first == key) {
@@ -235,12 +238,18 @@ namespace error_system::core {
             return *this;
         }
 
-        payload_overflow_ = std::make_unique<std::unordered_map<std::string, std::string>>();
-        for (size_t i = 0; i < PAYLOAD_SSO_CAPACITY; ++i) {
-            payload_overflow_->emplace(std::move(payload_small_[i].first),
-                                       std::move(payload_small_[i].second));
-        }
-        payload_overflow_->insert_or_assign(std::move(key), std::move(value));
+        try {
+            auto overflow = std::make_unique<std::unordered_map<std::string, std::string>>();
+            for (size_t i = 0; i < PAYLOAD_SSO_CAPACITY; ++i) {
+                overflow->emplace(payload_small_[i].first, payload_small_[i].second);
+            }
+            overflow->insert_or_assign(std::move(key), std::move(value));
+            payload_overflow_ = std::move(overflow);
+            for (size_t i = 0; i < PAYLOAD_SSO_CAPACITY; ++i) {
+                payload_small_[i] = {};
+            }
+            payload_count_ = 0;
+        } catch (...) {}
         return *this;
     }
 
@@ -276,10 +285,12 @@ namespace error_system::core {
 
     std::vector<std::pair<std::string, std::string>> error_context_t::get_payload() const noexcept {
         std::vector<std::pair<std::string, std::string>> result;
-        result.reserve(payload_count_);
-        for_each_payload([&](const std::string& key, const std::string& value) {
-            result.emplace_back(key, value);
-        });
+        try {
+            result.reserve(payload_count_ + (payload_overflow_ ? payload_overflow_->size() : 0));
+            for_each_payload([&](const std::string& key, const std::string& value) {
+                result.emplace_back(key, value);
+            });
+        } catch (...) {}
         return result;
     }
 
@@ -333,7 +344,7 @@ namespace error_system::core {
         }
         result.append(desc);
 
-        if (payload_count_ > 0) {
+        if (payload_count_ > 0 || payload_overflow_) {
             result.append(" {");
             bool first = true;
             for_each_payload([&](const std::string& key, const std::string& value) {
@@ -396,7 +407,7 @@ namespace error_system::core {
         json.append(",\"message\":");
         append_escaped_json_string(json, message);
 
-        if (payload_count_ > 0) {
+        if (payload_count_ > 0 || payload_overflow_) {
             json.append(",\"payload\":{");
             bool first_payload = true;
             for_each_payload([&](const std::string& key, const std::string& value) {
@@ -436,7 +447,8 @@ namespace error_system::core {
 
     std::string error_context_t::to_binary() const noexcept {
         std::string buf;
-        buf.reserve(128 + message.size() + payload_count_ * 24);
+        const size_t total_payload = payload_count_ + (payload_overflow_ ? payload_overflow_->size() : 0);
+        buf.reserve(128 + message.size() + total_payload * 24);
 
         auto write_string = [&buf](const std::string& str) {
             const uint32_t len = static_cast<uint32_t>(str.size());
@@ -463,7 +475,7 @@ namespace error_system::core {
         buf.push_back(0);
 #endif
 
-        write_little_endian(buf, static_cast<uint32_t>(payload_count_));
+        write_little_endian(buf, static_cast<uint32_t>(total_payload));
         for_each_payload([&](const std::string& key, const std::string& value) {
             write_string(key);
             write_string(value);

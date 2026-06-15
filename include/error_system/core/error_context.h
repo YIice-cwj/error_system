@@ -23,7 +23,7 @@ namespace error_system::plugin {
  * @details 定义错误上下文数据结构，封装错误码、消息、结构化负载、因果链、
  *          堆栈跟踪和源位置信息，提供统一的错误信息建模和序列化能力
  * @author yiice
- * @version 2.0.0
+ * @version 2.3.0
  * @date 2026-06-11
  * @copyright Copyright (c) 2026
  */
@@ -129,11 +129,10 @@ namespace error_system::core {
          * @brief 拷贝构造函数
          * @details 深拷贝 SSO payload 和溢出 map
          */
-        error_context_t(const error_context_t& other)
+        error_context_t(const error_context_t& other) noexcept
             : code_(other.code_), metadata_(other.metadata_),
               payload_count_(other.payload_count_),
-              message(other.message),
-              cause(other.cause ? std::make_shared<error_context_t>(*other.cause) : nullptr)
+              message(other.message)
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
               , stack_frames(other.stack_frames)
 #endif
@@ -145,10 +144,15 @@ namespace error_system::core {
             for (size_t i = 0; i < payload_count_ && i < PAYLOAD_SSO_CAPACITY; ++i) {
                 payload_small_[i] = other.payload_small_[i];
             }
-            if (other.payload_overflow_) {
-                payload_overflow_ = std::make_unique<std::unordered_map<std::string, std::string>>(
-                    *other.payload_overflow_);
-            }
+            try {
+                if (other.payload_overflow_) {
+                    payload_overflow_ = std::make_unique<std::unordered_map<std::string, std::string>>(
+                        *other.payload_overflow_);
+                }
+                if (other.cause) {
+                    cause = std::make_shared<error_context_t>(*other.cause);
+                }
+            } catch (...) {}
         }
         error_context_t& operator=(const error_context_t&) = delete;
         error_context_t& operator=(error_context_t&&) = delete;
@@ -209,14 +213,14 @@ namespace error_system::core {
          * @param underlying 底层错误上下文
          * @return error_context_t 包含因果链的新错误上下文
          */
-        error_context_t wrap(const error_context_t& underlying) const;
+        error_context_t wrap(const error_context_t& underlying) const noexcept;
 
         /**
          * @brief 包装底层错误为当前错误的直接原因（移动语义版本）
          * @param underlying 底层错误上下文（将被移动）
          * @return error_context_t 包含因果链的新错误上下文
          */
-        error_context_t wrap(error_context_t&& underlying) const;
+        error_context_t wrap(error_context_t&& underlying) const noexcept;
 
         /**
          * @brief 添加字符串类型负载字段
@@ -340,13 +344,15 @@ namespace error_system::core {
          * @brief 获取 payload 项数
          * @return size_t payload 项数
          */
-        size_t payload_size() const noexcept { return payload_count_; }
+        size_t payload_size() const noexcept {
+            return payload_count_ + (payload_overflow_ ? payload_overflow_->size() : 0);
+        }
 
         /**
          * @brief 判断 payload 是否为空
          * @return bool payload 为空时返回 true
          */
-        bool is_payload_empty() const noexcept { return payload_count_ == 0; }
+        bool is_payload_empty() const noexcept { return payload_count_ == 0 && !payload_overflow_; }
 
         /**
          * @brief 遍历所有 payload 项

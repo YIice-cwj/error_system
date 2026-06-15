@@ -1,4 +1,5 @@
 #include "error_system/utils/string_utils.h"
+#include <algorithm>
 #include <array>
 #include <charconv>
 

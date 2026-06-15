@@ -7,16 +7,13 @@
 #include <string_view>
 #include <type_traits>
 #include <vector>
-// IWYU pragma: begin_exports
-#include <algorithm>
-// IWYU pragma: end_exports
 
 /**
  * @file string_utils.h
  * @brief 字符串工具函数
  * @details 定义字符串相关的工具函数，用于处理字符串
  * @author yiice
- * @version 1.0.0
+ * @version 2.3.0
  * @date 2026-04-27
  * @copyright Copyright (c) 2026
  */
@@ -285,7 +282,9 @@ namespace error_system::utils {
                 }
             };
             (add_size(args), ...);
-            result.reserve(estimated_size);
+            try {
+                result.reserve(estimated_size);
+            } catch (...) {}
 
             format_appender appender{result, format, 0};
 

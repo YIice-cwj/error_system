@@ -266,6 +266,7 @@ namespace error_system::utils {
         } catch (const std::bad_alloc&) {
             return std::nullopt;
         } catch (...) {
+            std::fprintf(stderr, "[json_utils] parse exception caught and ignored\n");
             return std::nullopt;
         }
     }
