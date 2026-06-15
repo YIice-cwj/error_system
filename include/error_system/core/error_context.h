@@ -129,7 +129,7 @@ namespace error_system::core {
          * @brief 拷贝构造函数
          * @details 深拷贝 SSO payload 和溢出 map
          */
-        error_context_t(const error_context_t& other) noexcept
+        error_context_t(const error_context_t& other)
             : code_(other.code_), metadata_(other.metadata_),
               payload_count_(other.payload_count_),
               message(other.message),
@@ -173,7 +173,7 @@ namespace error_system::core {
          * error_context_t context(ERR_TIMEOUT, "请求超时: {}ms, 重试: {}次", 3000, 2);
          */
         template <typename... Args>
-        error_context_t(error_code_t code, std::string message_format = "", Args&&... args) noexcept
+        error_context_t(error_code_t code, std::string message_format, Args&&... args) noexcept
             : code_(code),
               metadata_(error_registry_t::instance().get_info(code)),
               message(utils::string_utils_t::format(message_format, std::forward<Args>(args)...)) {
@@ -209,14 +209,14 @@ namespace error_system::core {
          * @param underlying 底层错误上下文
          * @return error_context_t 包含因果链的新错误上下文
          */
-        error_context_t wrap(const error_context_t& underlying) const noexcept;
+        error_context_t wrap(const error_context_t& underlying) const;
 
         /**
          * @brief 包装底层错误为当前错误的直接原因（移动语义版本）
          * @param underlying 底层错误上下文（将被移动）
          * @return error_context_t 包含因果链的新错误上下文
          */
-        error_context_t wrap(error_context_t&& underlying) const noexcept;
+        error_context_t wrap(error_context_t&& underlying) const;
 
         /**
          * @brief 添加字符串类型负载字段
@@ -341,6 +341,12 @@ namespace error_system::core {
          * @return size_t payload 项数
          */
         size_t payload_size() const noexcept { return payload_count_; }
+
+        /**
+         * @brief 判断 payload 是否为空
+         * @return bool payload 为空时返回 true
+         */
+        bool is_payload_empty() const noexcept { return payload_count_ == 0; }
 
         /**
          * @brief 遍历所有 payload 项

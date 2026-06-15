@@ -142,6 +142,19 @@ namespace error_system::plugin {
          */
         size_t pending_notifications() const noexcept;
 
+        /**
+         * @brief 设置异步通知队列最大容量
+         * @details 当队列达到最大容量时，新通知将被丢弃（默认 0 = 无限制）
+         * @param max_size 队列最大容量
+         */
+        void set_max_queue_size(size_t max_size) noexcept;
+
+        /**
+         * @brief 获取异步通知队列最大容量
+         * @return size_t 队列最大容量，0 表示无限制
+         */
+        size_t get_max_queue_size() const noexcept;
+
         public:
         /**
          * @brief 获取单例实例

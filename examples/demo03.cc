@@ -125,8 +125,8 @@ int main() {
     std::cout << "通知模式已切换为: async_queue" << std::endl;
 
     // 设置背压上限
-    error_config_t::set_max_queue_size(100);
-    std::cout << "最大队列大小: " << error_config_t::get_max_queue_size() << std::endl;
+    registry.set_max_queue_size(100);
+    std::cout << "最大队列大小: " << registry.get_max_queue_size() << std::endl;
     std::cout << "（队列满时，新通知将被丢弃，避免内存无限增长）" << std::endl;
 
     // 在异步模式下创建错误（通知被推入异步队列）

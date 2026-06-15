@@ -373,23 +373,6 @@ namespace error_system::config {
         }
 #endif
 
-        /**
-         * @brief 设置异步通知队列最大容量
-         * @details 当队列达到最大容量时，新通知将被丢弃（默认 0 = 无限制）
-         * @param max_size 队列最大容量
-         */
-        static void set_max_queue_size(size_t max_size) noexcept {
-            __get_max_queue_size().store(max_size, std::memory_order_relaxed);
-        }
-
-        /**
-         * @brief 获取异步通知队列最大容量
-         * @return size_t 队列最大容量，0 表示无限制
-         */
-        static size_t get_max_queue_size() noexcept {
-            return __get_max_queue_size().load(std::memory_order_relaxed);
-        }
-
         private:
         /**
          * @brief 通知模式存储
@@ -417,13 +400,6 @@ namespace error_system::config {
         }
 #endif
 
-        /**
-         * @brief 异步队列最大容量存储
-         */
-        static std::atomic<size_t>& __get_max_queue_size() noexcept {
-            static std::atomic<size_t> max_size{0};
-            return max_size;
-        }
-    };
+        };
 
 }  // namespace error_system::config

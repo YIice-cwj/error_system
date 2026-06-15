@@ -159,13 +159,13 @@ namespace error_system::core {
         return code_.is_success_code();
     }
 
-    error_context_t error_context_t::wrap(const error_context_t& underlying) const noexcept {
+    error_context_t error_context_t::wrap(const error_context_t& underlying) const {
         error_context_t new_code_context = *this;
         new_code_context.cause = std::make_shared<error_context_t>(underlying);
         return new_code_context;
     }
 
-    error_context_t error_context_t::wrap(error_context_t&& underlying) const noexcept {
+    error_context_t error_context_t::wrap(error_context_t&& underlying) const {
         error_context_t new_code_context = *this;
         new_code_context.cause = std::make_shared<error_context_t>(std::move(underlying));
         return new_code_context;

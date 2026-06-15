@@ -62,6 +62,14 @@ namespace error_system::plugin {
         return async_queue_.size();
     }
 
+    void plugin_registry_t::set_max_queue_size(size_t max_size) noexcept {
+        async_queue_.set_max_size(max_size);
+    }
+
+    size_t plugin_registry_t::get_max_queue_size() const noexcept {
+        return async_queue_.max_size();
+    }
+
     plugin_registry_t& plugin_registry_t::instance() noexcept {
         static plugin_registry_t instance;
         return instance;

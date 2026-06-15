@@ -1,5 +1,6 @@
 #pragma once
 #include <atomic>
+#include <cstdio>
 #include <condition_variable>
 #include <cstddef>
 #include <mutex>
@@ -97,7 +98,9 @@ namespace error_system::utils {
                 }
                 try {
                     processor_(item);
-                } catch (...) {}
+                } catch (...) {
+                    std::fprintf(stderr, "[async_queue] processor exception caught and ignored\n");
+                }
             }
         }
 
@@ -151,6 +154,14 @@ namespace error_system::utils {
          */
         void set_max_size(size_t size) noexcept {
             max_size_ = size;
+        }
+
+        /**
+         * @brief 获取最大队列容量
+         * @return size_t 最大容量，0 表示无限制
+         */
+        size_t max_size() const noexcept {
+            return max_size_;
         }
 
         /**

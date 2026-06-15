@@ -135,7 +135,7 @@ namespace error_system::plugin {
         for (int i = 0; i < 10; ++i) {
             threads.emplace_back([&]() {
                 for (int j = 0; j < 100; ++j) {
-                    core::error_context_t context(core::error_code_t(42));
+                    core::error_context_t context(core::error_code_t(42), "test");
                     plugin_registry_t::instance().notify_error(context);
                     notify_count.fetch_add(1);
                 }
@@ -226,7 +226,7 @@ namespace error_system::plugin {
 
         std::thread notifier([&]() {
             for (int i = 0; i < 30; ++i) {
-                core::error_context_t context(core::error_code_t(42));
+                core::error_context_t context(core::error_code_t(42), "test");
                 plugin_registry_t::instance().notify_error(context);
             }
         });
