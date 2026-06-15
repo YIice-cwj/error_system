@@ -5,7 +5,7 @@
 namespace error_system::core {
 
     class result_test : public ::testing::Test {
-        protected:
+    protected:
         void SetUp() override { error_registry_t::instance().unregister_all(); }
 
         void TearDown() override { error_registry_t::instance().unregister_all(); }

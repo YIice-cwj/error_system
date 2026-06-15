@@ -8,7 +8,7 @@
  * @brief 错误码数据类定义
  * @details 定义错误码数据结构、字段解析和访问接口，采用完全符合 C++ 标准的位移实现
  * @author yiice
- * @version 1.0.1
+ * @version 2.3.0
  * @date 2026-05-21
  * @copyright Copyright (c) 2026
  */

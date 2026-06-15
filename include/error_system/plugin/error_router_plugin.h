@@ -14,7 +14,7 @@
  * @details 错误路由插件负责将错误事件路由到对应的插件进行处理，
  *          例如：日志记录、统计分析、告警通知等
  * @author yiice
- * @version 1.0.0
+ * @version 2.3.0
  * @date 2026-05-01
  * @copyright Copyright (c) 2026
  */

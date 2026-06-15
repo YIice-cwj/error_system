@@ -1,3 +1,6 @@
+// 注意：本示例演示 error_exception_t 的异常传递机制。
+// 项目规范要求所有函数 noexcept，生产代码应优先使用 result_t 模式。
+// 此处 throw 仅为演示 error_exception_t 的用法。
 #include "error_system.h"
 #include "payment_service_errors.h"
 #include "trade_service_errors.h"

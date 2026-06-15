@@ -3,11 +3,11 @@
 #include <string>
 
 /**
- * @file error_exception_t.h
+ * @file error_exception.h
  * @brief 错误异常数据类定义
  * @details 定义错误异常数据结构
  * @author yiice
- * @version 1.0.0
+ * @version 2.3.0
  * @date 2026-05-01
  * @copyright Copyright (c) 2026
  */

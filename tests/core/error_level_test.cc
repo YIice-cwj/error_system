@@ -85,4 +85,14 @@ namespace error_system::core {
         EXPECT_EQ(to_int(level), 3);
     }
 
+TEST_F(error_level_test, next_level_at_fatal_returns_fatal) {
+        // fatal 的下一级应保持 fatal（无更高级别）
+        EXPECT_EQ(next_level(error_level_t::fatal), error_level_t::fatal);
+    }
+
+    TEST_F(error_level_test, prev_level_at_debug_returns_fatal) {
+        // debug 的上一级下溢后 from_int 返回 fatal（无更低级别）
+        EXPECT_EQ(prev_level(error_level_t::debug), error_level_t::fatal);
+    }
+
 }  // namespace error_system::core

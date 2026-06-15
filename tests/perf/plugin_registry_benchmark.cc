@@ -11,9 +11,9 @@ using error_system::core::error_context_t;
 using error_system::plugin::i_error_plugin_t;
 using error_system::plugin::plugin_registry_t;
 
-constexpr int kPluginCount = 4;
-constexpr int kWarmupIterations = 20000;
-constexpr int kMeasureIterations = 200000;
+constexpr int PLUGIN_COUNT = 4;
+constexpr int WARMUP_ITERATIONS = 20000;
+constexpr int MEASURE_ITERATIONS = 200000;
 
 class benchmark_plugin_t : public i_error_plugin_t {
     public:
@@ -57,10 +57,10 @@ int main() {
     error_context_t context;
     context.message = "plugin benchmark";
 
-    run_loop(context, kWarmupIterations);
+    run_loop(context, WARMUP_ITERATIONS);
 
     const auto start = std::chrono::steady_clock::now();
-    const std::size_t iterations = run_loop(context, kMeasureIterations);
+    const std::size_t iterations = run_loop(context, MEASURE_ITERATIONS);
     const auto end = std::chrono::steady_clock::now();
 
     std::size_t total_callbacks = 0;
@@ -72,13 +72,13 @@ int main() {
     const auto ns_per_op = static_cast<double>(total_ns) / static_cast<double>(iterations);
 
     std::cout << "benchmark=plugin_registry_notify\n";
-    std::cout << "plugins=" << kPluginCount << "\n";
+    std::cout << "plugins=" << PLUGIN_COUNT << "\n";
     std::cout << "iterations=" << iterations << "\n";
     std::cout << "callbacks=" << total_callbacks << "\n";
     std::cout << "ns_per_op=" << ns_per_op << "\n";
 
-    constexpr double baseline_ns_per_op = 24.721;
-    const double ratio = ns_per_op / baseline_ns_per_op;
+    constexpr double BASELINE_NS_PER_OP = 24.721;
+    const double ratio = ns_per_op / BASELINE_NS_PER_OP;
     std::cout << "ratio_to_baseline=" << ratio << "\n";
     std::cout << "task4_target_passed=" << (ratio < 0.50 ? "true" : "false") << "\n";
 

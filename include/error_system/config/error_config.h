@@ -13,7 +13,7 @@
  * @brief 错误配置类
  * @details 封装错误配置信息
  * @author yiice
- * @version 1.0.0
+ * @version 2.3.0
  * @date 2026-05-03
  * @copyright Copyright (c) 2026
  */

@@ -11,7 +11,7 @@
  * @brief 结果数据类定义
  * @details 定义结果数据结构、字段解析和访问接口
  * @author yiice
- * @version 1.0.0
+ * @version 2.3.0
  * @date 2026-05-01
  * @copyright Copyright (c) 2026
  */

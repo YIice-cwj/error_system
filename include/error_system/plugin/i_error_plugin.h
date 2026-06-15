@@ -9,7 +9,7 @@
  * @details 定义错误系统插件的基础接口，插件可接收错误事件并进行处理，
  *          例如：日志记录、统计分析、告警通知等
  * @author yiice
- * @version 2.0.0
+ * @version 2.3.0
  * @date 2026-05-01
  * @copyright Copyright (c) 2026
  */

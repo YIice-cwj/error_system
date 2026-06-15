@@ -17,9 +17,9 @@ using error_system::core::error_registry_t;
 using error_system::domain::system_domain_t;
 using error_system::plugin::plugin_registry_t;
 
-constexpr int kWarmupIterations = 10000;
-constexpr int kMeasureIterations = 200000;
-constexpr double kTask2BaselineNsPerOp = 4591.1;
+constexpr int WARMUP_ITERATIONS = 10000;
+constexpr int MEASURE_ITERATIONS = 200000;
+constexpr double TASK2_BASELINE_NS_PER_OP = 4591.1;
 
 error_code_t make_benchmark_code() noexcept {
     return error_code_t(error_level_t::error, system_domain_t::database, 1, 1, 1);
@@ -47,15 +47,15 @@ std::size_t run_loop(int iterations) noexcept {
 }
 
 double measure_ns_per_op() noexcept {
-    run_loop(kWarmupIterations);
+    run_loop(WARMUP_ITERATIONS);
 
     const auto start = std::chrono::steady_clock::now();
-    const std::size_t checksum = run_loop(kMeasureIterations);
+    const std::size_t checksum = run_loop(MEASURE_ITERATIONS);
     const auto end = std::chrono::steady_clock::now();
 
     std::cout << "checksum=" << checksum << "\n";
     const auto total_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
-    return static_cast<double>(total_ns) / static_cast<double>(kMeasureIterations);
+    return static_cast<double>(total_ns) / static_cast<double>(MEASURE_ITERATIONS);
 }
 
 void print_flag(const char* name, bool enabled) {
@@ -68,7 +68,7 @@ int main() {
     prepare_registry();
 
     std::cout << "benchmark=error_context_create\n";
-    std::cout << "iterations=" << kMeasureIterations << "\n";
+    std::cout << "iterations=" << MEASURE_ITERATIONS << "\n";
     print_flag("stacktrace", error_config_t::is_stacktrace_enabled());
     print_flag("validation", error_config_t::is_validation_enabled());
     print_flag("location", error_config_t::is_source_location_enabled());
@@ -83,7 +83,7 @@ int main() {
     error_config_t::set_enable_stacktrace(true);
 #endif
 
-    const double fast_path_ratio_to_baseline = fast_path_ns_per_op / kTask2BaselineNsPerOp;
+    const double fast_path_ratio_to_baseline = fast_path_ns_per_op / TASK2_BASELINE_NS_PER_OP;
     std::cout << "default_ns_per_op=" << default_ns_per_op << "\n";
     std::cout << "fast_path_ns_per_op=" << fast_path_ns_per_op << "\n";
     std::cout << "fast_path_ratio_to_baseline=" << fast_path_ratio_to_baseline << "\n";

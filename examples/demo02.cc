@@ -9,12 +9,12 @@ using namespace error_system::domain;
 // 模拟订单查询
 result_t<int> query_order(int order_id) {
     if (order_id <= 0) {
-        return result_t<int>(error_context_t(biz::trade_errors::ERR_ORDER_NOT_FOUND, "无效的订单ID"));
+        return result_t<int>{error_context_t(biz::trade_errors::ERR_ORDER_NOT_FOUND, "无效的订单ID")};
     }
     if (order_id == 404) {
         return result_t<int>::make_error(biz::trade_errors::ERR_ORDER_NOT_FOUND, "订单不存在");
     }
-    return result_t<int>(order_id * 1000);  // 返回订单金额
+    return result_t<int>{order_id * 1000};  // 返回订单金额
 }
 
 // 模拟支付处理
@@ -27,7 +27,7 @@ result_t<std::string> process_payment(int user_id, int amount) {
         return result_t<std::string>::make_error(
             biz::payment_errors::ERR_ACCOUNT_FROZEN, "用户账户已被冻结");
     }
-    return result_t<std::string>(std::string("PAY_") + std::to_string(user_id) + "_" + std::to_string(amount));
+    return result_t<std::string>{std::string("PAY_") + std::to_string(user_id) + "_" + std::to_string(amount)};
 }
 
 int main() {
@@ -55,7 +55,7 @@ int main() {
                 error_code_t(error_level_t::warn, system_domain_t::application, 0, 0, 1),
                 "订单金额超过限额");
         }
-        return result_t<std::string>(std::string("订单金额正常: " + std::to_string(amount)));
+        return result_t<std::string>{std::string("订单金额正常: " + std::to_string(amount))};
     });
 
     if (result3.is_success()) {
@@ -69,7 +69,7 @@ int main() {
     auto result4 = query_order(404).or_else([](const error_context_t& err) -> result_t<int> {
         std::cout << "捕获错误: " << err.message << std::endl;
         std::cout << "返回默认值 0" << std::endl;
-        return result_t<int>(0);
+        return result_t<int>{0};
     });
     std::cout << "最终结果: " << result4.value() << std::endl;
 

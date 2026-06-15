@@ -14,16 +14,16 @@ int main() {
 
     // 1. 使用自动生成的错误码
     std::cout << "\n--- 1. 使用自动生成的错误码 ---" << std::endl;
-    error_context_t ctx1(biz::trade_errors::ERR_ORDER_NOT_FOUND, "订单查询失败");
+    error_context_t ctx1{biz::trade_errors::ERR_ORDER_NOT_FOUND, "订单查询失败"};
     ctx1.with("user_id", "8848").with("action", "query_order");
     std::cout << ctx1 << std::endl;
 
     // 2. 不同等级的错误码
     std::cout << "\n--- 2. 不同等级的错误 ---" << std::endl;
-    error_context_t ctx2(biz::user_errors::ERR_TOKEN_EXPIRED, "Token 已过期");
+    error_context_t ctx2{biz::user_errors::ERR_TOKEN_EXPIRED, "Token 已过期"};
     std::cout << "Info 级别: " << ctx2 << std::endl;
 
-    error_context_t ctx3(biz::payment_errors::ERR_ACCOUNT_FROZEN, "账户已被冻结");
+    error_context_t ctx3{biz::payment_errors::ERR_ACCOUNT_FROZEN, "账户已被冻结"};
     std::cout << "Fatal 级别: " << ctx3 << std::endl;
 
     // 3. Sign 位语义（v2.1: 0=false=错误, 1=true=成功）
@@ -58,8 +58,8 @@ int main() {
 
     // 7. 因果链 + 二进制序列化对比
     std::cout << "\n--- 7. 错误因果链（含二进制序列化） ---" << std::endl;
-    error_context_t root(infra::redis_errors::ERR_KEY_NOT_FOUND, "Redis 键不存在");
-    error_context_t wrapper(biz::trade_errors::ERR_ORDER_NOT_FOUND, "订单服务不可用");
+    error_context_t root{infra::redis_errors::ERR_KEY_NOT_FOUND, "Redis 键不存在"};
+    error_context_t wrapper{biz::trade_errors::ERR_ORDER_NOT_FOUND, "订单服务不可用"};
     auto chained = wrapper.wrap(root);
     std::cout << chained << std::endl;
 
@@ -69,7 +69,7 @@ int main() {
 
     // 8. with_batch 批量添加 payload（v2.1）
     std::cout << "\n--- 8. with_batch 批量添加 payload ---" << std::endl;
-    error_context_t ctx4(biz::payment_errors::ERR_INSUFFICIENT_BALANCE, "余额不足");
+    error_context_t ctx4{biz::payment_errors::ERR_INSUFFICIENT_BALANCE, "余额不足"};
     ctx4.with_batch({
         {"user_id", "8848"},
         {"balance", "150"},
@@ -81,7 +81,7 @@ int main() {
 
     // 9. payload 多类型值（模板 with）
     std::cout << "\n--- 9. payload 多类型值 ---" << std::endl;
-    error_context_t ctx5(biz::payment_errors::ERR_INSUFFICIENT_BALANCE, "余额不足");
+    error_context_t ctx5{biz::payment_errors::ERR_INSUFFICIENT_BALANCE, "余额不足"};
     ctx5.with("user_id", 8848)
         .with("balance", 150)
         .with("required", 500)
@@ -91,8 +91,8 @@ int main() {
 
     // 10. compare operators（v2.1）
     std::cout << "\n--- 10. compare operators ---" << std::endl;
-    error_context_t ctx_a(biz::trade_errors::ERR_ORDER_NOT_FOUND, "相同消息");
-    error_context_t ctx_b(biz::trade_errors::ERR_ORDER_NOT_FOUND, "相同消息");
+    error_context_t ctx_a{biz::trade_errors::ERR_ORDER_NOT_FOUND, "相同消息"};
+    error_context_t ctx_b{biz::trade_errors::ERR_ORDER_NOT_FOUND, "相同消息"};
     std::cout << "  ctx_a == ctx_b: " << (ctx_a == ctx_b) << " (应为 1)" << std::endl;
     std::cout << "  ctx_a != ctx1: " << (ctx_a != ctx1) << " (应为 1, 消息不同)" << std::endl;
 

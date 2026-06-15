@@ -14,11 +14,11 @@ using error_system::core::error_level_t;
 using error_system::core::error_registry_t;
 using error_system::domain::system_domain_t;
 
-constexpr std::size_t kBatchSize = 4096;
-constexpr int kRegisterRounds = 20;
-constexpr int kLookupRounds = 200;
-constexpr double kTask3BaselineBatchRegisterNsPerOp = 210.926;
-constexpr double kTask3BaselineLookupNsPerOp = 18.526;
+constexpr std::size_t BATCH_SIZE = 4096;
+constexpr int REGISTER_ROUNDS = 20;
+constexpr int LOOKUP_ROUNDS = 200;
+constexpr double TASK3_BASELINE_BATCH_REGISTER_NS_PER_OP = 210.926;
+constexpr double TASK3_BASELINE_LOOKUP_NS_PER_OP = 18.526;
 
 struct dataset_t {
     std::vector<error_code_t> codes;
@@ -30,20 +30,20 @@ struct dataset_t {
 
 dataset_t build_dataset() {
     dataset_t data;
-    data.codes.reserve(kBatchSize);
-    data.names.reserve(kBatchSize);
-    data.descriptions.reserve(kBatchSize);
-    data.name_views.reserve(kBatchSize);
-    data.description_views.reserve(kBatchSize);
+    data.codes.reserve(BATCH_SIZE);
+    data.names.reserve(BATCH_SIZE);
+    data.descriptions.reserve(BATCH_SIZE);
+    data.name_views.reserve(BATCH_SIZE);
+    data.description_views.reserve(BATCH_SIZE);
 
-    for (std::size_t i = 0; i < kBatchSize; ++i) {
+    for (std::size_t i = 0; i < BATCH_SIZE; ++i) {
         data.codes.push_back(error_code_t(
             error_level_t::error, system_domain_t::database, 2, static_cast<uint16_t>((i / 128) + 1), static_cast<uint16_t>(i + 1)));
         data.names.push_back("ERR_PERF_REGISTRY_" + std::to_string(i));
         data.descriptions.push_back("registry benchmark item " + std::to_string(i));
     }
 
-    for (std::size_t i = 0; i < kBatchSize; ++i) {
+    for (std::size_t i = 0; i < BATCH_SIZE; ++i) {
         data.name_views.push_back(data.names[i]);
         data.description_views.push_back(data.descriptions[i]);
     }
@@ -55,13 +55,13 @@ double benchmark_batch_register(const dataset_t& data) {
     registry.set_duplicate_warn_callback(nullptr);
 
     const auto start = std::chrono::steady_clock::now();
-    for (int round = 0; round < kRegisterRounds; ++round) {
+    for (int round = 0; round < REGISTER_ROUNDS; ++round) {
         registry.unregister_all();
         registry.register_errors(data.codes, data.name_views, data.description_views);
     }
     const auto end = std::chrono::steady_clock::now();
     const auto total_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
-    return static_cast<double>(total_ns) / static_cast<double>(kRegisterRounds * kBatchSize);
+    return static_cast<double>(total_ns) / static_cast<double>(REGISTER_ROUNDS * BATCH_SIZE);
 }
 
 double benchmark_lookup(const dataset_t& data, std::size_t& checksum) {
@@ -70,7 +70,7 @@ double benchmark_lookup(const dataset_t& data, std::size_t& checksum) {
     registry.register_errors(data.codes, data.name_views, data.description_views);
 
     const auto start = std::chrono::steady_clock::now();
-    for (int round = 0; round < kLookupRounds; ++round) {
+    for (int round = 0; round < LOOKUP_ROUNDS; ++round) {
         for (const auto& code : data.codes) {
             const error_system::core::error_metadata_t* info = registry.get_info(code);
             if (info != nullptr) {
@@ -80,7 +80,7 @@ double benchmark_lookup(const dataset_t& data, std::size_t& checksum) {
     }
     const auto end = std::chrono::steady_clock::now();
     const auto total_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
-    return static_cast<double>(total_ns) / static_cast<double>(kLookupRounds * kBatchSize);
+    return static_cast<double>(total_ns) / static_cast<double>(LOOKUP_ROUNDS * BATCH_SIZE);
 }
 }  // namespace
 
@@ -93,18 +93,18 @@ int main() {
     const double lookup_ns_per_op = benchmark_lookup(data, checksum);
 
     std::cout << "benchmark=error_registry\n";
-    std::cout << "batch_size=" << kBatchSize << "\n";
-    std::cout << "register_rounds=" << kRegisterRounds << "\n";
-    std::cout << "lookup_rounds=" << kLookupRounds << "\n";
+    std::cout << "batch_size=" << BATCH_SIZE << "\n";
+    std::cout << "register_rounds=" << REGISTER_ROUNDS << "\n";
+    std::cout << "lookup_rounds=" << LOOKUP_ROUNDS << "\n";
     std::cout << "checksum=" << checksum << "\n";
     std::cout << "batch_register_ns_per_op=" << batch_register_ns_per_op << "\n";
     std::cout << "lookup_ns_per_op=" << lookup_ns_per_op << "\n";
     std::cout << "batch_register_ratio_to_baseline="
-              << (batch_register_ns_per_op / kTask3BaselineBatchRegisterNsPerOp) << "\n";
-    std::cout << "lookup_ratio_to_baseline=" << (lookup_ns_per_op / kTask3BaselineLookupNsPerOp) << "\n";
+              << (batch_register_ns_per_op / TASK3_BASELINE_BATCH_REGISTER_NS_PER_OP) << "\n";
+    std::cout << "lookup_ratio_to_baseline=" << (lookup_ns_per_op / TASK3_BASELINE_LOOKUP_NS_PER_OP) << "\n";
     std::cout << "task3_target_passed="
-              << ((batch_register_ns_per_op < (kTask3BaselineBatchRegisterNsPerOp * 0.60) &&
-                   lookup_ns_per_op < (kTask3BaselineLookupNsPerOp * 0.85))
+              << ((batch_register_ns_per_op < (TASK3_BASELINE_BATCH_REGISTER_NS_PER_OP * 0.60) &&
+                   lookup_ns_per_op < (TASK3_BASELINE_LOOKUP_NS_PER_OP * 0.85))
                       ? "true"
                       : "false")
               << "\n";

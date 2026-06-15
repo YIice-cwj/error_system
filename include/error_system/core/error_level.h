@@ -9,7 +9,7 @@
  *          提供错误等级与整数、字符串之间的相互转换功能，
  *          支持编译期常量计算，用于日志过滤和错误处理决策
  * @author yiice
- * @version 1.0.0
+ * @version 2.3.0
  * @date 2026-04-27
  * @copyright Copyright (c) 2026
  */

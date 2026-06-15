@@ -18,7 +18,7 @@
  * @brief 错误码注册器
  * @details 定义错误码注册器，用于注册和查找错误码
  * @author yiice
- * @version 1.0.0
+ * @version 2.3.0
  * @date 2026-04-27
  * @copyright Copyright (c) 2026
  */
