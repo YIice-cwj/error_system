@@ -76,7 +76,7 @@ Domain             Plugin 层监听（同步或异步）
 | `async_queue.h` | `async_queue_t` | 异步工作队列模版类（自动启停、背压控制、异常隔离） |
 | `string_utils.h` | `string_utils_t` | 哈希、格式化、分割、修剪等 |
 | `json_utils.h` | `json_dict_t` | JSON 字典加载与点路径访问 |
-| `file_utils.h` | `file_utils` | 文件读写、创建、删除、存在性检查 |
+| `file_utils.h` | `file_utils_t` | 文件读写、创建、删除、存在性检查 |
 | `stack_trace_utils.h` | `stack_trace_utils_t` | 跨平台堆栈跟踪（Linux/macOS/Windows） |
 | `source_location.h` | `source_location_t` | 源文件位置信息封装 |
 | `error_formatter.h` | `operator<<` | `error_context_t` 输出流运算符重载 |
@@ -305,11 +305,11 @@ script/script_py/
 ```
 
 ```bash
-# 统一生成（推荐）
+# 统一生成（推荐，默认输出到 build/generated_errors）
 python script/script_py/generate_all.py
 
-# 或通过 shell 脚本
-bash script/generate_errors.sh
+# 指定构建目录
+python script/script_py/generate_all.py build-release
 ```
 
 JSON 配置格式示例：
@@ -361,7 +361,7 @@ JSON 配置格式示例：
 ### 测试框架
 
 - **测试框架**: GoogleTest
-- **测试文件数**: 16 个
+- **测试文件数**: 15 个
 - **测试覆盖模块**: Core, Plugin, Utils, Config, Domain
 
 ### 测试覆盖

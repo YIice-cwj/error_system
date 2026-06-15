@@ -62,6 +62,10 @@ public:
 
     // v2.0 新增：获取异步队列待处理通知数
     size_t pending_notifications() const noexcept;
+
+    // v2.3 新增：异步队列背压控制
+    void set_max_queue_size(size_t max_size) noexcept;
+    size_t get_max_queue_size() const noexcept;
 };
 ```
 
@@ -89,7 +93,7 @@ async_queue_t::__worker_loop()
 
 - 工作线程首次 `enqueue()` 时自动启动，`async_queue_t` 析构时自动 join
 - 支持 `set_max_size()` 背压控制，队列满时拒绝入队
-- 处理器异常被捕获隔离，工作线程不回退出
+- 处理器异常被捕获隔离，工作线程不会退出
 - 工作线程内 `notify_error()` 调用仍为同步（依次调用插件），但已与调用方解耦
 
 ### 使用示例
@@ -208,7 +212,7 @@ public:
     void on_error(const error_context_t& context) noexcept override {
         ++error_count_;
         std::lock_guard<std::mutex> lock(mutex_);
-        shared_data_.push_back(context.code.get_code());
+        shared_data_.push_back(context.get_code().get_code());
     }
     std::string_view name() const noexcept override {
         return "thread_safe_plugin";

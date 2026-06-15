@@ -64,7 +64,7 @@ public:
 | `enable_short_filename_` | `true` | 短文件名模式（仅显示文件名，不含路径） |
 | `enable_text_output_` | `true` | 文本输出模式（false 时输出数字 ID） |
 | `notify_mode_` | `sync` | 插件通知模式（sync：同步，async_queue：异步队列） |
-| `max_queue_size_` | `0`（无限制） | 异步队列最大容量（v2.1），超过后新通知丢弃 |
+| `max_queue_size_` | `0`（无限制） | 异步队列最大容量（v2.3），超过后新通知丢弃 |
 | `custom_formatter_` | `nullptr` | 自定义格式化回调 |
 
 ### 使用示例
@@ -120,10 +120,9 @@ error_config_t::reset_to_defaults();
 
 ```
 1. 若 is_stacktrace_enabled() == false → 不捕获堆栈
-2. 否则，取 max(全局等级, per-code 等级)
-   - 若 per-code 有值，使用 per-code 值
-   - 若 per-code 无值，使用全局值
-3. 若错误等级 >= 最终阈值 → 捕获堆栈
+2. 否则，若 per-code 有值，使用 per-code 值
+3. 若 per-code 无值，使用全局值
+4. 若错误等级 >= 最终阈值 → 捕获堆栈
 ```
 
 ### 与 CMake 选项的关系

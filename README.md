@@ -129,8 +129,8 @@ ctx.with("host", "192.168.1.100")
    .with("retry", true)
    .with("latency_ms", 150.5);
 
-// 获取 payload 只读引用
-const auto& payload = ctx.get_payload();
+// 获取 payload 副本
+auto payload = ctx.get_payload();
 
 // 获取 C 风格错误描述
 const char* desc = ctx.what();
@@ -218,7 +218,7 @@ try {
 }
 ```
 
-### 7. 使用 DEFINE_ERROR_CODE 宏定义错误码
+### 6. 使用 DEFINE_ERROR_CODE 宏定义错误码
 
 使用宏可以方便地定义错误码并自动注册到错误码注册表：
 
@@ -344,7 +344,8 @@ error_router_plugin_t::instance().register_handler_by_domain(
 plugin_registry_t::instance().register_plugin(&error_router_plugin_t::instance());
 
 // 之后创建的错误上下文会自动路由到对应的处理函数
-error_context_t ctx{db_error_code, "连接超时"};  // 触发数据库域处理函数
+auto some_code = error_code_t(error_level_t::error, domain::system_domain_t::database, 0, 0, 1);
+error_context_t ctx(some_code, "连接超时");  // 触发数据库域处理函数
 ```
 
 ---
@@ -378,7 +379,7 @@ error_context_t ctx{db_error_code, "连接超时"};  // 触发数据库域处理
 │  Utils Layer                                                 │
 │  ├── async_queue_t       (异步队列模版类)                     │
 │  ├── string_utils_t     (字符串处理: hash, trim, format...) │
-│  ├── json_utils_t       (JSON解析与字典)                     │
+│  ├── json_dict_t         (JSON解析与字典)                     │
 │  ├── file_utils         (文件读写操作)                       │
 │  ├── stack_trace_utils_t(跨平台堆栈跟踪)                     │
 │  └── source_location_t  (源文件位置追踪)                     │
@@ -510,7 +511,7 @@ sudo cmake --install .
 #### 方式一：使用 find_package
 
 ```cmake
-find_package(error_system 1.0.0 REQUIRED)
+find_package(error_system 2.3.0 REQUIRED)
 
 add_executable(my_business_app main.cpp)
 target_link_libraries(my_business_app PRIVATE error_system::error_system)
@@ -519,7 +520,7 @@ target_link_libraries(my_business_app PRIVATE error_system::error_system)
 #### 方式二：使用 CMake 宏自动生成错误码（推荐）
 
 ```cmake
-find_package(error_system 1.0.0 REQUIRED)
+find_package(error_system 2.3.0 REQUIRED)
 
 add_executable(my_business_app main.cpp)
 target_link_libraries(my_business_app PRIVATE error_system::error_system)
@@ -592,7 +593,6 @@ error_system/
 │   ├── config/                 # 配置层测试
 │   ├── core/                   # 核心层测试
 │   ├── domain/                 # 系统域测试
-│   ├── memory/                 # 内存层测试
 │   ├── plugin/                 # 插件层测试
 │   └── utils/                  # 工具库测试
 ├── script/                     # 代码生成脚本
