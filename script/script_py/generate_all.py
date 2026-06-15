@@ -2,21 +2,42 @@
 """
 统一错误码生成入口脚本。
 一次调用完成：业务错误码头文件 + 全局字典 + Markdown 文档 三项生成。
+
+用法:
+    python generate_all.py                    # 默认输出到 build/generated_errors
+    python generate_all.py build-release      # 指定构建目录
+    python generate_all.py /path/to/output    # 指定绝对输出路径
 """
 
+import argparse
 import os
 import subprocess
 import sys
 
 
 def main():
+    parser = argparse.ArgumentParser(description="统一错误码生成入口脚本")
+    parser.add_argument(
+        "build_dir",
+        nargs="?",
+        default="build",
+        help="构建目录（相对于项目根目录），默认为 build")
+    args = parser.parse_args()
+
     # 动态定位项目根目录（脚本位于 script/script_py/ 下）
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(os.path.dirname(script_dir))
 
     json_dir = os.path.join(project_root, "config", "errors")
-    output_dir = os.path.join(project_root, "build", "generated_errors", "include")
-    generated_dir = os.path.join(project_root, "build", "generated_errors")
+
+    # 支持绝对路径和相对路径
+    if os.path.isabs(args.build_dir):
+        build_dir = args.build_dir
+    else:
+        build_dir = os.path.join(project_root, args.build_dir)
+
+    output_dir = os.path.join(build_dir, "generated_errors", "include")
+    generated_dir = os.path.join(build_dir, "generated_errors")
 
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(generated_dir, exist_ok=True)

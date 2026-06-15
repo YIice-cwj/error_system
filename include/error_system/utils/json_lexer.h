@@ -7,7 +7,7 @@
  * @brief JSON词法分析器
  * @details 定义JSON词法分析器相关的操作，如解析JSON字符串为JSON字典
  * @author yiice
- * @version 1.0.0
+ * @version 2.3.0
  * @date 2026-04-28
  * @copyright Copyright (c) 2026
  */
@@ -47,8 +47,6 @@ namespace error_system::utils::detail {
         std::string_view json_str_{};
 
         size_t pos_{0};
-
-        private:
         /**
          * @brief 跳过JSON字符串中的空格字符
          * @details 跳过JSON字符串中的空格字符，直到遇到非空格字符

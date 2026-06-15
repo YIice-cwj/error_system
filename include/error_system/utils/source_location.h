@@ -6,7 +6,7 @@
  * @brief 源文件位置
  * @details 定义源文件位置相关的操作，如获取源文件位置
  * @author yiice
- * @version 1.0.0
+ * @version 2.3.0
  * @date 2026-05-07
  * @copyright Copyright (c) 2026
  */
@@ -55,7 +55,7 @@ namespace error_system::utils {
             uint32_t line = __builtin_LINE()
 #elif defined(_MSC_VER) && _MSC_VER >= 1926
             const char* file = __builtin_FILE(),
-            const char* func = __builtin_FUNCSIG(),
+            const char* func = __builtin_FUNCTION(),
             uint32_t line = __builtin_LINE()
 #else
             const char* file = "unknown", const char* func = "unknown", uint32_t line = 0
@@ -87,4 +87,4 @@ namespace error_system::utils {
         constexpr uint32_t line() const noexcept { return line_; }
     };
 
-};  // namespace error_system::utils
+}  // namespace error_system::utils

@@ -9,7 +9,7 @@
  * @brief JSON工具函数
  * @details 定义JSON相关的工具函数，用于解析、序列化、验证等操作
  * @author yiice
- * @version 1.0.0
+ * @version 2.3.0
  * @date 2026-04-27
  * @copyright Copyright (c) 2026
  */
@@ -22,7 +22,6 @@ namespace error_system::utils {
         private:
         std::unordered_map<std::string, std::string> dict_{};
 
-        private:
         public:
         json_dict_t() noexcept = default;
 
@@ -54,10 +53,11 @@ namespace error_system::utils {
         std::optional<std::string> get_value(const std::string& key) const noexcept;
 
         /**
-         * @brief 获取JSON字典中的字符串值
-         * @details 根据键获取JSON字典中的字符串值
+         * @brief 获取JSON字典中的字符串值，若键不存在则返回默认值
+         * @details 根据键获取JSON字典中的字符串值，若键不存在则返回指定的默认值
          * @param key JSON键，格式为 "key1.key2"
-         * @return std::optional<std::string> 字符串值，若键不存在则返回空可选
+         * @param default_value 键不存在时返回的默认值
+         * @return std::string 若键存在则返回对应值，否则返回 default_value
          */
         std::optional<std::string> get_value_or(const std::string& key,
                                                 const std::string& default_value) const noexcept;

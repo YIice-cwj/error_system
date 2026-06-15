@@ -7,7 +7,7 @@
  * @brief 错误码构建器
  * @details 提供编译期类型安全的错误码构造，支持枚举类型参数防止 ID 传反
  * @author yiice
- * @version 2.0.0
+ * @version 2.3.0
  * @date 2026-06-11
  * @copyright Copyright (c) 2026
  */
@@ -49,7 +49,7 @@ namespace error_system::core {
                                                       SubSystemEnum subsys,
                                                       ModuleEnum module,
                                                       uint16_t number) noexcept {
-            return error_code_t(level, system, static_cast<uint16_t>(subsys), static_cast<uint16_t>(module), number);
+            return error_code_t{level, system, static_cast<uint16_t>(subsys), static_cast<uint16_t>(module), number};
         }
 
         /**
