@@ -150,9 +150,9 @@ struct error_context_t {
 
     constexpr error_context_t() noexcept = default;
 
-    // 模板构造函数（v2.0 简化：直接接受 error_code_t，无需 code_with_location_t）
+    // 模板构造函数（v2.3：message 必传，不再默认空字符串）
     template <typename... Args>
-    error_context_t(error_code_t code, std::string message_format = "", Args&&... args) noexcept;
+    error_context_t(error_code_t code, std::string message_format, Args&&... args) noexcept;
 
     // 链式添加 payload（v2.0 支持多类型值）
     error_context_t& with(const std::string& key, const std::string& value) noexcept;
@@ -173,8 +173,8 @@ struct error_context_t {
     bool operator!=(const error_context_t& other) const noexcept;
 
     // 因果链
-    error_context_t wrap(const error_context_t& underlying) const noexcept;
-    error_context_t wrap(error_context_t&& underlying) const noexcept;
+    error_context_t wrap(const error_context_t& underlying) const;
+    error_context_t wrap(error_context_t&& underlying) const;
 
     bool is_success() const noexcept;
     bool is_error() const noexcept;
@@ -183,7 +183,15 @@ struct error_context_t {
     std::string to_json() const noexcept;   // code 字段使用 identity_code，含因果链递归输出
     std::string to_binary() const noexcept; // v2.1 新增因果链标志位 + 递归序列化
 
-    const std::unordered_map<std::string, std::string>& get_payload() const noexcept;
+    // v2.3: payload 查询（SSO 栈存储 + 惰性溢出）
+    std::vector<std::pair<std::string, std::string>> get_payload() const noexcept;
+    size_t payload_size() const noexcept;
+    bool is_payload_empty() const noexcept;
+
+    // v2.3: 遍历 payload（零拷贝）
+    template <typename Visitor>
+    void for_each_payload(Visitor&& visitor) const noexcept;
+
     const char* what() const noexcept;
 };
 ```
