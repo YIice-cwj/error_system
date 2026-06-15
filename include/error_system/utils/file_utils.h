@@ -1,16 +1,13 @@
 #pragma once
 #include <filesystem>
-// IWYU pragma: begin_exports
-#include <fstream>
-// IWYU pragma: end_exports
 #include <optional>
 
 /**
- * @file file_util.h
+ * @file file_utils.h
  * @brief 文件工具
  * @details 定义文件相关的相关的函数，用于读取、写入、创建文件等
  * @author yiice
- * @version 1.0.0
+ * @version 2.3.0
  * @date 2026-04-27
  * @copyright Copyright (c) 2026
  */
@@ -18,6 +15,10 @@ namespace error_system::utils {
 
     class file_utils_t {
         public:
+        file_utils_t() = delete;
+        ~file_utils_t() = delete;
+        file_utils_t(const file_utils_t&) = delete;
+        file_utils_t& operator=(const file_utils_t&) = delete;
         /**
          * @brief 读取文件内容
          * @details 从指定文件路径读取文件内容，返回文件内容的字符串表示
@@ -73,7 +74,7 @@ namespace error_system::utils {
          * @param path 文件路径
          * @return bool 文件路径存在则返回 true，否则返回 false
          */
-        static bool file_path_exists(const std::filesystem::path& path) noexcept;
+        static bool dir_exists(const std::filesystem::path& path) noexcept;
     };
 
-};  // namespace error_system::utils
+}  // namespace error_system::utils

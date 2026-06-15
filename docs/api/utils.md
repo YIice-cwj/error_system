@@ -13,7 +13,7 @@
 | 参数 | 说明 |
 |------|------|
 | `T` | 队列元素类型（必须可移动） |
-| `Processor` | 处理器类型（void(T&) noexcept 可调用对象） |
+| `Processor` | 处理器类型（`void(T&) noexcept` 可调用对象） |
 
 ### 核心 API
 
@@ -28,6 +28,7 @@ public:
 
     // 背压控制：0 表示无限制
     void set_max_size(size_t size) noexcept;
+    size_t max_size() const noexcept;
 
     // 查询队列状态
     size_t size() const noexcept;
@@ -41,7 +42,7 @@ public:
 |------|------|
 | 自动生命周期 | 首次 `enqueue()` 启动线程，析构自动 `join()` |
 | 死锁安全 | 先 `running_ = false` 再 `notify_all` 再 `join()` |
-| 异常隔离 | 处理器异常 catch 后继续，工作线程不回退出 |
+| 异常隔离 | 处理器异常 catch 后记录日志继续，工作线程不退出 |
 | 背压控制 | `set_max_size()` 限制队列容量，满时拒绝入队 |
 | 零 `std::function` | Processor 模版参数，编译期确定调用目标 |
 
@@ -62,6 +63,7 @@ queue.enqueue(42);
 
 // 设置背压
 queue.set_max_size(1000);
+std::cout << "max size: " << queue.max_size() << std::endl;
 
 // 析构时自动等待队列排空并停止工作线程
 ```
@@ -77,36 +79,45 @@ queue.set_max_size(1000);
 ```cpp
 class string_utils_t {
 public:
-    // 哈希
-    static size_t hash(std::string_view str) noexcept;
+    // 哈希（FNV-1a 64 位）
+    static constexpr uint64_t hash(std::string_view string) noexcept;
+    static constexpr uint64_t hash_limit(std::string_view string,
+                                         size_t max_length = 128) noexcept;
 
-    // 格式化
-    static std::string format(const char* fmt, ...);
+    // 格式化（{} 占位符，基于变参模板 + std::to_chars）
+    template <typename... Args>
+    static inline std::string format(std::string_view format, Args&&... args) noexcept;
 
-    // 分割
-    static std::vector<std::string> split(std::string_view str, std::string_view delimiter);
+    // 分割 / 合并
+    static std::vector<std::string_view> split(std::string_view string,
+                                               std::string_view delimiter) noexcept;
+    static std::string join(const std::vector<std::string_view>& tokens,
+                            std::string_view delimiter) noexcept;
 
-    // 修剪
-    static std::string trim(std::string_view str);
-    static std::string trim_left(std::string_view str);
-    static std::string trim_right(std::string_view str);
+    // 修剪（返回 string_view，零拷贝）
+    static std::string_view trim(std::string_view string) noexcept;
 
-    // JSON 转义
-    static std::string escape_json(std::string_view str);
-
-    // 大小写转换
-    static std::string to_lower(std::string_view str);
-    static std::string to_upper(std::string_view str);
-
-    // 替换
-    static std::string replace(std::string_view str, std::string_view from, std::string_view to);
-
-    // 是否包含
-    static bool contains(std::string_view str, std::string_view substr) noexcept;
+    // 替换（拷贝原始字符串，原地替换）
+    static std::string replace_all(std::string string,
+                                   std::string_view from,
+                                   std::string_view to) noexcept;
 
     // 起止判断
-    static bool starts_with(std::string_view str, std::string_view prefix) noexcept;
-    static bool ends_with(std::string_view str, std::string_view suffix) noexcept;
+    static constexpr bool starts_with(std::string_view string,
+                                      std::string_view prefix) noexcept;
+    static constexpr bool ends_with(std::string_view string,
+                                    std::string_view suffix) noexcept;
+
+    // 大小写转换
+    static std::string to_lower(std::string_view string) noexcept;
+    static std::string to_upper(std::string_view string) noexcept;
+
+    // 数字解析
+    template <typename T>
+    static inline std::optional<T> parse_number(std::string_view string) noexcept;
+
+    // JSON 转义
+    static std::string escape_json(std::string_view string) noexcept;
 };
 ```
 
@@ -118,41 +129,49 @@ using namespace error_system::utils;
 // 哈希
 auto h = string_utils_t::hash("hello");
 
-// 格式化
-auto msg = string_utils_t::format("Error code: %d, message: %s", 404, "Not Found");
+// 格式化（{} 占位符风格）
+auto msg = string_utils_t::format("Error code: {}, message: {}", 404, "Not Found");
+// msg = "Error code: 404, message: Not Found"
 
-// 分割
+// 分割（返回 string_view，零拷贝）
 auto parts = string_utils_t::split("a,b,c", ",");
 // parts = {"a", "b", "c"}
 
-// 修剪
+// 修剪（返回 string_view）
 auto trimmed = string_utils_t::trim("  hello  ");
 // trimmed = "hello"
 
-// JSON 转义
-auto escaped = string_utils_t::escape_json("line1\nline2\"quote\"");
-// escaped = "line1\\nline2\\\"quote\\\""
+// 替换
+auto replaced = string_utils_t::replace_all("hello world", "world", "universe");
+// replaced = "hello universe"
+
+// 起止判断
+bool pref = string_utils_t::starts_with("hello", "he");   // true
+bool suf = string_utils_t::ends_with("hello", "lo");      // true
+
+// 数字解析
+auto num = string_utils_t::parse_number<int>("42");
+if (num) { int value = *num; }
 
 // 大小写转换
 auto lower = string_utils_t::to_lower("HELLO");  // "hello"
 auto upper = string_utils_t::to_upper("hello");  // "HELLO"
 
-// 替换
-auto replaced = string_utils_t::replace("hello world", "world", "universe");
-// replaced = "hello universe"
+// JSON 转义
+auto escaped = string_utils_t::escape_json("line1\nline2\"quote\"");
+// escaped = "line1\\nline2\\\"quote\\\""
+
+// 合并
+std::vector<std::string_view> tokens = {"a", "b", "c"};
+auto joined = string_utils_t::join(tokens, ", ");
+// joined = "a, b, c"
 ```
-
-### 测试覆盖
-
-| 测试文件 | 用例数 | 覆盖内容 |
-|----------|--------|----------|
-| `tests/utils/string_utils_test.cc` | 12+ | 哈希、格式化、分割、修剪、JSON 转义、大小写转换 |
 
 ---
 
 ## json_dict_t
 
-JSON 字典加载与点路径访问工具。
+JSON 字典解析与点路径访问工具。支持从文件或字符串加载 JSON。
 
 ### 核心 API
 
@@ -167,22 +186,19 @@ public:
     json_dict_t(json_dict_t&&) noexcept = default;
     json_dict_t& operator=(json_dict_t&&) noexcept = default;
 
-    bool load_from_file(const std::string& file_path);
-    bool load_from_string(const std::string& json_str);
-
-    bool has_key(std::string_view key) const;
-    std::optional<std::string> get_string(std::string_view key) const;
-    std::optional<int64_t> get_int(std::string_view key) const;
-    std::optional<double> get_double(std::string_view key) const;
-    std::optional<bool> get_bool(std::string_view key) const;
-
     // 点路径访问："errors.0.code"
-    std::optional<std::string> get_string_by_path(std::string_view path) const;
-    std::optional<int64_t> get_int_by_path(std::string_view path) const;
+    std::optional<std::string> operator[](const std::string& key) const noexcept;
+    std::optional<std::string> get_value(const std::string& key) const noexcept;
+    std::optional<std::string> get_value_or(const std::string& key,
+                                           const std::string& default_value) const noexcept;
 
-    void clear() noexcept;
+    bool contains(const std::string& key) const noexcept;
     bool empty() const noexcept;
     size_t size() const noexcept;
+
+    // 静态工厂方法
+    static std::optional<json_dict_t> from_file(const std::filesystem::path& json_path) noexcept;
+    static std::optional<json_dict_t> parse(const std::string& json_content) noexcept;
 };
 ```
 
@@ -191,53 +207,51 @@ public:
 ```cpp
 using namespace error_system::utils;
 
-json_dict_t dict;
-
 // 从文件加载
-if (dict.load_from_file("config/errors.json")) {
+auto dict = json_dict_t::from_file("config/errors.json");
+if (dict) {
     // 访问顶层键
-    auto name = dict.get_string("service_name");
+    auto name = dict->get_value("service_name");
 
     // 点路径访问嵌套值
-    auto code = dict.get_string_by_path("errors.0.name");
-    auto level = dict.get_string_by_path("errors.0.level");
-    auto number = dict.get_int_by_path("errors.0.number");
+    auto err_name = dict->get_value("errors.0.name");
+    auto err_level = dict->get_value("errors.0.level");
+    auto err_code = dict->get_value_or("errors.0.code", "0");
 }
 
-// 从字符串加载
-std::string json = R"({"code": 404, "message": "Not Found"})";
-dict.load_from_string(json);
-auto msg = dict.get_string("message");  // "Not Found"
+// 从字符串解析
+std::string json = R"({"code": "404", "message": "Not Found"})";
+auto parsed = json_dict_t::parse(json);
+if (parsed) {
+    auto msg = parsed->get_value("message");  // "Not Found"
+    auto exists = parsed->contains("code");    // true
+}
 ```
-
-### 测试覆盖
-
-| 测试文件 | 用例数 | 覆盖内容 |
-|----------|--------|----------|
-| `tests/utils/json_utils_test.cc` | 8 | 文件加载、字符串加载、点路径访问、类型转换 |
 
 ---
 
-## file_utils
+## file_utils_t
 
-文件操作工具类。
+文件操作工具类，基于 `std::filesystem` 实现。
 
 ### 核心 API
 
 ```cpp
 class file_utils_t {
 public:
-    static std::string read_file(const std::string& file_path);
-    static bool write_file(const std::string& file_path, std::string_view content);
-    static bool append_file(const std::string& file_path, std::string_view content);
+    // 读写
+    static std::optional<std::string> read_file(const std::filesystem::path& path) noexcept;
+    static bool write_file(const std::filesystem::path& path,
+                           const std::string& content) noexcept;
 
-    static bool exists(const std::string& file_path);
-    static bool remove(const std::string& file_path);
-    static bool create_directory(const std::string& dir_path);
+    // 创建 / 删除
+    static bool create_file(const std::filesystem::path& path) noexcept;
+    static bool delete_file(const std::filesystem::path& path) noexcept;
+    static bool force_delete_file(const std::filesystem::path& path) noexcept;
 
-    static std::vector<std::string> list_files(const std::string& dir_path);
-    static std::string get_extension(const std::string& file_path);
-    static std::string get_filename(const std::string& file_path);
+    // 存在性检查
+    static bool file_exists(const std::filesystem::path& path) noexcept;
+    static bool dir_exists(const std::filesystem::path& path) noexcept;
 };
 ```
 
@@ -248,42 +262,41 @@ using namespace error_system::utils;
 
 // 读取文件
 auto content = file_utils_t::read_file("config/errors.json");
+if (content) {
+    std::cout << *content << std::endl;
+}
 
 // 写入文件
 file_utils_t::write_file("output.txt", "Hello, World!");
 
+// 创建/删除文件
+file_utils_t::create_file("new_file.txt");
+file_utils_t::delete_file("obsolete.txt");
+file_utils_t::force_delete_file("readonly.txt");
+
 // 检查存在性
-if (file_utils_t::exists("config/errors.json")) {
-    // ...
+if (file_utils_t::file_exists("config/errors.json")) {
+    // 文件存在
 }
-
-// 创建目录
-file_utils_t::create_directory("logs/2024");
-
-// 列出文件
-auto files = file_utils_t::list_files("config/errors");
-// files = {"trade_service_errors.json", "user_service_errors.json", ...}
+if (file_utils_t::dir_exists("config/")) {
+    // 目录存在
+}
 ```
-
-### 测试覆盖
-
-| 测试文件 | 用例数 | 覆盖内容 |
-|----------|--------|----------|
-| `tests/utils/file_utils_test.cc` | 8 | 读写、存在性检查、目录操作、文件列表 |
 
 ---
 
 ## stack_trace_utils_t
 
-跨平台堆栈跟踪工具，支持 Linux、macOS 和 Windows。
+跨平台堆栈跟踪工具，通过 `ERROR_SYSTEM_ENABLE_STACKTRACE` 编译开关控制。
 
 ### 核心 API
 
 ```cpp
 class stack_trace_utils_t {
 public:
-    static std::vector<std::string> generate(int skip_frames = 1, int max_frames = 16) noexcept;
-    static std::string to_string(const std::vector<std::string>& frames) noexcept;
+    // 生成堆栈跟踪，skip_frames 跳过调用栈前 N 帧
+    static std::vector<std::string> generate(int skip_frames = 1,
+                                             int max_frames = 16) noexcept;
 };
 ```
 
@@ -302,27 +315,15 @@ using namespace error_system::utils;
 
 // 生成堆栈跟踪
 auto frames = stack_trace_utils_t::generate();
-for (const auto& frame : frames) {
-    std::cout << frame << std::endl;
+for (size_t i = 0; i < frames.size(); ++i) {
+    std::cout << i << ": " << frames[i] << std::endl;
 }
 
-// 输出示例：
-// 0: main (main.cc:42)
-// 1: process_request (handler.cc:128)
-// 2: handle_connection (server.cc:256)
-
-// 转换为字符串
-std::string stack_str = stack_trace_utils_t::to_string(frames);
-
-// 检查平台支持
-if (stack_trace_utils_t::is_supported()) {
-    std::cout << "Platform: " << stack_trace_utils_t::get_platform_info() << std::endl;
-}
+// 指定跳帧数和最大帧数
+auto limited = stack_trace_utils_t::generate(2, 8);
 ```
 
 ### 编译期控制
-
-堆栈追踪功能可通过 CMake 选项在编译期开启或关闭：
 
 ```cmake
 # 开启（默认）
@@ -331,14 +332,6 @@ set(ERROR_SYSTEM_ENABLE_STACKTRACE ON)
 # 关闭（零开销）
 set(ERROR_SYSTEM_ENABLE_STACKTRACE OFF)
 ```
-
-关闭后 `generate()` 将标记为 `[[deprecated]]` 并返回空向量。
-
-### 测试覆盖
-
-| 测试文件 | 用例数 | 覆盖内容 |
-|----------|--------|----------|
-| `tests/utils/stack_trace_utils_test.cc` | 8 | 生成、格式化、帧数限制、skip |
 
 ---
 
@@ -351,49 +344,19 @@ set(ERROR_SYSTEM_ENABLE_STACKTRACE OFF)
 ```cpp
 class source_location_t {
 public:
-    std::string file_name;
-    std::string function_name;
-    uint32_t line_number{0};
-    uint32_t column_number{0};
-
     source_location_t() = default;
 
+    // 自动捕获当前位置（编译期内建宏）
     static source_location_t current(
         const char* file = __builtin_FILE(),
         const char* func = __builtin_FUNCTION(),
-        uint32_t line = __builtin_LINE(),
-        uint32_t column = __builtin_COLUMN());
+        uint32_t line = __builtin_LINE());
 
-    std::string to_string() const;
-    bool is_valid() const noexcept;
+    // 访问字段
+    const char* file_name() const noexcept;
+    const char* function_name() const noexcept;
+    uint32_t line() const noexcept;
 };
-```
-
-### 使用示例
-
-```cpp
-using namespace error_system::utils;
-
-// 自动捕获当前位置
-auto loc = source_location_t::current();
-// loc.file_name = "/path/to/file.cc"
-// loc.function_name = "my_function"
-// loc.line_number = 42
-
-// 手动构造
-source_location_t manual_loc;
-manual_loc.file_name = "custom.cc";
-manual_loc.function_name = "custom_func";
-manual_loc.line_number = 100;
-
-// 转换为字符串
-std::string str = loc.to_string();
-// 输出: "file.cc:42 (my_function)"
-
-// 检查有效性
-if (loc.is_valid()) {
-    std::cout << loc.to_string() << std::endl;
-}
 ```
 
 ### 与 error_context_t 集成
@@ -401,13 +364,12 @@ if (loc.is_valid()) {
 `error_context_t` 构造函数自动捕获源位置：
 
 ```cpp
-error_context_t ctx(code, "错误信息");
-// ctx.source_location 自动填充为构造位置
+error_context_t context(code, "错误信息");
+// 内部自动调用 source_location_t::current() 填充位置字段
+// 可通过 context.to_string() 输出时显示
 ```
 
 ### 编译期控制
-
-源位置追踪可通过 CMake 选项在编译期开启或关闭：
 
 ```cmake
 # 开启（默认）
@@ -417,17 +379,9 @@ set(ERROR_SYSTEM_ENABLE_LOCATION ON)
 set(ERROR_SYSTEM_ENABLE_LOCATION OFF)
 ```
 
-关闭后 `current()` 将标记为 `[[deprecated]]` 并返回默认构造的对象。
-
-### 测试覆盖
-
-| 测试文件 | 用例数 | 覆盖内容 |
-|----------|--------|----------|
-| `tests/utils/source_location_test.cc` | 5 | 自动捕获、手动构造、字符串转换、有效性检查 |
-
 ---
 
-## error_formatter.h
+## error_formatter
 
 `error_context_t` 输出流运算符重载。
 
@@ -435,24 +389,20 @@ set(ERROR_SYSTEM_ENABLE_LOCATION OFF)
 std::ostream& operator<<(std::ostream& os, const error_context_t& ctx);
 ```
 
-### 输出格式
+### 输出文本示例
 
-```cpp
-error_context_t ctx(code, "数据库连接超时");
-std::cout << ctx << std::endl;
-
-// 输出示例：
-// [ERROR][database][1][1][1] 数据库连接超时
-// at main (main.cc:42)
-// Stack:
-//   0: main (main.cc:42)
-//   1: process_request (handler.cc:128)
-// Cause: [WARN][network][2][1][1] 连接超时
+```
+[ERROR][database][1][1][1] 数据库连接超时
+at main (main.cc:42)
+Stack:
+  0: main (main.cc:42)
+  1: process_request (handler.cc:128)
+Cause: [WARN][network][2][1][1] 连接超时
 ```
 
 ### 自定义格式化
 
-通过 `config::error_config_t::set_custom_formatter()` 设置自定义格式化器：
+通过 `error_config_t::set_custom_formatter()` 设置自定义格式化器：
 
 ```cpp
 error_system::config::error_config_t::set_custom_formatter(

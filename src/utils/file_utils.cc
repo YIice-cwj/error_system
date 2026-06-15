@@ -1,4 +1,5 @@
 #include "error_system/utils/file_utils.h"
+#include <fstream>
 
 namespace error_system::utils {
 
@@ -126,9 +127,9 @@ namespace error_system::utils {
      * @param path 文件路径
      * @return bool 文件路径存在则返回 true，否则返回 false
      */
-    bool file_utils_t::file_path_exists(const std::filesystem::path& path) noexcept {
+    bool file_utils_t::dir_exists(const std::filesystem::path& path) noexcept {
         std::error_code error{};
         return std::filesystem::exists(path, error) && std::filesystem::is_directory(path, error);
     }
 
-};  // namespace error_system::utils
+}  // namespace error_system::utils

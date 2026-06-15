@@ -143,24 +143,24 @@ namespace error_system::utils {
         EXPECT_FALSE(file_utils_t::file_exists(file_path));
     }
 
-    TEST_F(file_utils_test, file_path_exists_returns_true_for_directory) {
+    TEST_F(file_utils_test, dir_exists_returns_true_for_directory) {
         auto dir_path = temp_dir_ / "test_dir";
         std::filesystem::create_directories(dir_path);
 
-        EXPECT_TRUE(file_utils_t::file_path_exists(dir_path));
+        EXPECT_TRUE(file_utils_t::dir_exists(dir_path));
     }
 
-    TEST_F(file_utils_test, file_path_exists_returns_false_for_file) {
+    TEST_F(file_utils_test, dir_exists_returns_false_for_file) {
         auto file_path = temp_dir_ / "test_file.txt";
         file_utils_t::write_file(file_path, "content");
 
-        EXPECT_FALSE(file_utils_t::file_path_exists(file_path));
+        EXPECT_FALSE(file_utils_t::dir_exists(file_path));
     }
 
-    TEST_F(file_utils_test, file_path_exists_returns_false_for_missing_path) {
+    TEST_F(file_utils_test, dir_exists_returns_false_for_missing_path) {
         auto dir_path = temp_dir_ / "missing_dir";
 
-        EXPECT_FALSE(file_utils_t::file_path_exists(dir_path));
+        EXPECT_FALSE(file_utils_t::dir_exists(dir_path));
     }
 
     TEST_F(file_utils_test, write_file_overwrites_existing_content) {

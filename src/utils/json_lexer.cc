@@ -18,7 +18,9 @@ namespace error_system::utils::detail {
      */
     json_lexer_t::token_t json_lexer_t::__parse_string() noexcept {
         std::string str{};
-        str.reserve(32);
+        try {
+            str.reserve(32);
+        } catch (...) {}
         ++pos_;
 
         while (pos_ < json_str_.size() && json_str_[pos_] != '"') {
@@ -55,8 +57,13 @@ namespace error_system::utils::detail {
                     } else if (codepoint <= 0x7FF) {
                         str += static_cast<char>(0xC0 | (codepoint >> 6));
                         str += static_cast<char>(0x80 | (codepoint & 0x3F));
-                    } else {
+                    } else if (codepoint <= 0xFFFF) {
                         str += static_cast<char>(0xE0 | (codepoint >> 12));
+                        str += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+                        str += static_cast<char>(0x80 | (codepoint & 0x3F));
+                    } else if (codepoint <= 0x10FFFF) {
+                        str += static_cast<char>(0xF0 | (codepoint >> 18));
+                        str += static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F));
                         str += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
                         str += static_cast<char>(0x80 | (codepoint & 0x3F));
                     }
@@ -116,8 +123,7 @@ namespace error_system::utils::detail {
             return __parse_string();
         }
 
-        ++pos_;
-        return {token_type_t::invalid, ""};
+        return {token_type_t::invalid, {}};
     }
 
 }  // namespace error_system::utils::detail

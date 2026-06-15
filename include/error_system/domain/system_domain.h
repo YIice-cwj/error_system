@@ -1,7 +1,8 @@
 #pragma once
-#include "error_system/utils/string_utils.h"
 #include <cstdint>
 #include <type_traits>
+
+#include "error_system/utils/string_utils.h"
 
 /**
  * @file system_domain.h
@@ -9,7 +10,7 @@
  * @details 定义错误码系统中的模块层级结构，包括系统域、子系统和功能模块三级分类，
  *          用于64位错误码bit位分配中的模块标识，支持大规模分布式系统的错误码管理
  * @author yiice
- * @version 1.0.0
+ * @version 2.3.0
  * @date 2026-04-27
  * @copyright Copyright (c) 2026
  */
@@ -44,7 +45,7 @@ namespace error_system::domain {
      * @return uint8_t 系统域整数
      */
     constexpr uint8_t to_int(system_domain_t domain) noexcept {
-        return static_cast<uint8_t>(std::underlying_type_t<system_domain_t>(domain));
+        return static_cast<uint8_t>(domain);
     }
 
     /**
@@ -54,6 +55,9 @@ namespace error_system::domain {
      * @return const char* 系统域字符串
      */
     constexpr const char* to_string(system_domain_t domain) noexcept {
+        if (to_int(domain) >= to_int(system_domain_t::_count)) {
+            return "unknown";
+        }
         return SYSTEM_DOMAIN_STRING[to_int(domain)];
     }
 

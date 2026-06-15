@@ -84,9 +84,13 @@ namespace error_system::utils {
          * @return std::string 格式化后的字符串
          */
         std::string format_fallback_address(void* address) noexcept {
-            std::ostringstream oss;
-            oss << "[Unknown Symbol] at " << address;
-            return oss.str();
+            try {
+                std::ostringstream oss;
+                oss << "[Unknown Symbol] at " << address;
+                return oss.str();
+            } catch (...) {
+                return "[Unknown Symbol]";
+            }
         }
 
         /**

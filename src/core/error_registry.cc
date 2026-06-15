@@ -22,7 +22,7 @@ namespace error_system::core {
             return true;
         }
 
-        const uint64_t old_group_id = error_code_t(raw_code).get_module_group_id();
+        const uint64_t old_group_id = error_code_t{raw_code}.get_module_group_id();
         __erase_from_module_index(old_group_id, raw_code);
         name_index_.erase(primary_it->second.name);
         primary_index_.erase(primary_it);
@@ -263,7 +263,7 @@ namespace error_system::core {
             return;
         }
 
-        error_code_t code(identity_code);
+        error_code_t code{identity_code};
         uint64_t group_id = code.get_module_group_id();
         __erase_from_module_index(group_id, identity_code);
         if (module_index_.find(group_id) == module_index_.end()) {
@@ -346,7 +346,10 @@ namespace error_system::core {
             std::vector<std::reference_wrapper<const error_metadata_t>> errors;
             errors.reserve(it->second.size());
             for (code_t raw_code : it->second) {
-                errors.push_back(primary_index_.at(raw_code));
+                auto primary_it = primary_index_.find(raw_code);
+                if (primary_it != primary_index_.end()) {
+                    errors.push_back(primary_it->second);
+                }
             }
             return errors;
         }
