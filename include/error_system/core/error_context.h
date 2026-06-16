@@ -7,11 +7,15 @@
 #include "error_system/utils/stack_trace_utils.h"
 #include "error_system/utils/string_utils.h"
 #include <array>
+#include <exception>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+using error_system::config::error_config_t;
 
 namespace error_system::plugin {
     class plugin_registry_t;
@@ -82,11 +86,7 @@ namespace error_system::core {
         public:
         std::string message{};
         std::shared_ptr<error_context_t> cause{nullptr};
-#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
         std::vector<std::string> stack_frames{};
-#endif
-
-#ifdef ERROR_SYSTEM_ENABLE_LOCATION
         const char* file_name{nullptr};
         const char* function_name{nullptr};
         uint32_t line_number{0};
@@ -95,7 +95,6 @@ namespace error_system::core {
          * @details 构造时自动通过 source_location_t::current() 捕获调用位置
          */
         utils::source_location_t source_location_{};
-#endif
 
         /**
          * @brief 执行运行时特性初始化
@@ -131,16 +130,17 @@ namespace error_system::core {
          */
         error_context_t(const error_context_t& other) noexcept
             : code_(other.code_), metadata_(other.metadata_),
-              payload_count_(other.payload_count_),
-              message(other.message)
-#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
-              , stack_frames(other.stack_frames)
-#endif
-#ifdef ERROR_SYSTEM_ENABLE_LOCATION
-              , file_name(other.file_name), function_name(other.function_name),
-              line_number(other.line_number), source_location_(other.source_location_)
-#endif
-        {
+            payload_count_(other.payload_count_),
+            message(other.message) {
+            if constexpr (error_config_t::STACKTRACE_ENABLED) {
+                stack_frames = other.stack_frames;
+            }
+            if constexpr (error_config_t::LOCATION_ENABLED) {
+                file_name = other.file_name;
+                function_name = other.function_name;
+                line_number = other.line_number;
+                source_location_ = other.source_location_;
+            }
             for (size_t i = 0; i < payload_count_ && i < PAYLOAD_SSO_CAPACITY; ++i) {
                 payload_small_[i] = other.payload_small_[i];
             }
@@ -152,7 +152,9 @@ namespace error_system::core {
                 if (other.cause) {
                     cause = std::make_shared<error_context_t>(*other.cause);
                 }
-            } catch (...) {}
+            } catch (...) {
+                std::fprintf(stderr, "[error_context] copy constructor: std::bad_alloc\n");
+            }
         }
         error_context_t& operator=(const error_context_t&) = delete;
         error_context_t& operator=(error_context_t&&) = delete;
@@ -179,15 +181,26 @@ namespace error_system::core {
         template <typename... Args>
         error_context_t(error_code_t code, std::string message_format, Args&&... args) noexcept
             : code_(code),
-              metadata_(error_registry_t::instance().get_info(code)),
-              message(utils::string_utils_t::format(message_format, std::forward<Args>(args)...)) {
-#ifdef ERROR_SYSTEM_ENABLE_LOCATION
-            source_location_ = utils::source_location_t::current();
-#endif
+            metadata_(error_registry_t::instance().get_info(code)),
+            message(utils::string_utils_t::format(message_format, std::forward<Args>(args)...)) {
+            if constexpr (error_config_t::LOCATION_ENABLED) {
+                source_location_ = utils::source_location_t::current();
+            }
             if (is_success()) {
                 return;
             }
             __finalize_runtime_features();
+        }
+
+        /**
+         * @brief 从标准异常创建错误上下文
+         * @details 从 std::exception 或派生类创建错误上下文，提取错误消息
+         * @param code 错误码
+         * @param ex 标准异常对象
+         * @return error_context_t 错误上下文
+         */
+        static error_context_t from_exception(const error_code_t& code, const std::exception& ex) noexcept {
+            return error_context_t(code, ex.what());
         }
 
         /**
@@ -312,6 +325,30 @@ namespace error_system::core {
         }
 
         /**
+         * @brief 添加自定义负载（const char* key）
+         * @details 使用 const char* 作为 key 添加任意类型值到错误上下文
+         * @param key 键名
+         * @param value 值
+         * @return error_context_t& 自身引用
+         */
+        template <typename T>
+        error_context_t& with(const char* key, T value) noexcept {
+            return with(std::string(key), std::move(value));
+        }
+
+        /**
+         * @brief 添加自定义负载（string_view key）
+         * @details 使用 std::string_view 作为 key 添加任意类型值到错误上下文
+         * @param key 键名
+         * @param value 值
+         * @return error_context_t& 自身引用
+         */
+        template <typename T>
+        error_context_t& with(std::string_view key, T value) noexcept {
+            return with(std::string(key), std::move(value));
+        }
+
+        /**
          * @brief 转换为人类可读字符串
          * @details 从 error_registry_t 获取元数据，根据 enable_text_output 配置决定
          *          输出子系统/模块名称或原始 ID。包含：源位置、错误等级、系统域、
@@ -339,6 +376,14 @@ namespace error_system::core {
          * @return std::vector<std::pair<std::string, std::string>> payload 键值对列表
          */
         std::vector<std::pair<std::string, std::string>> get_payload() const noexcept;
+
+        /**
+         * @brief 根据键获取 payload 值
+         * @details 直接按 key 查找 payload 值，避免手动遍历 get_payload() 结果
+         * @param key 键名
+         * @return std::optional<std::string> 值，若键不存在则返回 std::nullopt
+         */
+        std::optional<std::string> get_payload_value(const std::string& key) const noexcept;
 
         /**
          * @brief 获取 payload 项数

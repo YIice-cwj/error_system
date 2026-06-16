@@ -9,7 +9,7 @@ using error_system::config::error_config_t;
  * @details 定义错误上下文的实现，包括通知插件、检查有效性和包装错误上下文等功能。
  *          payload 采用 SSO（Small Size Optimization），≤4 项时栈上存储零堆分配。
  * @author yiice
- * @version 1.0.0
+ * @version 2.3.0
  * @date 2026-04-27
  * @copyright Copyright (c) 2026
  */
@@ -44,11 +44,11 @@ namespace error_system::core {
                 capacity += key.size() + value.size() + 4;
             });
 
-#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
-            for (const auto& frame : context.stack_frames) {
-                capacity += frame.size() + 12;
+            if constexpr (error_config_t::STACKTRACE_ENABLED) {
+                for (const auto& frame : context.stack_frames) {
+                    capacity += frame.size() + 12;
+                }
             }
-#endif
 
             if (context.cause) {
                 capacity += 16 + context.cause->message.size();
@@ -63,11 +63,11 @@ namespace error_system::core {
                 capacity += key.size() + value.size() + 8;
             });
 
-#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
-            for (const auto& frame : context.stack_frames) {
-                capacity += frame.size() + 4;
+            if constexpr (error_config_t::STACKTRACE_ENABLED) {
+                for (const auto& frame : context.stack_frames) {
+                    capacity += frame.size() + 4;
+                }
             }
-#endif
 
             if (context.cause) {
                 capacity += 16 + context.cause->message.size();
@@ -84,35 +84,41 @@ namespace error_system::core {
         const bool validation_enabled = error_config_t::is_validation_enabled();
         const bool stacktrace_enabled = error_config_t::is_stacktrace_enabled();
         const bool location_enabled = error_config_t::is_source_location_enabled();
-#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
-        auto stacktrace_level = stacktrace_enabled ? error_config_t::get_stacktrace_level() : error_level_t::warn;
-        if (stacktrace_enabled) {
-            const auto per_code_level = error_config_t::get_per_code_stacktrace_level(code_.get_identity_code());
-            if (per_code_level.has_value()) {
-                stacktrace_level = per_code_level.value();
+
+        auto stacktrace_level = core::error_level_t::warn;
+        if constexpr (error_config_t::STACKTRACE_ENABLED) {
+            stacktrace_level = stacktrace_enabled ? error_config_t::get_stacktrace_level() : core::error_level_t::warn;
+            if (stacktrace_enabled) {
+                const auto per_code_level = error_config_t::get_per_code_stacktrace_level(code_.get_identity_code());
+                if (per_code_level.has_value()) {
+                    stacktrace_level = per_code_level.value();
+                }
             }
         }
-#endif
-#ifdef ERROR_SYSTEM_ENABLE_LOCATION
-        const bool short_filename_enabled =
-            location_enabled && error_config_t::is_short_filename_enabled();
-#endif
+
+        const bool short_filename_enabled = [&]() {
+            if constexpr (error_config_t::LOCATION_ENABLED) {
+                return location_enabled && error_config_t::is_short_filename_enabled();
+            } else {
+                return false;
+            }
+        }();
 
         if (validation_enabled) {
             __fill_validation_fields();
         }
 
-#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
-        if (stacktrace_enabled && code_.get_level() >= stacktrace_level) {
-            __fill_stacktrace();
+        if constexpr (error_config_t::STACKTRACE_ENABLED) {
+            if (stacktrace_enabled && code_.get_level() >= stacktrace_level) {
+                __fill_stacktrace();
+            }
         }
-#endif
 
-#ifdef ERROR_SYSTEM_ENABLE_LOCATION
-        if (location_enabled) {
-            __fill_source_location(short_filename_enabled);
+        if constexpr (error_config_t::LOCATION_ENABLED) {
+            if (location_enabled) {
+                __fill_source_location(short_filename_enabled);
+            }
         }
-#endif
 
         if (error_config_t::get_notify_mode() == error_config_t::notify_mode_t::async_queue) {
             plugin::plugin_registry_t::instance().enqueue_notification(*this);
@@ -133,20 +139,18 @@ namespace error_system::core {
     }
 
     void error_context_t::__fill_stacktrace() noexcept {
-#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
-        stack_frames = utils::stack_trace_utils_t::generate(1);
-#endif
+        if constexpr (error_config_t::STACKTRACE_ENABLED) {
+            stack_frames = utils::stack_trace_utils_t::generate(1);
+        }
     }
 
     void error_context_t::__fill_source_location(bool short_filename_enabled) noexcept {
-#ifdef ERROR_SYSTEM_ENABLE_LOCATION
-        file_name = short_filename_enabled ? utils::extract_short_filename(source_location_.file_name())
-                                           : source_location_.file_name();
-        function_name = source_location_.function_name();
-        line_number = source_location_.line();
-#else
-        (void)short_filename_enabled;
-#endif
+        if constexpr (error_config_t::LOCATION_ENABLED) {
+            file_name = short_filename_enabled ? utils::extract_short_filename(source_location_.file_name())
+                                               : source_location_.file_name();
+            function_name = source_location_.function_name();
+            line_number = source_location_.line();
+        }
     }
 
     bool error_context_t::is_error() const noexcept {
@@ -161,7 +165,9 @@ namespace error_system::core {
         error_context_t new_code_context = *this;
         try {
             new_code_context.cause = std::make_shared<error_context_t>(underlying);
-        } catch (...) {}
+        } catch (...) {
+            std::fprintf(stderr, "[error_context] wrap: std::bad_alloc\n");
+        }
         return new_code_context;
     }
 
@@ -169,7 +175,9 @@ namespace error_system::core {
         error_context_t new_code_context = *this;
         try {
             new_code_context.cause = std::make_shared<error_context_t>(std::move(underlying));
-        } catch (...) {}
+        } catch (...) {
+            std::fprintf(stderr, "[error_context] wrap(&&): std::bad_alloc\n");
+        }
         return new_code_context;
     }
 
@@ -205,7 +213,9 @@ namespace error_system::core {
                 payload_small_[i] = {};
             }
             payload_count_ = 0;
-        } catch (...) {}
+        } catch (...) {
+            std::fprintf(stderr, "[error_context] with: std::bad_alloc\n");
+        }
         return *this;
     }
 
@@ -249,7 +259,9 @@ namespace error_system::core {
                 payload_small_[i] = {};
             }
             payload_count_ = 0;
-        } catch (...) {}
+        } catch (...) {
+            std::fprintf(stderr, "[error_context] with(string_view): std::bad_alloc\n");
+        }
         return *this;
     }
 
@@ -290,8 +302,29 @@ namespace error_system::core {
             for_each_payload([&](const std::string& key, const std::string& value) {
                 result.emplace_back(key, value);
             });
-        } catch (...) {}
+        } catch (...) {
+            std::fprintf(stderr, "[error_context] get_payload: std::bad_alloc\n");
+        }
         return result;
+    }
+
+    std::optional<std::string> error_context_t::get_payload_value(const std::string& key) const noexcept {
+        try {
+            for (size_t i = 0; i < payload_count_ && i < PAYLOAD_SSO_CAPACITY; ++i) {
+                if (payload_small_[i].first == key) {
+                    return payload_small_[i].second;
+                }
+            }
+            if (payload_overflow_) {
+                auto it = payload_overflow_->find(key);
+                if (it != payload_overflow_->end()) {
+                    return it->second;
+                }
+            }
+        } catch (...) {
+            std::fprintf(stderr, "[error_context] get_payload_value: unexpected exception\n");
+        }
+        return std::nullopt;
     }
 
     std::string error_context_t::to_string() const noexcept {
@@ -300,7 +333,7 @@ namespace error_system::core {
         }
 
         auto& registry = error_system::core::error_registry_t::instance();
-        const error_metadata_t* info = metadata_;  // 使用构造时缓存的元数据，避免重复加锁查询
+        const error_metadata_t* info = metadata_; 
         const std::string& desc = info ? info->description : "未注册的未知错误";
         const std::string& name = info ? info->name : "UNKNOWN_ERR_CODE";
 
@@ -320,13 +353,13 @@ namespace error_system::core {
         std::string result;
         result.reserve(estimate_string_capacity(*this, name.size(), desc.size(), subsys_module_str.size()));
 
-#ifdef ERROR_SYSTEM_ENABLE_LOCATION
-        if (error_config_t::is_source_location_enabled() && file_name != nullptr) {
-            result.append(" [Location: ").append(file_name).append(":");
-            append_decimal(result, line_number);
-            result.append(" @ ").append(function_name != nullptr ? function_name : "unknown").append("]");
+        if constexpr (error_config_t::LOCATION_ENABLED) {
+            if (error_config_t::is_source_location_enabled() && file_name != nullptr) {
+                result.append(" [Location: ").append(file_name).append(":");
+                append_decimal(result, line_number);
+                result.append(" @ ").append(function_name != nullptr ? function_name : "unknown").append("]");
+            }
         }
-#endif
 
         result.append("[Sign: ")
             .append(is_error() ? "Error" : "Success")
@@ -357,16 +390,16 @@ namespace error_system::core {
             result.push_back('}');
         }
 
-#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
-        if (!stack_frames.empty()) {
-            result.append("\n  [Stacktrace]:");
-            for (size_t i = 0; i < stack_frames.size(); ++i) {
-                result.append("\n    #");
-                append_decimal(result, i);
-                result.append("  ").append(stack_frames[i]);
+        if constexpr (error_config_t::STACKTRACE_ENABLED) {
+            if (!stack_frames.empty()) {
+                result.append("\n  [Stacktrace]:");
+                for (size_t i = 0; i < stack_frames.size(); ++i) {
+                    result.append("\n    #");
+                    append_decimal(result, i);
+                    result.append("  ").append(stack_frames[i]);
+                }
             }
         }
-#endif
 
         if (cause) {
             result.append("\n  ↳ Caused by: ").append(cause->to_string());
@@ -387,19 +420,19 @@ namespace error_system::core {
             first_field = false;
         };
 
-#ifdef ERROR_SYSTEM_ENABLE_LOCATION
-        if (error_config_t::is_source_location_enabled() && file_name != nullptr && function_name != nullptr) {
-            append_separator();
-            json.append("\"location\":{");
-            json.append("\"file\":");
-            append_escaped_json_string(json, file_name);
-            json.append(",\"function\":");
-            append_escaped_json_string(json, function_name != nullptr ? function_name : "unknown");
-            json.append(",\"line\":");
-            append_decimal(json, line_number);
-            json.push_back('}');
+        if constexpr (error_config_t::LOCATION_ENABLED) {
+            if (error_config_t::is_source_location_enabled() && file_name != nullptr && function_name != nullptr) {
+                append_separator();
+                json.append("\"location\":{");
+                json.append("\"file\":");
+                append_escaped_json_string(json, file_name);
+                json.append(",\"function\":");
+                append_escaped_json_string(json, function_name != nullptr ? function_name : "unknown");
+                json.append(",\"line\":");
+                append_decimal(json, line_number);
+                json.push_back('}');
+            }
         }
-#endif
 
         append_separator();
         json.append("\"code\":");
@@ -422,20 +455,20 @@ namespace error_system::core {
             json.push_back('}');
         }
 
-#ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
-        if (!stack_frames.empty()) {
-            json.append(",\"stack_frames\":[");
-            bool first_frame = true;
-            for (const auto& frame : stack_frames) {
-                if (!first_frame) {
-                    json.push_back(',');
+        if constexpr (error_config_t::STACKTRACE_ENABLED) {
+            if (!stack_frames.empty()) {
+                json.append(",\"stack_frames\":[");
+                bool first_frame = true;
+                for (const auto& frame : stack_frames) {
+                    if (!first_frame) {
+                        json.push_back(',');
+                    }
+                    append_escaped_json_string(json, frame);
+                    first_frame = false;
                 }
-                append_escaped_json_string(json, frame);
-                first_frame = false;
+                json.push_back(']');
             }
-            json.push_back(']');
         }
-#endif
 
         if (cause) {
             json.append(",\"cause\":").append(cause->to_json());
@@ -459,10 +492,11 @@ namespace error_system::core {
         write_little_endian(buf, code_.get_code());
         write_string(message);
 
-#ifdef ERROR_SYSTEM_ENABLE_LOCATION
         uint8_t has_location = 0;
-        if (error_config_t::is_source_location_enabled() && file_name != nullptr && function_name != nullptr) {
-            has_location = 1;
+        if constexpr (error_config_t::LOCATION_ENABLED) {
+            if (error_config_t::is_source_location_enabled() && file_name != nullptr && function_name != nullptr) {
+                has_location = 1;
+            }
         }
         buf.push_back(static_cast<char>(has_location));
 
@@ -471,9 +505,6 @@ namespace error_system::core {
             write_string(function_name != nullptr ? function_name : "unknown");
             write_little_endian(buf, line_number);
         }
-#else
-        buf.push_back(0);
-#endif
 
         write_little_endian(buf, static_cast<uint32_t>(total_payload));
         for_each_payload([&](const std::string& key, const std::string& value) {
