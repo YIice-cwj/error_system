@@ -116,7 +116,7 @@ namespace error_system::core {
         };
         EXPECT_EQ(find_val("int_val"), "42");
         EXPECT_EQ(find_val("bool_val"), "true");
-        EXPECT_EQ(find_val("double_val"), "3.140000");
+        EXPECT_EQ(find_val("double_val"), std::to_string(3.14));
     }
 
     TEST_F(error_context_test, serialization_contains_registered_metadata_and_payload) {
@@ -137,12 +137,12 @@ namespace error_system::core {
     TEST_F(error_context_test, to_binary_includes_cause_chain) {
         error_context_t cause_context(registered_code_, "root cause");
         error_context_t context(registered_code_, "wrapper error");
-        context.wrap(cause_context);
+        auto wrapped = context.wrap(cause_context);
 
-        std::string binary_with_cause = context.to_binary();
+        std::string binary_with_cause = wrapped.to_binary();
 
         // 不带 cause 的二进制应小于带 cause 的
-        error_context_t ctx_no_cause(registered_code_, "no cause");
+        error_context_t ctx_no_cause(registered_code_, "wrapper error");
         std::string binary_no_cause = ctx_no_cause.to_binary();
 
         EXPECT_GT(binary_with_cause.size(), binary_no_cause.size());
@@ -156,6 +156,158 @@ namespace error_system::core {
 
         // 无 cause 时最后 1 字节为 has_cause 标志，值为 0
         EXPECT_EQ(static_cast<uint8_t>(binary.back()), 0x00);
+    }
+
+    // ========== with_batch() 批量添加 payload ==========
+
+    TEST_F(error_context_test, with_batch_adds_multiple_payload_items) {
+        error_context_t context(registered_code_, "batch test");
+        context.with_batch({
+            {"host", "192.168.1.1"},
+            {"port", "3306"},
+            {"db", "users"}
+        });
+
+        const auto& payload = context.get_payload();
+        auto find_val = [&](const std::string& key) -> const std::string& {
+            static const std::string empty;
+            for (const auto& [k, v] : payload) {
+                if (k == key) return v;
+            }
+            return empty;
+        };
+        EXPECT_EQ(find_val("host"), "192.168.1.1");
+        EXPECT_EQ(find_val("port"), "3306");
+        EXPECT_EQ(find_val("db"), "users");
+        EXPECT_EQ(payload.size(), 3);
+    }
+
+    // ========== is_success() / is_error() ==========
+
+    TEST_F(error_context_test, is_error_for_registered_error_code) {
+        error_context_t context(registered_code_, "error status");
+        EXPECT_TRUE(context.is_error());
+        EXPECT_FALSE(context.is_success());
+    }
+
+    TEST_F(error_context_test, is_success_for_success_code) {
+        error_context_t context(error_code_t::make_success(), "success status");
+        EXPECT_TRUE(context.is_success());
+        EXPECT_FALSE(context.is_error());
+    }
+
+    // ========== payload overflow（SSO → unordered_map） ==========
+
+    TEST_F(error_context_test, payload_overflow_switches_to_unordered_map) {
+        error_context_t context(registered_code_, "overflow test");
+        context.with("k1", "v1")
+               .with("k2", "v2")
+               .with("k3", "v3")
+               .with("k4", "v4")
+               .with("k5", "v5");
+
+        const auto& payload = context.get_payload();
+        EXPECT_EQ(payload.size(), 5);
+
+        auto find_val = [&](const std::string& key) -> const std::string& {
+            static const std::string empty;
+            for (const auto& [k, v] : payload) {
+                if (k == key) return v;
+            }
+            return empty;
+        };
+        EXPECT_EQ(find_val("k1"), "v1");
+        EXPECT_EQ(find_val("k3"), "v3");
+        EXPECT_EQ(find_val("k5"), "v5");
+    }
+
+    // ========== operator== / operator!= ==========
+
+    TEST_F(error_context_test, equality_same_code_and_message) {
+        error_context_t ctx_a{registered_code_, "same message"};
+        error_context_t ctx_b{registered_code_, "same message"};
+
+        EXPECT_TRUE(ctx_a == ctx_b);
+        EXPECT_FALSE(ctx_a != ctx_b);
+    }
+
+    TEST_F(error_context_test, inequality_different_message) {
+        error_context_t ctx_a{registered_code_, "message A"};
+        error_context_t ctx_b{registered_code_, "message B"};
+
+        EXPECT_FALSE(ctx_a == ctx_b);
+        EXPECT_TRUE(ctx_a != ctx_b);
+    }
+
+    TEST_F(error_context_test, equality_considers_payload) {
+        error_context_t ctx_a{registered_code_, "msg"};
+        ctx_a.with("key", "val");
+
+        error_context_t ctx_b{registered_code_, "msg"};
+        ctx_b.with("key", "val");
+
+        error_context_t ctx_c{registered_code_, "msg"};
+        ctx_c.with("key", "different");
+
+        EXPECT_TRUE(ctx_a == ctx_b);
+        EXPECT_FALSE(ctx_a == ctx_c);
+    }
+
+    // ========== deep cause chain（depth > 1） ==========
+
+    TEST_F(error_context_test, deep_cause_chain_multiple_levels) {
+        error_context_t root{registered_code_, "root cause"};
+        error_context_t middle{registered_code_, "middle error"};
+        error_context_t top{registered_code_, "top error"};
+
+        auto wrapped = top.wrap(middle.wrap(root));
+
+        // top 层
+        EXPECT_EQ(wrapped.message, "top error");
+        ASSERT_NE(wrapped.cause, nullptr);
+
+        // middle 层
+        EXPECT_EQ(wrapped.cause->message, "middle error");
+        ASSERT_NE(wrapped.cause->cause, nullptr);
+
+        // root 层
+        EXPECT_EQ(wrapped.cause->cause->message, "root cause");
+        EXPECT_EQ(wrapped.cause->cause->cause, nullptr);
+    }
+
+// ========== get_payload_value() 测试 ==========
+
+    TEST_F(error_context_test, get_payload_value_returns_existing_key) {
+        error_context_t ctx{registered_code_, "test"};
+        ctx.with("key1", "value1");
+        auto val = ctx.get_payload_value("key1");
+        ASSERT_TRUE(val.has_value());
+        EXPECT_EQ(*val, "value1");
+    }
+
+    TEST_F(error_context_test, get_payload_value_returns_nullopt_for_missing_key) {
+        error_context_t ctx{registered_code_, "test"};
+        auto val = ctx.get_payload_value("nonexistent");
+        EXPECT_FALSE(val.has_value());
+    }
+
+    // ========== with() const char* key 测试 ==========
+
+    TEST_F(error_context_test, with_const_char_key_works) {
+        error_context_t ctx{registered_code_, "test"};
+        ctx.with("c_string_key", 42);
+        auto val = ctx.get_payload_value("c_string_key");
+        ASSERT_TRUE(val.has_value());
+        EXPECT_EQ(*val, "42");
+    }
+
+    // ========== from_exception() 测试 ==========
+
+    TEST_F(error_context_test, from_exception_creates_context_with_what_message) {
+        std::runtime_error ex("something went wrong");
+        auto ctx = error_context_t::from_exception(registered_code_, ex);
+        EXPECT_EQ(ctx.message, "something went wrong");
+        EXPECT_EQ(ctx.get_code().get_code(), registered_code_.get_code());
     }
 
 }  // namespace error_system::core

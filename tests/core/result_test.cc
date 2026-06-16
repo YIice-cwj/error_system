@@ -196,4 +196,179 @@ namespace error_system::core {
         EXPECT_EQ(result.expect(), "hello");
     }
 
-    }  // namespace error_system::core
+    // ========== value_pointer() 测试 ==========
+
+    TEST_F(result_test, value_pointer_on_success_returns_non_null) {
+        auto result = result_t<int>(99);
+        const int* ptr = result.value_pointer();
+        ASSERT_NE(ptr, nullptr);
+        EXPECT_EQ(*ptr, 99);
+    }
+
+    TEST_F(result_test, value_pointer_on_error_returns_null) {
+        auto code = error_code_t{error_level_t::error, domain::system_domain_t::none, 0x0001, 0x0001, 1};
+        error_registry_t::instance().register_error(code, "ERR_VP", "value_pointer error");
+        auto result = result_t<int>::make_error(code, "fail");
+        const int* ptr = result.value_pointer();
+        EXPECT_EQ(ptr, nullptr);
+    }
+
+    // ========== value_or() 测试 ==========
+
+    TEST_F(result_test, value_or_on_success_returns_value) {
+        auto result = result_t<int>(42);
+        EXPECT_EQ(result.value_or(100), 42);
+    }
+
+    TEST_F(result_test, value_or_on_error_returns_default) {
+        auto code = error_code_t{error_level_t::error, domain::system_domain_t::none, 0x0001, 0x0001, 1};
+        error_registry_t::instance().register_error(code, "ERR_VO", "value_or error");
+        auto result = result_t<int>::make_error(code, "fail");
+        EXPECT_EQ(result.value_or(100), 100);
+    }
+
+    // ========== map() 测试 ==========
+
+    TEST_F(result_test, map_on_success_transforms_value) {
+        auto result = result_t<int>(21);
+        auto mapped = result.map([](int v) noexcept { return v * 2; });
+        EXPECT_TRUE(mapped.is_success());
+        EXPECT_EQ(mapped.value_or(0), 42);
+    }
+
+    TEST_F(result_test, map_on_error_propagates_error) {
+        auto code = error_code_t{error_level_t::error, domain::system_domain_t::none, 0x0001, 0x0001, 1};
+        error_registry_t::instance().register_error(code, "ERR_MAP", "map error");
+        auto result = result_t<int>::make_error(code, "fail");
+        auto mapped = result.map([](int v) noexcept { return v * 2; });
+        EXPECT_TRUE(mapped.is_error());
+        EXPECT_EQ(mapped.value_or(0), 0);
+    }
+
+    // ========== map_error() 测试 ==========
+
+    TEST_F(result_test, map_error_on_success_preserves_value) {
+        auto result = result_t<int>(42);
+        auto mapped = result.map_error([](const error_context_t&) noexcept {
+            auto code = error_code_t{error_level_t::fatal, domain::system_domain_t::none, 0x0001, 0x0001, 99};
+            error_registry_t::instance().register_error(code, "ERR_ME99", "map_error 99");
+            return error_context_t{code, "unused"};
+        });
+        EXPECT_TRUE(mapped.is_success());
+        EXPECT_EQ(mapped.value_or(0), 42);
+    }
+
+    TEST_F(result_test, map_error_on_error_transforms_error) {
+        auto original_code = error_code_t{error_level_t::error, domain::system_domain_t::none, 0x0001, 0x0001, 1};
+        error_registry_t::instance().register_error(original_code, "ERR_ME1", "map_error 1");
+        auto result = result_t<int>::make_error(original_code, "original");
+        auto mapped = result.map_error([](const error_context_t&) noexcept {
+            auto code = error_code_t{error_level_t::fatal, domain::system_domain_t::none, 0x0001, 0x0001, 99};
+            error_registry_t::instance().register_error(code, "ERR_ME99", "map_error 99");
+            return error_context_t{code, "transformed"};
+        });
+        EXPECT_TRUE(mapped.is_error());
+        // 错误码应被替换
+        EXPECT_EQ(mapped.error().get_code().get_number(), 99u);
+    }
+
+    // ========== result_t<void> 测试 ==========
+
+    TEST_F(result_test, void_result_success) {
+        auto result = result_t<void>();
+        EXPECT_TRUE(result.is_success());
+        EXPECT_FALSE(result.is_error());
+    }
+
+    TEST_F(result_test, void_result_make_error) {
+        auto code = error_code_t{error_level_t::error, domain::system_domain_t::none, 0x0001, 0x0001, 1};
+        error_registry_t::instance().register_error(code, "ERR_VOID", "void error");
+        auto result = result_t<void>::make_error(code, "void error");
+        EXPECT_TRUE(result.is_error());
+        EXPECT_FALSE(result.is_success());
+    }
+
+    // ========== 拷贝构造测试 ==========
+
+    TEST_F(result_test, copy_constructor_preserves_success) {
+        auto original = result_t<int>(42);
+        auto copy = original;
+        EXPECT_TRUE(copy.is_success());
+        EXPECT_EQ(copy.value_or(0), 42);
+    }
+
+    TEST_F(result_test, copy_constructor_preserves_error) {
+        auto code = error_code_t{error_level_t::error, domain::system_domain_t::none, 0x0001, 0x0001, 1};
+        error_registry_t::instance().register_error(code, "ERR_COPY", "copy error");
+        auto original = result_t<int>::make_error(code, "copy me");
+        auto copy = original;
+        EXPECT_TRUE(copy.is_error());
+        EXPECT_EQ(copy.value_or(0), 0);
+    }
+
+    // ========== 移动构造测试 ==========
+
+    TEST_F(result_test, move_constructor_preserves_success) {
+        auto original = result_t<int>(42);
+        result_t<int> moved(std::move(original));
+        EXPECT_TRUE(moved.is_success());
+        EXPECT_EQ(moved.value_or(0), 42);
+    }
+
+    TEST_F(result_test, move_constructor_preserves_error) {
+        auto code = error_code_t{error_level_t::error, domain::system_domain_t::none, 0x0001, 0x0001, 1};
+        error_registry_t::instance().register_error(code, "ERR_MOVE", "move error");
+        auto original = result_t<int>::make_error(code, "move me");
+        result_t<int> moved(std::move(original));
+        EXPECT_TRUE(moved.is_error());
+    }
+
+// ========== make_success() 测试 ==========
+
+    TEST_F(result_test, make_success_creates_success_result) {
+        auto result = result_t<int>::make_success(42);
+        EXPECT_TRUE(result.is_success());
+        EXPECT_EQ(result.value_or(0), 42);
+    }
+
+    TEST_F(result_test, make_success_string_creates_success_result) {
+        auto result = result_t<std::string>::make_success("hello");
+        EXPECT_TRUE(result.is_success());
+        EXPECT_EQ(result.value_or(""), "hello");
+    }
+
+    // ========== unwrap() 测试 ==========
+
+    TEST_F(result_test, unwrap_on_success_returns_value) {
+        auto result = result_t<int>::make_success(42);
+        EXPECT_EQ(result.unwrap(), 42);
+    }
+
+    TEST_F(result_test, unwrap_on_error_returns_default) {
+        auto result = result_t<int>::make_error(
+            error_code_t{error_level_t::error, domain::system_domain_t::none, 0x0001, 0x0001, 1}, "fail");
+        EXPECT_EQ(result.unwrap(), 0);
+    }
+
+    // ========== match() 测试 ==========
+
+    TEST_F(result_test, match_on_success_calls_success_fn) {
+        auto result = result_t<int>::make_success(42);
+        auto output = result.match(
+            [](int v) noexcept { return std::string("success: ") + std::to_string(v); },
+            [](const error_context_t&) noexcept { return std::string("error"); }
+        );
+        EXPECT_EQ(output, "success: 42");
+    }
+
+    TEST_F(result_test, match_on_error_calls_error_fn) {
+        auto result = result_t<int>::make_error(
+            error_code_t{error_level_t::error, domain::system_domain_t::none, 0x0001, 0x0001, 1}, "fail");
+        auto output = result.match(
+            [](int) noexcept { return std::string("success"); },
+            [](const error_context_t&) noexcept { return std::string("error"); }
+        );
+        EXPECT_EQ(output, "error");
+    }
+
+}  // namespace error_system::core

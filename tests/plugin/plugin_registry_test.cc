@@ -2,8 +2,10 @@
 #include "error_system/plugin/plugin_registry.h"
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <gtest/gtest.h>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -191,6 +193,7 @@ namespace error_system::plugin {
         });
 
         while (!notification_started.load()) {
+            std::this_thread::yield();
         }
 
         std::thread unregisterer([&]() {
@@ -213,10 +216,13 @@ namespace error_system::plugin {
             public:
             std::string_view name() const noexcept override { return "slow_plugin"; }
             void on_error(const core::error_context_t&) noexcept override {
-                std::this_thread::sleep_for(std::chrono::microseconds(100));
+                std::unique_lock<std::mutex> lock(mutex_);
+                cv_.wait_for(lock, std::chrono::microseconds(100));
                 call_count_.fetch_add(1);
             }
             std::atomic<int> call_count_{0};
+            std::mutex mutex_{};
+            std::condition_variable cv_{};
         };
 
         slow_plugin_t slow_plugin;
@@ -242,6 +248,82 @@ namespace error_system::plugin {
         registrant.join();
 
         EXPECT_GT(slow_plugin.call_count_.load(), 0);
+    }
+
+    TEST_F(plugin_registry_test, register_plugin_nullptr) {
+        EXPECT_EQ(plugin_registry_t::instance().size(), 0UL);
+        plugin_registry_t::instance().register_plugin(nullptr);
+        EXPECT_EQ(plugin_registry_t::instance().size(), 0UL);
+    }
+
+    TEST_F(plugin_registry_test, min_level_filtering) {
+        class level_filter_plugin_t : public i_error_plugin_t {
+            public:
+            std::string_view name() const noexcept override { return "level_filter"; }
+            core::error_level_t min_level() const noexcept override { return core::error_level_t::error; }
+            void on_error(const core::error_context_t&) noexcept override {
+                call_count_.fetch_add(1);
+            }
+            std::atomic<int> call_count_{0};
+        };
+
+        level_filter_plugin_t plugin;
+        plugin_registry_t::instance().register_plugin(&plugin);
+
+        // 注册不同等级的错误码，防止 __fill_validation_fields 替换为哨兵值
+        error_system::core::error_registry_t::instance().register_error(
+            core::error_code_t(core::error_level_t::debug, domain::system_domain_t::application, 1, 1, 1),
+            "TEST_DEBUG_1", "debug test");
+        error_system::core::error_registry_t::instance().register_error(
+            core::error_code_t(core::error_level_t::info, domain::system_domain_t::application, 1, 1, 2),
+            "TEST_INFO_1", "info test");
+        error_system::core::error_registry_t::instance().register_error(
+            core::error_code_t(core::error_level_t::warn, domain::system_domain_t::application, 1, 1, 3),
+            "TEST_WARN_1", "warn test");
+        error_system::core::error_registry_t::instance().register_error(
+            core::error_code_t(core::error_level_t::error, domain::system_domain_t::application, 1, 1, 4),
+            "TEST_ERROR_1", "error test");
+        error_system::core::error_registry_t::instance().register_error(
+            core::error_code_t(core::error_level_t::fatal, domain::system_domain_t::application, 1, 1, 5),
+            "TEST_FATAL_1", "fatal test");
+
+        // debug 级别 —— 不应触发（低于 min_level = error）
+        core::error_context_t ctx_debug(
+            core::error_code_t(core::error_level_t::debug, domain::system_domain_t::application, 1, 1, 1),
+            "debug message");
+        EXPECT_EQ(plugin.call_count_.load(), 0);
+
+        // info 级别 —— 不应触发
+        core::error_context_t ctx_info(
+            core::error_code_t(core::error_level_t::info, domain::system_domain_t::application, 1, 1, 2),
+            "info message");
+        EXPECT_EQ(plugin.call_count_.load(), 0);
+
+        // warn 级别 —— 不应触发
+        core::error_context_t ctx_warn(
+            core::error_code_t(core::error_level_t::warn, domain::system_domain_t::application, 1, 1, 3),
+            "warn message");
+        EXPECT_EQ(plugin.call_count_.load(), 0);
+
+        // error 级别 —— 应触发（等于 min_level）
+        core::error_context_t ctx_error(
+            core::error_code_t(core::error_level_t::error, domain::system_domain_t::application, 1, 1, 4),
+            "error message");
+        EXPECT_EQ(plugin.call_count_.load(), 1);
+
+        // fatal 级别 —— 应触发（高于 min_level）
+        core::error_context_t ctx_fatal(
+            core::error_code_t(core::error_level_t::fatal, domain::system_domain_t::application, 1, 1, 5),
+            "fatal message");
+        EXPECT_EQ(plugin.call_count_.load(), 2);
+    }
+
+    TEST_F(plugin_registry_test, set_max_queue_size) {
+        EXPECT_EQ(plugin_registry_t::instance().get_max_queue_size(), 0UL);
+        plugin_registry_t::instance().set_max_queue_size(100);
+        EXPECT_EQ(plugin_registry_t::instance().get_max_queue_size(), 100UL);
+        plugin_registry_t::instance().set_max_queue_size(0);
+        EXPECT_EQ(plugin_registry_t::instance().get_max_queue_size(), 0UL);
     }
 
 }  // namespace error_system::plugin
