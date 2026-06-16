@@ -84,14 +84,18 @@ namespace error_system::utils {
                 return true;
             }
             if (token.type == json_lexer_t::token_type_t::string) {
-                std::string full_path;
-                full_path.reserve(context.path_prefix.size() + context.current_key.size() + 2);
-                if (!context.path_prefix.empty()) {
-                    full_path = context.path_prefix;
-                    full_path += ".";
+                try {
+                    std::string full_path;
+                    full_path.reserve(context.path_prefix.size() + context.current_key.size() + 2);
+                    if (!context.path_prefix.empty()) {
+                        full_path = context.path_prefix;
+                        full_path += ".";
+                    }
+                    full_path += context.current_key;
+                    context.temp_dict.emplace(std::move(full_path), token.value);
+                } catch (...) {
+                    std::fprintf(stderr, "[json_utils] handle_expect_value_or_start: emplace failed\n");
                 }
-                full_path += context.current_key;
-                context.temp_dict.emplace(std::move(full_path), token.value);
 
                 context.current_key.clear();
                 context.state = parse_state_t::expect_comma_or_end;

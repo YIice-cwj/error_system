@@ -20,10 +20,14 @@ namespace error_system::utils {
         }
 
         std::string result{};
-        if (to.size() > from.size()) {
-            result.reserve(string.size() + (to.size() - from.size()) * 2);
-        } else {
-            result.reserve(string.size());
+        try {
+            if (to.size() > from.size()) {
+                result.reserve(string.size() + (to.size() - from.size()) * 2);
+            } else {
+                result.reserve(string.size());
+            }
+        } catch (...) {
+            std::fprintf(stderr, "[string_utils] replace_all: reserve failed\n");
         }
 
         size_t current_pos = 0;
@@ -85,7 +89,11 @@ namespace error_system::utils {
         }
         total_length += delimiter.size() * (tokens.size() - 1);
         std::string result{};
-        result.reserve(total_length);
+        try {
+            result.reserve(total_length);
+        } catch (...) {
+            std::fprintf(stderr, "[string_utils] join: reserve failed\n");
+        }
         result.append(tokens[0]);
         for (size_t i = 1; i < tokens.size(); ++i) {
             result.append(delimiter);
@@ -118,7 +126,12 @@ namespace error_system::utils {
      */
     std::string string_utils_t::to_lower(std::string_view string) noexcept {
         std::string result{};
-        result.resize(string.size());
+        try {
+            result.resize(string.size());
+        } catch (...) {
+            std::fprintf(stderr, "[string_utils] to_lower: resize failed\n");
+            return {};
+        }
         std::transform(string.begin(), string.end(), result.begin(), [](unsigned char c) {
             return static_cast<char>(std::tolower(c));
         });
@@ -133,7 +146,12 @@ namespace error_system::utils {
      */
     std::string string_utils_t::to_upper(std::string_view string) noexcept {
         std::string result{};
-        result.resize(string.size());
+        try {
+            result.resize(string.size());
+        } catch (...) {
+            std::fprintf(stderr, "[string_utils] to_upper: resize failed\n");
+            return {};
+        }
 
         std::transform(string.begin(), string.end(), result.begin(), [](unsigned char c) {
             return static_cast<char>(std::toupper(c));
@@ -149,7 +167,11 @@ namespace error_system::utils {
      */
     std::string string_utils_t::escape_json(std::string_view string) noexcept {
         std::string result{};
-        result.reserve(string.size() + 16);  // 预分配稍大一点的合理空间
+        try {
+            result.reserve(string.size() + 16);  // 预分配稍大一点的合理空间
+        } catch (...) {
+            std::fprintf(stderr, "[string_utils] escape_json: reserve failed\n");
+        }
 
         for (char c : string) {
             switch (c) {

@@ -23,6 +23,7 @@ inline std::ostream& operator<<(std::ostream& os, const error_context_t& context
     try {
         return os << context.to_string();
     } catch (...) {
+        std::fprintf(stderr, "[error_formatter] operator<< threw exception\n");
         return os;
     }
 }

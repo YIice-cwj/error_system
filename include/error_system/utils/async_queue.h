@@ -56,7 +56,12 @@ namespace error_system::utils {
         void __start() noexcept {
             bool expected = false;
             if (running_.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
-                worker_ = std::thread(&async_queue_t::__worker_loop, this);
+                try {
+                    worker_ = std::thread(&async_queue_t::__worker_loop, this);
+                } catch (...) {
+                    std::fprintf(stderr, "[async_queue] __start: failed to create worker thread\n");
+                    running_.store(false, std::memory_order_release);
+                }
             }
         }
 
@@ -142,7 +147,12 @@ namespace error_system::utils {
                 if (max_size_ > 0 && queue_.size() >= max_size_) {
                     return false;
                 }
-                queue_.push(std::move(item));
+                try {
+                    queue_.push(std::move(item));
+                } catch (...) {
+                    std::fprintf(stderr, "[async_queue] enqueue: std::bad_alloc\n");
+                    return false;
+                }
             }
             cv_.notify_one();
             return true;

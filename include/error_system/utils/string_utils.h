@@ -284,7 +284,9 @@ namespace error_system::utils {
             (add_size(args), ...);
             try {
                 result.reserve(estimated_size);
-            } catch (...) {}
+            } catch (...) {
+                std::fprintf(stderr, "[string_utils] format: reserve failed\n");
+            }
 
             format_appender appender{result, format, 0};
 

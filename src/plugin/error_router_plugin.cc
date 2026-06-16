@@ -52,8 +52,12 @@ namespace error_system::plugin {
         if (!handler) {
             return;
         }
-        std::unique_lock<std::shared_mutex> lock(mutex_);
-        specific_handlers_[code] = std::move(handler);
+        try {
+            std::unique_lock<std::shared_mutex> lock(mutex_);
+            specific_handlers_[code] = std::move(handler);
+        } catch (...) {
+            std::fprintf(stderr, "[error_router_plugin] register_handler_by_code: std::bad_alloc\n");
+        }
     }
 
     /**
@@ -66,8 +70,12 @@ namespace error_system::plugin {
         if (!handler) {
             return;
         }
-        std::unique_lock<std::shared_mutex> lock(mutex_);
-        module_group_handlers_[module_group_id] = std::move(handler);
+        try {
+            std::unique_lock<std::shared_mutex> lock(mutex_);
+            module_group_handlers_[module_group_id] = std::move(handler);
+        } catch (...) {
+            std::fprintf(stderr, "[error_router_plugin] register_handler_by_module_group_id: std::bad_alloc\n");
+        }
     }
 
     /**
@@ -80,8 +88,12 @@ namespace error_system::plugin {
         if (!handler) {
             return;
         }
-        std::unique_lock<std::shared_mutex> lock(mutex_);
-        domain_handlers_[domain] = std::move(handler);
+        try {
+            std::unique_lock<std::shared_mutex> lock(mutex_);
+            domain_handlers_[domain] = std::move(handler);
+        } catch (...) {
+            std::fprintf(stderr, "[error_router_plugin] register_handler_by_domain: std::bad_alloc\n");
+        }
     }
 
     /**

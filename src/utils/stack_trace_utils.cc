@@ -67,7 +67,7 @@ namespace error_system::utils {
             dbghelp_manager_t() {
                 process = GetCurrentProcess();
                 SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
-                SymInitialize(process, NULL, TRUE);
+                SymInitialize(process, nullptr, TRUE);
             }
 
             ~dbghelp_manager_t() { SymCleanup(process); }
@@ -100,7 +100,7 @@ namespace error_system::utils {
          * @return int 实际抓取的栈帧数
          */
         int capture_os_frames(void** buffer, int max_frames) noexcept {
-            return CaptureStackBackTrace(0, max_frames, buffer, NULL);
+            return CaptureStackBackTrace(0, max_frames, buffer, nullptr);
         }
 
         /**

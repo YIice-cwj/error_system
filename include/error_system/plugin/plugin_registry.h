@@ -16,7 +16,7 @@
  *          使用 RCU（Read-Copy-Update）快照机制，notify_error 热路径零拷贝无锁读取。
  *          异步队列由 async_queue_t 模版类实现，自动管理后台线程生命周期。
  * @author yiice
- * @version 2.2.0
+ * @version 2.3.0
  * @date 2026-05-01
  * @copyright Copyright (c) 2026
  */

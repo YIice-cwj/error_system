@@ -20,7 +20,9 @@ namespace error_system::utils::detail {
         std::string str{};
         try {
             str.reserve(32);
-        } catch (...) {}
+        } catch (...) {
+            std::fprintf(stderr, "[json_lexer] __parse_string: reserve failed\n");
+        }
         ++pos_;
 
         while (pos_ < json_str_.size() && json_str_[pos_] != '"') {

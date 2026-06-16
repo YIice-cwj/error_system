@@ -111,8 +111,12 @@ namespace error_system::core {
         std::unique_lock<std::shared_mutex> lock(index_mutex_);
         uint32_t key = (static_cast<uint32_t>(subsys_id) << 16) | module_id;
         if (subsystem_module_index_.find(key) == subsystem_module_index_.end()) {
-            subsystem_module_index_.emplace(
-                key, subsystem_module_info_t{std::string(subsystem_name), std::string(module_name)});
+            try {
+                subsystem_module_index_.emplace(
+                    key, subsystem_module_info_t{std::string(subsystem_name), std::string(module_name)});
+            } catch (...) {
+                fprintf(stderr, "[error_registry] register_subsystem_module: std::bad_alloc\n");
+            }
         }
     }
 
@@ -155,10 +159,15 @@ namespace error_system::core {
             }
         }
 
-        error_metadata_t meta{
-            std::string(name), std::string(description), code.get_module(), code.get_number(), code.get_level()};
-        name_index_.emplace(meta.name, identity_code);
-        primary_index_.emplace(identity_code, std::move(meta));
+        try {
+            error_metadata_t meta{
+                std::string(name), std::string(description), code.get_module(), code.get_number(), code.get_level()};
+            name_index_.emplace(meta.name, identity_code);
+            primary_index_.emplace(identity_code, std::move(meta));
+        } catch (...) {
+            fprintf(stderr, "[error_registry] register_error: std::bad_alloc\n");
+            return;
+        }
         module_index_[code.get_module_group_id()].push_back(identity_code);
         {
             uint16_t subsys_id = code.get_subsys();
@@ -202,14 +211,19 @@ namespace error_system::core {
                 }
             }
 
-            error_metadata_t meta{std::string(names[i]),
-                                  std::string(descriptions[i]),
-                                  codes[i].get_module(),
-                                  codes[i].get_number(),
-                                  codes[i].get_level()};
+            try {
+                error_metadata_t meta{std::string(names[i]),
+                                      std::string(descriptions[i]),
+                                      codes[i].get_module(),
+                                      codes[i].get_number(),
+                                      codes[i].get_level()};
 
-            name_index_.emplace(meta.name, identity_code);
-            primary_index_.emplace(identity_code, std::move(meta));
+                name_index_.emplace(meta.name, identity_code);
+                primary_index_.emplace(identity_code, std::move(meta));
+            } catch (...) {
+                fprintf(stderr, "[error_registry] register_error_batch: std::bad_alloc at index %zu\n", i);
+                continue;
+            }
             module_index_[codes[i].get_module_group_id()].push_back(identity_code);
             {
                 uint16_t subsys_id = codes[i].get_subsys();
@@ -251,7 +265,14 @@ namespace error_system::core {
      */
     void error_registry_t::unregister_error(const std::string_view name) noexcept {
         std::unique_lock<std::shared_mutex> lock(index_mutex_);
-        auto name_it = name_index_.find(std::string(name));
+        auto name_it = [&]() noexcept {
+            try {
+                return name_index_.find(std::string(name));
+            } catch (...) {
+                fprintf(stderr, "[error_registry] unregister_error: std::bad_alloc\n");
+                return name_index_.end();
+            }
+        }();
         if (name_it == name_index_.end()) {
             return;
         }
@@ -394,7 +415,14 @@ namespace error_system::core {
      */
     std::optional<error_code_t> error_registry_t::find_by_name(const std::string_view name) const noexcept {
         std::shared_lock<std::shared_mutex> lock(index_mutex_);
-        auto name_it = name_index_.find(std::string(name));
+        auto name_it = [&]() noexcept {
+            try {
+                return name_index_.find(std::string(name));
+            } catch (...) {
+                fprintf(stderr, "[error_registry] find_by_name: std::bad_alloc\n");
+                return name_index_.end();
+            }
+        }();
         if (name_it != name_index_.end()) {
             return error_code_t(name_it->second);
         }

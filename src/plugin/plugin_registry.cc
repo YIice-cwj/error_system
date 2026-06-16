@@ -34,14 +34,21 @@ namespace error_system::plugin {
             if (context.get_code().get_level() >= plugin->min_level()) {
                 try {
                     plugin->on_error(context);
-                } catch (...) {}
+                } catch (...) {
+                    fprintf(stderr, "[plugin_registry] plugin '%s' on_error threw exception\n",
+                            plugin->name().data());
+                }
             }
         }
     }
 
     void plugin_registry_t::enqueue_notification(const core::error_context_t& context) noexcept {
-        auto copy = std::make_shared<core::error_context_t>(context);
-        async_queue_.enqueue(std::move(copy));
+        try {
+            auto copy = std::make_shared<core::error_context_t>(context);
+            async_queue_.enqueue(std::move(copy));
+        } catch (...) {
+            fprintf(stderr, "[plugin_registry] enqueue_notification failed to allocate memory\n");
+        }
     }
 
     size_t plugin_registry_t::size() const noexcept {
