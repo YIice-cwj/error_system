@@ -1,53 +1,43 @@
-# 文档索引
-
-欢迎来到 Error System 文档中心。
+# 📚 文档索引
 
 ---
 
-## API 参考
+## 📖 API 参考
 
-| 文档 | 命名空间 | 描述 |
-|------|----------|------|
-| [Core 层](api/core.md) | `error_system::core` | 错误码、等级、上下文、Result、异常、注册表 |
-| [Config 层](api/config.md) | `error_system::config` | 全局配置、per-code 覆盖、通知模式、格式化器 |
-| [Plugin 层](api/plugin.md) | `error_system::plugin` | 插件系统（同步/异步）、路由分发 |
-| [Utils 层](api/utils.md) | `error_system::utils` | 字符串工具、JSON 解析、文件操作、异步队列、堆栈跟踪 |
-
-## 设计文档
-
-| 文档 | 描述 |
+| 📄 文档 | 📝 内容 |
 |------|------|
-| [架构设计](architecture.md) | 模块划分、依赖关系、关键设计决策 |
+| [🧩 Core 层](api/core.md) | `error_code_t` `error_context_t` `result_t` `error_registry_t` 等 |
+| [⚙️ Config 层](api/config.md) | 全局配置、per-code 覆盖、通知模式 |
+| [🔌 Plugin 层](api/plugin.md) | 插件接口、注册表、路由分发、开发指南 |
+| [🛠️ Utils 层](api/utils.md) | 字符串工具、JSON 解析、文件操作、异步队列、堆栈跟踪 |
 
-## 快速导航
+## 🏗️ 设计文档
 
-- **构建错误码** → [Core API: error_code_t](api/core.md#error_code_t)
-- **使用错误上下文** → [Core API: error_context_t](api/core.md#error_context_t)
-- **错误码注册** → [Core API: error_registry_t](api/core.md#error_registry_t)
-- **Result 错误传递** → [Core API: result_t](api/core.md#result_t)
-- **全局配置** → [Config API](api/config.md)
-- **异步插件通知** → [Plugin API](api/plugin.md)
-- **字符串格式化** → [Utils API: string_utils_t](api/utils.md)
-- **代码生成工具** → [架构设计：代码生成](architecture.md#18-代码生成工具)
+| 📄 文档 | 📝 内容 |
+|------|------|
+| [架构设计](architecture.md) | 分层架构、模块职责、关键设计决策、编译配置 |
 
-## 测试覆盖
+## 🧭 快速导航
 
-所有 API 文档均包含对应的单元测试说明，运行测试：
+- 🔢 **构建错误码** → [error_code_t](api/core.md#error_code_t)
+- 📦 **错误上下文** → [error_context_t](api/core.md#error_context_t)
+- 🎯 **Result 错误传递** → [result_t](api/core.md#result_tt)
+- 📋 **错误码注册** → [error_registry_t](api/core.md#error_registry_t)
+- ⚙️ **全局配置** → [error_config_t](api/config.md)
+- 🔌 **异步插件通知** → [plugin_registry_t](api/plugin.md#plugin_registry_t)
+- 🤖 **代码生成工具** → [架构设计](architecture.md#14-代码生成)
+
+## 🧪 运行测试
 
 ```bash
-cd build
-ctest --output-on-failure
+cd build && ctest --output-on-failure
 ```
 
-测试统计：
-
-| 模块 | 测试文件数 | 测试用例数 |
-|------|-----------|-----------|
-| Core 层 | 7 | 100+ |
-| Plugin 层 | 2 | 20 |
-| Utils 层 | 4 | 37+ |
-| Config 层 | 1 | 11 |
-| Domain 层 | 1 | 3 |
-| **总计** | **15** | **234** |
-
-> 另含 `tests/perf/` 下 3 个性能基线 benchmark 程序。
+| 模块 | 文件数 | 用例数 |
+|------|:---:|:---:|
+| 🧩 Core | 7 | 100+ |
+| 🔌 Plugin | 2 | 20 |
+| 🛠️ Utils | 4 | 37+ |
+| ⚙️ Config | 1 | 11 |
+| 🌐 Domain | 1 | 3 |
+| **📊 总计** | **15** | **271** |
