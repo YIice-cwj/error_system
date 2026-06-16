@@ -20,3 +20,4 @@ Release/
 *.tmp
 *.swp
 *.DS_Store
+*.history
