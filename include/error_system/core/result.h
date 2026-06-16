@@ -67,6 +67,16 @@ namespace error_system::core {
         }
 
         /**
+         * @brief 创建成功结果
+         * @details 工厂方法，创建包含成功值的结果
+         * @param value 成功值
+         * @return result_t 成功结果
+         */
+        static result_t make_success(value_type value) noexcept {
+            return result_t(std::move(value));
+        }
+
+        /**
          * @brief 构造函数
          * @param value 成功值
          */
@@ -172,6 +182,16 @@ namespace error_system::core {
         const value_type& value_or(const value_type& default_value) const noexcept {
             auto* ptr = std::get_if<value_type>(&value_or_error_);
             return ptr ? *ptr : default_value;
+        }
+
+        /**
+         * @brief 获取成功值，失败时返回默认值
+         * @details 若结果为成功，返回包含的值；否则返回 T{} 默认值
+         * @return T 成功值或默认值
+         */
+        value_type unwrap() const noexcept {
+            const value_type* ptr = std::get_if<value_type>(&value_or_error_);
+            return ptr ? *ptr : value_type{};
         }
 
         /**
@@ -336,6 +356,31 @@ namespace error_system::core {
             }
             return *this;
         }
+
+        /**
+         * @brief 模式匹配处理成功和错误两种路径
+         * @details 若结果为成功，调用 success_fn；否则调用 error_fn。两个函数必须返回相同类型
+         * @param success_fn 成功时的处理函数
+         * @param error_fn 错误时的处理函数
+         * @return 处理函数的返回值
+         */
+        template <typename SuccessFn, typename ErrorFn>
+        auto match(SuccessFn&& success_fn, ErrorFn&& error_fn) const noexcept
+            -> decltype(success_fn(std::declval<const value_type&>()))
+        {
+            if (is_success()) {
+                auto* ptr = std::get_if<value_type>(&value_or_error_);
+                if (ptr) {
+                    return success_fn(*ptr);
+                }
+            } else {
+                auto* ptr = std::get_if<error_context_t>(&value_or_error_);
+                if (ptr) {
+                    return error_fn(*ptr);
+                }
+            }
+            return {};
+        }
     };
 
     /**
@@ -383,6 +428,15 @@ namespace error_system::core {
          */
         static result_t<void> make_error(const error_context_t& context) noexcept {
             return result_t<void>(context);
+        }
+
+        /**
+         * @brief 创建成功结果
+         * @details 工厂方法，创建成功结果（void 类型）
+         * @return result_t<void> 成功结果
+         */
+        static result_t make_success() noexcept {
+            return result_t();
         }
 
         /**
