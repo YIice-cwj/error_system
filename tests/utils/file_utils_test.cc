@@ -1,6 +1,8 @@
 #include "error_system/utils/file_utils.h"
 #include <filesystem>
 #include <gtest/gtest.h>
+#include <random>
+#include <sys/stat.h>
 
 namespace error_system::utils {
 
@@ -9,8 +11,13 @@ namespace error_system::utils {
         std::filesystem::path temp_dir_;
 
         void SetUp() override {
-            temp_dir_ = std::filesystem::temp_directory_path() / "error_system_file_test";
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_int_distribution<> dis(100000, 999999);
+            temp_dir_ = std::filesystem::temp_directory_path()
+                        / ("error_system_file_test_" + std::to_string(dis(gen)));
             std::filesystem::create_directories(temp_dir_);
+            chmod(temp_dir_.c_str(), 0700);
         }
 
         void TearDown() override { std::filesystem::remove_all(temp_dir_); }
