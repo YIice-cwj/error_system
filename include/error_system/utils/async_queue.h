@@ -163,6 +163,7 @@ namespace error_system::utils {
          * @param size 最大容量，0 表示无限制
          */
         void set_max_size(size_t size) noexcept {
+            std::lock_guard<std::mutex> lock(mutex_);
             max_size_ = size;
         }
 
@@ -171,6 +172,7 @@ namespace error_system::utils {
          * @return size_t 最大容量，0 表示无限制
          */
         size_t max_size() const noexcept {
+            std::lock_guard<std::mutex> lock(mutex_);
             return max_size_;
         }
 

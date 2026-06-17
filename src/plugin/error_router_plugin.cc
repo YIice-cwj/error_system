@@ -48,13 +48,14 @@ namespace error_system::plugin {
      * @param code 错误码
      * @param handler 处理函数
      */
-    void error_router_plugin_t::register_handler_by_code(core::code_t code, error_handler_t handler) noexcept {
+    void error_router_plugin_t::register_handler_by_code(const core::error_code_t& code,
+                                                       error_handler_t handler) noexcept {
         if (!handler) {
             return;
         }
         try {
             std::unique_lock<std::shared_mutex> lock(mutex_);
-            specific_handlers_[code] = std::move(handler);
+            specific_handlers_[code.get_code()] = std::move(handler);
         } catch (...) {
             std::fprintf(stderr, "[error_router_plugin] register_handler_by_code: std::bad_alloc\n");
         }
@@ -100,9 +101,9 @@ namespace error_system::plugin {
      * @brief 移除按错误码注册的处理函数
      * @param code 错误码
      */
-    void error_router_plugin_t::unregister_handler_by_code(core::code_t code) noexcept {
+    void error_router_plugin_t::unregister_handler_by_code(const core::error_code_t& code) noexcept {
         std::unique_lock<std::shared_mutex> lock(mutex_);
-        specific_handlers_.erase(code);
+        specific_handlers_.erase(code.get_code());
     }
 
     /**

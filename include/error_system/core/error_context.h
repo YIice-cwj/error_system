@@ -141,10 +141,10 @@ namespace error_system::core {
                 line_number = other.line_number;
                 source_location_ = other.source_location_;
             }
-            for (size_t i = 0; i < payload_count_ && i < PAYLOAD_SSO_CAPACITY; ++i) {
-                payload_small_[i] = other.payload_small_[i];
-            }
             try {
+                for (size_t i = 0; i < payload_count_ && i < PAYLOAD_SSO_CAPACITY; ++i) {
+                    payload_small_[i] = other.payload_small_[i];
+                }
                 if (other.payload_overflow_) {
                     payload_overflow_ = std::make_unique<std::unordered_map<std::string, std::string>>(
                         *other.payload_overflow_);
@@ -199,7 +199,7 @@ namespace error_system::core {
          * @param ex 标准异常对象
          * @return error_context_t 错误上下文
          */
-        static error_context_t from_exception(const error_code_t& code, const std::exception& ex) noexcept {
+        static error_context_t from_exception(error_code_t code, const std::exception& ex) noexcept {
             return error_context_t(code, ex.what());
         }
 
@@ -315,12 +315,17 @@ namespace error_system::core {
          */
         template <typename T>
         error_context_t& with(const std::string& key, T value) noexcept {
-            if constexpr (std::is_same_v<T, bool>) {
-                return with(key, std::string(value ? "true" : "false"));
-            } else if constexpr (std::is_arithmetic_v<T>) {
-                return with(key, std::to_string(value));
-            } else {
-                return with(key, std::string(value));
+            try {
+                if constexpr (std::is_same_v<T, bool>) {
+                    return with(key, std::string(value ? "true" : "false"));
+                } else if constexpr (std::is_arithmetic_v<T>) {
+                    return with(key, std::to_string(value));
+                } else {
+                    return with(key, std::string(value));
+                }
+            } catch (...) {
+                std::fprintf(stderr, "[error_context] with(const string&, T): std::bad_alloc\n");
+                return *this;
             }
         }
 
@@ -333,7 +338,12 @@ namespace error_system::core {
          */
         template <typename T>
         error_context_t& with(const char* key, T value) noexcept {
-            return with(std::string(key), std::move(value));
+            try {
+                return with(std::string(key), std::move(value));
+            } catch (...) {
+                std::fprintf(stderr, "[error_context] with(const char*, T): std::bad_alloc\n");
+                return *this;
+            }
         }
 
         /**
@@ -345,7 +355,12 @@ namespace error_system::core {
          */
         template <typename T>
         error_context_t& with(std::string_view key, T value) noexcept {
-            return with(std::string(key), std::move(value));
+            try {
+                return with(std::string(key), std::move(value));
+            } catch (...) {
+                std::fprintf(stderr, "[error_context] with(string_view, T): std::bad_alloc\n");
+                return *this;
+            }
         }
 
         /**

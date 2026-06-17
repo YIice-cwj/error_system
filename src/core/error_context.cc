@@ -24,14 +24,22 @@ namespace error_system::core {
         }
 
         template <typename T>
-        void append_decimal(std::string& out, T value) {
-            out.append(std::to_string(value));
+        void append_decimal(std::string& out, T value) noexcept {
+            try {
+                out.append(std::to_string(value));
+            } catch (...) {
+                std::fprintf(stderr, "[error_context] append_decimal: std::bad_alloc\n");
+            }
         }
 
-        void append_escaped_json_string(std::string& out, std::string_view value) {
-            out.push_back('"');
-            out.append(utils::string_utils_t::escape_json(std::string(value)));
-            out.push_back('"');
+        void append_escaped_json_string(std::string& out, std::string_view value) noexcept {
+            try {
+                out.push_back('"');
+                out.append(utils::string_utils_t::escape_json(std::string(value)));
+                out.push_back('"');
+            } catch (...) {
+                std::fprintf(stderr, "[error_context] append_escaped_json_string: std::bad_alloc\n");
+            }
         }
 
         size_t estimate_string_capacity(const error_context_t& context,
@@ -133,9 +141,13 @@ namespace error_system::core {
         }
 
         with("illegal_raw_code", std::to_string(code_.get_code()));
-        message.insert(0, "[UNREGISTERED CODE] ");
+        try {
+            message.insert(0, "[UNREGISTERED CODE] ");
+        } catch (...) {
+            std::fprintf(stderr, "[error_context] __fill_validation_fields: std::bad_alloc\n");
+        }
         code_ = error_code_t(error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFF);
-        metadata_ = error_registry_t::instance().get_info(code_);  // 同步更新缓存
+        metadata_ = error_registry_t::instance().get_info(code_);
     }
 
     void error_context_t::__fill_stacktrace() noexcept {
@@ -340,18 +352,30 @@ namespace error_system::core {
         std::string subsys_module_str;
         if (error_config_t::is_text_output_enabled()) {
             const auto& sm_info = registry.get_subsystem_module_info(code_.get_subsys(), code_.get_module());
-            subsys_module_str.reserve(sm_info.subsystem_name.size() + sm_info.module_name.size() + 3);
-            subsys_module_str.append(sm_info.subsystem_name).append(" / ").append(sm_info.module_name);
+            try {
+                subsys_module_str.reserve(sm_info.subsystem_name.size() + sm_info.module_name.size() + 3);
+                subsys_module_str.append(sm_info.subsystem_name).append(" / ").append(sm_info.module_name);
+            } catch (...) {
+                std::fprintf(stderr, "[error_context] to_string: subsys_module_str failed\n");
+            }
         } else {
-            subsys_module_str.reserve(32);
-            subsys_module_str.append("SubSys: ");
-            append_decimal(subsys_module_str, code_.get_subsys());
-            subsys_module_str.append(", Module: ");
-            append_decimal(subsys_module_str, code_.get_module());
+            try {
+                subsys_module_str.reserve(32);
+                subsys_module_str.append("SubSys: ");
+                append_decimal(subsys_module_str, code_.get_subsys());
+                subsys_module_str.append(", Module: ");
+                append_decimal(subsys_module_str, code_.get_module());
+            } catch (...) {
+                std::fprintf(stderr, "[error_context] to_string: subsys_module_str (numeric) failed\n");
+            }
         }
 
         std::string result;
-        result.reserve(estimate_string_capacity(*this, name.size(), desc.size(), subsys_module_str.size()));
+        try {
+            result.reserve(estimate_string_capacity(*this, name.size(), desc.size(), subsys_module_str.size()));
+        } catch (...) {
+            std::fprintf(stderr, "[error_context] to_string: reserve failed\n");
+        }
 
         if constexpr (error_config_t::LOCATION_ENABLED) {
             if (error_config_t::is_source_location_enabled() && file_name != nullptr) {
@@ -409,7 +433,11 @@ namespace error_system::core {
 
     std::string error_context_t::to_json() const noexcept {
         std::string json;
-        json.reserve(estimate_json_capacity(*this));
+        try {
+            json.reserve(estimate_json_capacity(*this));
+        } catch (...) {
+            std::fprintf(stderr, "[error_context] to_json: reserve failed\n");
+        }
         json.push_back('{');
 
         bool first_field = true;
@@ -481,12 +509,20 @@ namespace error_system::core {
     std::string error_context_t::to_binary() const noexcept {
         std::string buf;
         const size_t total_payload = payload_count_ + (payload_overflow_ ? payload_overflow_->size() : 0);
-        buf.reserve(128 + message.size() + total_payload * 24);
+        try {
+            buf.reserve(128 + message.size() + total_payload * 24);
+        } catch (...) {
+            std::fprintf(stderr, "[error_context] to_binary: reserve failed\n");
+        }
 
-        auto write_string = [&buf](const std::string& str) {
+        auto write_string = [&buf](const std::string& str) noexcept {
             const uint32_t len = static_cast<uint32_t>(str.size());
             write_little_endian(buf, len);
-            buf.append(str.data(), len);
+            try {
+                buf.append(str.data(), len);
+            } catch (...) {
+                std::fprintf(stderr, "[error_context] to_binary: write_string append failed\n");
+            }
         };
 
         write_little_endian(buf, code_.get_code());

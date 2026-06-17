@@ -6,7 +6,7 @@ namespace error_system::plugin {
     class error_router_plugin_test : public ::testing::Test {
         protected:
         void SetUp() override {
-            error_router_plugin_t::instance().unregister_handler_by_code(0);
+            error_router_plugin_t::instance().unregister_handler_by_code(core::error_code_t(0));
             error_router_plugin_t::instance().unregister_handler_by_module_group_id(0);
             error_router_plugin_t::instance().unregister_handler_by_domain(domain::system_domain_t::none);
             // 注册测试用错误码，防止 fill_validation_fields 替换为哨兵值
@@ -39,13 +39,13 @@ namespace error_system::plugin {
 
     TEST_F(error_router_plugin_test, register_handler_by_code_and_trigger) {
         bool handler_called = false;
-        core::code_t target_code = 12345;
+        core::error_code_t target_code(12345);
 
         error_router_plugin_t::instance().register_handler_by_code(
             target_code, [&handler_called](const core::error_context_t&) { handler_called = true; });
 
         // Use default constructed context and set code directly
-        core::error_context_t context(core::error_code_t(target_code), "test");
+        core::error_context_t context(target_code, "test");
         error_router_plugin_t::instance().on_error(context);
 
         EXPECT_TRUE(handler_called);
@@ -70,12 +70,13 @@ namespace error_system::plugin {
 
     TEST_F(error_router_plugin_test, handler_receives_correct_context) {
         core::code_t received_code = 0;
+        core::error_code_t target_code(99999);
 
         error_router_plugin_t::instance().register_handler_by_code(
-            99999, [&received_code](const core::error_context_t& context) { received_code = context.get_code().get_code(); });
+            target_code, [&received_code](const core::error_context_t& context) { received_code = context.get_code().get_code(); });
 
         // Use default constructed context and set code directly
-        core::error_context_t context(core::error_code_t(99999), "test");
+        core::error_context_t context(target_code, "test");
         error_router_plugin_t::instance().on_error(context);
 
         EXPECT_EQ(received_code, 99999ULL);
@@ -83,14 +84,15 @@ namespace error_system::plugin {
 
     TEST_F(error_router_plugin_test, unregister_handler_by_code_removes_it) {
         bool handler_called = false;
+        core::error_code_t target_code(11111);
 
         error_router_plugin_t::instance().register_handler_by_code(
-            11111, [&handler_called](const core::error_context_t&) { handler_called = true; });
+            target_code, [&handler_called](const core::error_context_t&) { handler_called = true; });
 
-        error_router_plugin_t::instance().unregister_handler_by_code(11111);
+        error_router_plugin_t::instance().unregister_handler_by_code(target_code);
 
         // Use default constructed context and set code directly
-        core::error_context_t context(core::error_code_t(11111), "test");
+        core::error_context_t context(target_code, "test");
         error_router_plugin_t::instance().on_error(context);
 
         EXPECT_FALSE(handler_called);
@@ -127,7 +129,7 @@ namespace error_system::plugin {
             [&domain_handler_called](const core::error_context_t&) { domain_handler_called = true; });
 
         error_router_plugin_t::instance().register_handler_by_code(
-            code.get_code(), [&code_handler_called](const core::error_context_t&) { code_handler_called = true; });
+            code, [&code_handler_called](const core::error_context_t&) { code_handler_called = true; });
 
         // Use default constructed context and set code directly
         core::error_context_t context(code, "test");

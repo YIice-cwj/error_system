@@ -73,7 +73,7 @@ namespace error_system::plugin {
          * @param code 错误码
          * @param handler 处理函数
          */
-        void register_handler_by_code(core::code_t code, error_handler_t handler) noexcept;
+        void register_handler_by_code(const core::error_code_t& code, error_handler_t handler) noexcept;
 
         /**
          * @brief 按模块组 ID 注册处理函数
@@ -94,7 +94,7 @@ namespace error_system::plugin {
          * @brief 移除按错误码注册的处理函数
          * @param code 错误码
          */
-        void unregister_handler_by_code(core::code_t code) noexcept;
+        void unregister_handler_by_code(const core::error_code_t& code) noexcept;
 
         /**
          * @brief 移除按模块组 ID 注册的处理函数
