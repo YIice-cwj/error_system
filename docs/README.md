@@ -40,4 +40,4 @@ cd build && ctest --output-on-failure
 | 🛠️ Utils | 4 | 37+ |
 | ⚙️ Config | 1 | 11 |
 | 🌐 Domain | 1 | 3 |
-| **📊 总计** | **15** | **271** |
+| **📊 总计** | **15** | **273** |

@@ -155,7 +155,7 @@ struct error_context_t {
     const char* what() const noexcept;        // C 风格描述
 
     // 🏭 工厂
-    static error_context_t from_exception(const error_code_t&,
+    static error_context_t from_exception(error_code_t code,
                                           const std::exception& ex) noexcept;
 
     bool operator==(const error_context_t&) const noexcept;
@@ -256,27 +256,29 @@ public:
     explicit operator bool() const noexcept;
 
     // 🔓 值访问（零异常）
-    T& value();                          // 失败返回 T{} 哨兵
+    T& value();                          // 失败返回 thread_local T{} 哨兵
     const T& value() const;
     T* value_pointer();                  // 失败返回 nullptr
     const T* value_pointer() const;
     T value_or(T default_value) const;   // 失败返回默认值
-    const T& expect(const char* msg) const;  // Debug 断言，Release 哨兵
+    const T& expect() const;             // Debug 断言，Release 哨兵
     T unwrap() const noexcept;           // 失败返回 T{}
+    T unwrap_or(T default_value) const noexcept;  // 失败返回指定默认值
 
-    // 🔓 错误访问（成功返回空哨兵）
-    error_context_t& error();
+    // 🔓 错误访问（成功返回哨兵）
+    error_context_t& error();            // 可变引用
     const error_context_t& error() const;
 
-    // 🔗 链式操作
-    result_t and_then(std::function<result_t(T)> fn) &&;
-    result_t or_else(std::function<result_t(const error_context_t&)> fn) &&;
-    result_t and_then(std::function<result_t(T)> fn) const&;
-    result_t or_else(std::function<result_t(const error_context_t&)> fn) const&;
-    result_t map(std::function<auto(T)->U> fn) &&;
-    result_t map(std::function<auto(T)->U> fn) const&;
-    result_t map_error(std::function<auto(const error_context_t)->ER> fn) &&;
-    result_t map_error(std::function<auto(const error_context_t)->ER> fn) const&;
+    // 🔗 链式操作（全部 noexcept，try-catch 保护）
+    auto and_then(Function&& fn) && noexcept;
+    auto and_then(Function&& fn) & noexcept;
+    auto and_then(Function&& fn) const& noexcept;
+    auto or_else(Function&& fn) && noexcept;
+    auto or_else(Function&& fn) & noexcept;
+    auto map(Function&& fn) && noexcept;
+    auto map(Function&& fn) const& noexcept;
+    auto map_error(Function&& fn) && noexcept;
+    auto map_error(Function&& fn) const& noexcept;
 
     // 🎭 模式匹配
     template <typename SuccessFn, typename ErrorFn>

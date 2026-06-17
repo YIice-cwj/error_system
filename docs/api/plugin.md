@@ -43,7 +43,10 @@ class plugin_registry_t {
 public:
     static plugin_registry_t& instance() noexcept;
 
-    void register_plugin(i_error_plugin_t* plugin) noexcept;
+    // 🏠 转移所有权：注册表接管插件生命周期
+    void register_plugin(std::unique_ptr<i_error_plugin_t> plugin) noexcept;
+    // 👁️ 非持有引用：适用于单例、栈对象等场景
+    void register_plugin_ref(i_error_plugin_t& plugin) noexcept;
     void unregister_plugin(std::string_view name) noexcept;
 
     // ⚡ 同步通知（RCU 快照，无锁读取）
@@ -87,14 +90,20 @@ error_context_t 构造
 
 ```cpp
 auto& registry = plugin_registry_t::instance();
-registry.register_plugin(logger.get());
+
+// 转移所有权：注册表接管插件生命周期
+registry.register_plugin(std::make_unique<my_plugin_t>());
+
+// 非持有引用：适用于单例
+registry.register_plugin_ref(error_router_plugin_t::instance());
 
 // 切换异步模式
 error_config_t::set_notify_mode(error_config_t::notify_mode_t::async_queue);
 registry.set_max_queue_size(10000);
 ```
 
-> ⚠️ `plugin_registry_t` 不持有插件所有权，调用方管理生命周期，避免注册临时对象。
+> ⚠️ `register_plugin(unique_ptr)` 接管插件所有权，注销/替换时自动释放。
+> `register_plugin_ref()` 不持有所有权，调用方负责生命周期，避免注册临时对象。
 
 ---
 
@@ -110,7 +119,7 @@ public:
     using handler_t = std::function<void(const error_context_t&)>;
     static error_router_plugin_t& instance() noexcept;
 
-    void register_handler_by_code(error_code_t code, handler_t handler);
+    void register_handler_by_code(const core::error_code_t& code, handler_t handler) noexcept;
     void register_handler_by_domain(uint8_t domain, handler_t handler);
     void register_handler_by_module_group(uint16_t module_group_id, handler_t handler);
 

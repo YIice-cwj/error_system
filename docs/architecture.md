@@ -97,7 +97,7 @@ constexpr error_level_t get_level() const noexcept {
 ### 6. 🏰 全局单例注册表
 
 - Meyer's singleton + `std::shared_mutex`
-- 不持有插件所有权，调用方管理生命周期
+- `register_plugin(unique_ptr)` 接管所有权，`register_plugin_ref()` 非持有引用
 - `notify_error()` 捕获每个插件的异常
 
 ### 7. 🔀 通知模式
@@ -109,9 +109,9 @@ constexpr error_level_t get_level() const noexcept {
 
 ### 8. 🎯 result_t\<T\> 零异常
 
-- `std::get_if` + 静态哨兵值替代 `std::get`
-- `value()` / `error()` / `expect()` / `unwrap()` 失败永不抛异常
-- `map()` / `map_error()` 链式类型转换
+- `std::get_if` + `thread_local` 哨兵值替代 `std::get`，防止跨线程污染
+- `value()` / `error()` / `expect()` / `unwrap()` / `unwrap_or()` 失败永不抛异常
+- `map()` / `map_error()` / `and_then()` / `or_else()` 全部 noexcept，try-catch 保护用户函数异常
 
 ### 9. 🔍 子系统索引（v2.1）
 
@@ -127,7 +127,7 @@ constexpr error_level_t get_level() const noexcept {
 
 ### 12. ⏳ 异步队列模板
 
-从 `plugin_registry_t` 抽离，支持死锁安全析构、背压控制、异常隔离、零 `std::function` 开销。
+从 `plugin_registry_t` 抽离，支持死锁安全析构、背压控制（`set_max_size` 加锁保护）、异常隔离、零 `std::function` 开销。
 
 ### 13. 🔍 自动堆栈 + Per-Code 覆盖
 
@@ -180,7 +180,7 @@ script/script_py/
 ## 🧪 测试架构
 
 - **框架**：GoogleTest
-- **覆盖**：15 文件 · 271 用例 · Core/Plugin/Utils/Config/Domain 全模块
+- **覆盖**：15 文件 · 273 用例 · Core/Plugin/Utils/Config/Domain 全模块
 - **性能基线**：`tests/perf/` 下 3 个 benchmark
 
 ```bash

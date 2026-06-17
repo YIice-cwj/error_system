@@ -2,7 +2,7 @@
 
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://isocpp.org/std/the-standard)
 [![CMake](https://img.shields.io/badge/CMake-3.15%2B-green.svg)](https://cmake.org)
-[![GoogleTest](https://img.shields.io/badge/Tests-271%20passing-brightgreen.svg)](https://github.com/google/googletest)
+[![GoogleTest](https://img.shields.io/badge/Tests-273%20passing-brightgreen.svg)](https://github.com/google/googletest)
 
 > 🎯 高性能 C++17 错误码管理系统 — 将完整错误上下文封装在一个 64 位整数中，零开销构建与解析。
 
@@ -188,7 +188,7 @@ error_system/
 │   ├── plugin/             #   🔌 插件接口、注册表、路由
 │   └── utils/              #   🛠️ 字符串、JSON、文件、堆栈、异步队列
 ├── src/                    # 🔨 核心实现
-├── tests/                  # 🧪 GoogleTest (15 文件 · 271 用例)
+├── tests/                  # 🧪 GoogleTest (15 文件 · 273 用例)
 ├── config/errors/          # 📝 JSON 错误码配置
 ├── script/script_py/       # 🐍 Python 代码生成工具
 ├── examples/               # 📖 示例代码 (5 个 demo)
