@@ -51,7 +51,7 @@ int main() {
     };
 
     for (auto& plugin : plugins) {
-        registry.register_plugin(&plugin);
+        registry.register_plugin_ref(plugin);
     }
 
     error_context_t context;

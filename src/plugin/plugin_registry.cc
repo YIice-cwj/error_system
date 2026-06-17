@@ -1,21 +1,47 @@
 #include "error_system/plugin/plugin_registry.h"
 #include <algorithm>
+#include <cstdio>
 
 namespace error_system::plugin {
 
-    void plugin_registry_t::register_plugin(i_error_plugin_t* plugin) noexcept {
+    void plugin_registry_t::register_plugin(std::unique_ptr<i_error_plugin_t> plugin) noexcept {
         if (!plugin) {
             return;
         }
 
-        __update_snapshot([plugin](std::vector<i_error_plugin_t*>& snapshot) {
-            auto it = std::find_if(snapshot.begin(), snapshot.end(), [plugin](const i_error_plugin_t* registered) {
-                return registered->name() == plugin->name();
+        i_error_plugin_t* raw_ptr = plugin.get();
+        __update_snapshot([raw_ptr](std::vector<i_error_plugin_t*>& snapshot) {
+            auto it = std::find_if(snapshot.begin(), snapshot.end(), [raw_ptr](const i_error_plugin_t* registered) {
+                return registered->name() == raw_ptr->name();
             });
             if (it != snapshot.end()) {
-                *it = plugin;
+                *it = raw_ptr;
             } else {
-                snapshot.push_back(plugin);
+                snapshot.push_back(raw_ptr);
+            }
+        });
+
+        auto it = std::find_if(owned_plugins_.begin(), owned_plugins_.end(),
+                               [&raw_ptr](const std::unique_ptr<i_error_plugin_t>& owned) {
+                                   return owned->name() == raw_ptr->name();
+                               });
+        if (it != owned_plugins_.end()) {
+            *it = std::move(plugin);
+        } else {
+            owned_plugins_.push_back(std::move(plugin));
+        }
+    }
+
+    void plugin_registry_t::register_plugin_ref(i_error_plugin_t& plugin) noexcept {
+        i_error_plugin_t* raw_ptr = &plugin;
+        __update_snapshot([raw_ptr](std::vector<i_error_plugin_t*>& snapshot) {
+            auto it = std::find_if(snapshot.begin(), snapshot.end(), [raw_ptr](const i_error_plugin_t* registered) {
+                return registered->name() == raw_ptr->name();
+            });
+            if (it != snapshot.end()) {
+                *it = raw_ptr;
+            } else {
+                snapshot.push_back(raw_ptr);
             }
         });
     }
@@ -26,6 +52,10 @@ namespace error_system::plugin {
                                           [name](const i_error_plugin_t* plugin) { return plugin->name() == name; }),
                            snapshot.end());
         });
+        owned_plugins_.erase(
+            std::remove_if(owned_plugins_.begin(), owned_plugins_.end(),
+                           [name](const std::unique_ptr<i_error_plugin_t>& owned) { return owned->name() == name; }),
+            owned_plugins_.end());
     }
 
     void plugin_registry_t::notify_error(const core::error_context_t& context) noexcept {
@@ -63,6 +93,7 @@ namespace error_system::plugin {
 
     void plugin_registry_t::clear() noexcept {
         __update_snapshot([](std::vector<i_error_plugin_t*>& snapshot) { snapshot.clear(); });
+        owned_plugins_.clear();
     }
 
     size_t plugin_registry_t::pending_notifications() const noexcept {

@@ -88,9 +88,9 @@ int main() {
     alert_plugin_t alert;
 
     auto& registry = plugin_registry_t::instance();
-    registry.register_plugin(&logger);
-    registry.register_plugin(&stats);
-    registry.register_plugin(&alert);
+    registry.register_plugin_ref(logger);
+    registry.register_plugin_ref(stats);
+    registry.register_plugin_ref(alert);
 
     std::cout << "已注册 " << registry.size() << " 个插件" << std::endl;
     std::cout << "  logger min_level = debug (所有级别)" << std::endl;
@@ -155,7 +155,7 @@ int main() {
         }
     );
 
-    registry.register_plugin(&error_router_plugin_t::instance());
+    registry.register_plugin_ref(error_router_plugin_t::instance());
 
     std::cout << "\n>> 触发特定错误码路由:" << std::endl;
     error_context_t ctx_route1(biz::trade_errors::ERR_ORDER_NOT_FOUND, "测试特定路由");

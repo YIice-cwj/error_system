@@ -44,7 +44,7 @@ namespace error_system::plugin {
         mock_plugin_t plugin1("plugin1");
         EXPECT_EQ(plugin_registry_t::instance().size(), 0UL);
 
-        plugin_registry_t::instance().register_plugin(&plugin1);
+        plugin_registry_t::instance().register_plugin_ref(plugin1);
         EXPECT_EQ(plugin_registry_t::instance().size(), 1UL);
     }
 
@@ -52,7 +52,7 @@ namespace error_system::plugin {
         EXPECT_TRUE(plugin_registry_t::instance().empty());
 
         mock_plugin_t plugin("test");
-        plugin_registry_t::instance().register_plugin(&plugin);
+        plugin_registry_t::instance().register_plugin_ref(plugin);
         EXPECT_FALSE(plugin_registry_t::instance().empty());
     }
 
@@ -60,15 +60,15 @@ namespace error_system::plugin {
         mock_plugin_t plugin1("same_name");
         mock_plugin_t plugin2("same_name");
 
-        plugin_registry_t::instance().register_plugin(&plugin1);
-        plugin_registry_t::instance().register_plugin(&plugin2);
+        plugin_registry_t::instance().register_plugin_ref(plugin1);
+        plugin_registry_t::instance().register_plugin_ref(plugin2);
 
         EXPECT_EQ(plugin_registry_t::instance().size(), 1UL);
     }
 
     TEST_F(plugin_registry_test, unregister_plugin_removes_it) {
         mock_plugin_t plugin("to_remove");
-        plugin_registry_t::instance().register_plugin(&plugin);
+        plugin_registry_t::instance().register_plugin_ref(plugin);
         EXPECT_EQ(plugin_registry_t::instance().size(), 1UL);
 
         plugin_registry_t::instance().unregister_plugin("to_remove");
@@ -77,7 +77,7 @@ namespace error_system::plugin {
 
     TEST_F(plugin_registry_test, unregister_nonexistent_does_nothing) {
         mock_plugin_t plugin("exists");
-        plugin_registry_t::instance().register_plugin(&plugin);
+        plugin_registry_t::instance().register_plugin_ref(plugin);
 
         plugin_registry_t::instance().unregister_plugin("nonexistent");
         EXPECT_EQ(plugin_registry_t::instance().size(), 1UL);
@@ -87,8 +87,8 @@ namespace error_system::plugin {
         mock_plugin_t plugin1("p1");
         mock_plugin_t plugin2("p2");
 
-        plugin_registry_t::instance().register_plugin(&plugin1);
-        plugin_registry_t::instance().register_plugin(&plugin2);
+        plugin_registry_t::instance().register_plugin_ref(plugin1);
+        plugin_registry_t::instance().register_plugin_ref(plugin2);
 
         core::error_context_t context;
         plugin_registry_t::instance().notify_error(context);
@@ -101,8 +101,8 @@ namespace error_system::plugin {
         mock_plugin_t plugin1("p1");
         mock_plugin_t plugin2("p2");
 
-        plugin_registry_t::instance().register_plugin(&plugin1);
-        plugin_registry_t::instance().register_plugin(&plugin2);
+        plugin_registry_t::instance().register_plugin_ref(plugin1);
+        plugin_registry_t::instance().register_plugin_ref(plugin2);
         EXPECT_EQ(plugin_registry_t::instance().size(), 2UL);
 
         plugin_registry_t::instance().clear();
@@ -118,7 +118,7 @@ namespace error_system::plugin {
 
     TEST_F(plugin_registry_test, notify_error_passes_correct_context) {
         mock_plugin_t plugin("test");
-        plugin_registry_t::instance().register_plugin(&plugin);
+        plugin_registry_t::instance().register_plugin_ref(plugin);
 
         // Create context with code 42 and test message
         core::error_context_t context(core::error_code_t(42), "test message");
@@ -129,7 +129,7 @@ namespace error_system::plugin {
 
     TEST_F(plugin_registry_test, concurrent_register_and_notify) {
         mock_plugin_t plugin("concurrent");
-        plugin_registry_t::instance().register_plugin(&plugin);
+        plugin_registry_t::instance().register_plugin_ref(plugin);
 
         std::vector<std::thread> threads;
         std::atomic<int> notify_count{0};
@@ -164,7 +164,7 @@ namespace error_system::plugin {
             threads.emplace_back([&, i]() {
                 for (int j = 0; j < 10; ++j) {
                     int idx = i * 10 + j;
-                    plugin_registry_t::instance().register_plugin(plugins[idx].get());
+                    plugin_registry_t::instance().register_plugin_ref(*plugins[idx]);
                     plugin_registry_t::instance().unregister_plugin("plugin_" + std::to_string(idx));
                 }
             });
@@ -179,7 +179,7 @@ namespace error_system::plugin {
 
     TEST_F(plugin_registry_test, concurrent_unregister_during_notify_does_not_deadlock) {
         mock_plugin_t plugin("target");
-        plugin_registry_t::instance().register_plugin(&plugin);
+        plugin_registry_t::instance().register_plugin_ref(plugin);
 
         std::atomic<bool> notification_started{false};
         std::atomic<bool> unregister_done{false};
@@ -199,7 +199,7 @@ namespace error_system::plugin {
         std::thread unregisterer([&]() {
             for (int i = 0; i < 500; ++i) {
                 plugin_registry_t::instance().unregister_plugin("target");
-                plugin_registry_t::instance().register_plugin(&plugin);
+                plugin_registry_t::instance().register_plugin_ref(plugin);
             }
             unregister_done.store(true);
         });
@@ -228,7 +228,7 @@ namespace error_system::plugin {
         slow_plugin_t slow_plugin;
         mock_plugin_t normal_plugin("normal");
 
-        plugin_registry_t::instance().register_plugin(&slow_plugin);
+        plugin_registry_t::instance().register_plugin_ref(slow_plugin);
 
         std::thread notifier([&]() {
             for (int i = 0; i < 30; ++i) {
@@ -239,7 +239,7 @@ namespace error_system::plugin {
 
         std::thread registrant([&]() {
             for (int i = 0; i < 50; ++i) {
-                plugin_registry_t::instance().register_plugin(&normal_plugin);
+                plugin_registry_t::instance().register_plugin_ref(normal_plugin);
                 plugin_registry_t::instance().unregister_plugin("normal");
             }
         });
@@ -252,7 +252,32 @@ namespace error_system::plugin {
 
     TEST_F(plugin_registry_test, register_plugin_nullptr) {
         EXPECT_EQ(plugin_registry_t::instance().size(), 0UL);
-        plugin_registry_t::instance().register_plugin(nullptr);
+        plugin_registry_t::instance().register_plugin(std::unique_ptr<i_error_plugin_t>{});
+        EXPECT_EQ(plugin_registry_t::instance().size(), 0UL);
+    }
+
+    TEST_F(plugin_registry_test, register_plugin_ownership_transfer) {
+        // 通过 unique_ptr 注册，注册表接管所有权
+        auto plugin = std::make_unique<mock_plugin_t>("owned_plugin");
+        plugin_registry_t::instance().register_plugin(std::move(plugin));
+        EXPECT_EQ(plugin_registry_t::instance().size(), 1UL);
+
+        // 注销时自动释放
+        plugin_registry_t::instance().unregister_plugin("owned_plugin");
+        EXPECT_EQ(plugin_registry_t::instance().size(), 0UL);
+    }
+
+    TEST_F(plugin_registry_test, register_plugin_ownership_replace_old) {
+        // 注册 owned 插件，再用同名 plugin 替换，旧插件应自动释放
+        auto plugin1 = std::make_unique<mock_plugin_t>("owned_replace");
+        plugin_registry_t::instance().register_plugin(std::move(plugin1));
+        EXPECT_EQ(plugin_registry_t::instance().size(), 1UL);
+
+        auto plugin2 = std::make_unique<mock_plugin_t>("owned_replace");
+        plugin_registry_t::instance().register_plugin(std::move(plugin2));
+        EXPECT_EQ(plugin_registry_t::instance().size(), 1UL);
+
+        plugin_registry_t::instance().clear();
         EXPECT_EQ(plugin_registry_t::instance().size(), 0UL);
     }
 
@@ -268,7 +293,7 @@ namespace error_system::plugin {
         };
 
         level_filter_plugin_t plugin;
-        plugin_registry_t::instance().register_plugin(&plugin);
+        plugin_registry_t::instance().register_plugin_ref(plugin);
 
         // 注册不同等级的错误码，防止 __fill_validation_fields 替换为哨兵值
         error_system::core::error_registry_t::instance().register_error(

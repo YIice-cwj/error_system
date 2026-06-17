@@ -24,10 +24,17 @@ namespace error_system::plugin {
 
     /**
      * @brief 插件注册表
-     * @details 单例，不持有插件所有权，调用方负责插件对象的生命周期。
+     * @details 单例，通过 register_plugin(unique_ptr) 接管插件所有权，
+     *          register_plugin_ref() 提供非持有引用注册（用于单例等场景）。
      *          异步模式下自动启动后台工作线程处理通知队列。
      */
     class plugin_registry_t {
+        public:
+        using plugin_pointer_t = i_error_plugin_t*;
+        using unique_plugin_ptr_t = std::unique_ptr<i_error_plugin_t>;
+        using shared_plugin_ptr_t = std::shared_ptr<i_error_plugin_t>;
+        using plugin_list_t = std::vector<plugin_pointer_t>;
+
         private:
         /**
          * @brief RCU 插件快照
@@ -35,9 +42,16 @@ namespace error_system::plugin {
          *          register/unregister 时拷贝-修改-原子交换，
          *          notify_error 直接 atomic_load 读取，无锁零拷贝。
          */
-        std::shared_ptr<const std::vector<i_error_plugin_t*>> plugins_snapshot_{
-            std::make_shared<const std::vector<i_error_plugin_t*>>()};
+        std::shared_ptr<const plugin_list_t> plugins_snapshot_{
+            std::make_shared<const plugin_list_t>()};
         mutable std::shared_mutex plugins_mutex_;
+
+        /**
+         * @brief 持有所有权的插件列表
+         * @details 存储通过 register_plugin(unique_ptr) 注册的插件，
+         *          注册表析构时自动释放。非持有引用（register_plugin_ref）不在此列表。
+         */
+        std::vector<unique_plugin_ptr_t> owned_plugins_{};
 
         /**
          * @brief 异步队列处理器
@@ -80,20 +94,28 @@ namespace error_system::plugin {
         void __update_snapshot(Modifier&& modifier) noexcept {
             std::unique_lock<std::shared_mutex> lock(plugins_mutex_);
             auto old_snapshot = std::atomic_load(&plugins_snapshot_);
-            auto new_snapshot_ptr = std::make_shared<std::vector<i_error_plugin_t*>>(*old_snapshot);
+            auto new_snapshot_ptr = std::make_shared<plugin_list_t>(*old_snapshot);
             modifier(*new_snapshot_ptr);
             std::atomic_store(&plugins_snapshot_,
-                              std::static_pointer_cast<const std::vector<i_error_plugin_t*>>(new_snapshot_ptr));
+                              std::static_pointer_cast<const plugin_list_t>(new_snapshot_ptr));
         }
 
         public:
         /**
-         * @brief 注册插件
-         * @details 若已存在同名插件，将替换旧插件
-         *          不持有所有权，调用方需保证插件在整个使用期间有效
-         * @param plugin 插件指针，不能为 nullptr
+         * @brief 注册插件（转移所有权）
+         * @details 注册表接管插件所有权，插件生命周期由注册表管理。
+         *          若已存在同名插件，旧插件将被替换并自动释放。
+         * @param plugin 插件 unique_ptr，不能为 nullptr
          */
-        void register_plugin(i_error_plugin_t* plugin) noexcept;
+        void register_plugin(unique_plugin_ptr_t plugin) noexcept;
+
+        /**
+         * @brief 注册插件（非持有引用）
+         * @details 注册表不持有所有权，调用方负责插件生命周期。
+         *          适用于单例、栈对象等场景。
+         * @param plugin 插件引用
+         */
+        void register_plugin_ref(i_error_plugin_t& plugin) noexcept;
 
         /**
          * @brief 注销插件
