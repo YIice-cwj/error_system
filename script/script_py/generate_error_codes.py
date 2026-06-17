@@ -3,7 +3,19 @@ import json
 import os
 import sys
 
+def __validate_safe_path(path, base_dir):
+    """校验路径在 base_dir 内，防止路径穿越"""
+    resolved = os.path.realpath(path)
+    base_real = os.path.realpath(base_dir)
+    if not resolved.startswith(base_real + os.sep) and resolved != base_real:
+        print(f"[错误] 路径越界: {resolved} 不在 {base_real} 内", file=sys.stderr)
+        sys.exit(1)
+    return resolved
+
 def generate_header(json_file, out_dir):
+    script_dir = os.path.dirname(os.path.realpath(__file__))
+    project_root = os.path.realpath(os.path.dirname(os.path.dirname(script_dir)))
+    json_file = __validate_safe_path(json_file, project_root)
     with open(json_file, 'r', encoding='utf-8') as f:
         data = json.load(f)
         
@@ -12,9 +24,9 @@ def generate_header(json_file, out_dir):
     subsystem_id = data.get('subsystem_id', 0)
     namespace = data.get('namespace', 'errors')
     
-    # 获取无后缀的文件名，用作生成的头文件名
     base_name = os.path.basename(json_file).replace('.json', '')
     out_file = os.path.join(out_dir, f"{base_name}.h")
+    out_file = __validate_safe_path(out_file, out_dir)
     
     lines = [
         "#pragma once",

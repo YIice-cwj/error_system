@@ -15,6 +15,16 @@ import subprocess
 import sys
 
 
+def __resolve_safe_path(base_path, relative_path):
+    """将相对路径解析为 base_path 下的绝对路径，并校验不越界"""
+    resolved = os.path.realpath(os.path.join(base_path, relative_path))
+    base_real = os.path.realpath(base_path)
+    if not resolved.startswith(base_real + os.sep) and resolved != base_real:
+        print(f"[错误] 路径越界: {resolved} 不在项目目录 {base_real} 内", file=sys.stderr)
+        sys.exit(1)
+    return resolved
+
+
 def main():
     parser = argparse.ArgumentParser(description="统一错误码生成入口脚本")
     parser.add_argument(
@@ -25,16 +35,19 @@ def main():
     args = parser.parse_args()
 
     # 动态定位项目根目录（脚本位于 script/script_py/ 下）
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(os.path.dirname(script_dir))
+    script_dir = os.path.dirname(os.path.realpath(__file__))
+    project_root = os.path.realpath(os.path.dirname(os.path.dirname(script_dir)))
 
     json_dir = os.path.join(project_root, "config", "errors")
 
-    # 支持绝对路径和相对路径
+    # 解析并校验构建目录，防止路径穿越
     if os.path.isabs(args.build_dir):
-        build_dir = args.build_dir
+        build_dir = os.path.realpath(args.build_dir)
+        if not build_dir.startswith(project_root + os.sep) and build_dir != project_root:
+            print(f"[错误] 构建目录 {build_dir} 不在项目根目录 {project_root} 内", file=sys.stderr)
+            sys.exit(1)
     else:
-        build_dir = os.path.join(project_root, args.build_dir)
+        build_dir = __resolve_safe_path(project_root, args.build_dir)
 
     output_dir = os.path.join(build_dir, "generated_errors", "include")
     generated_dir = os.path.join(build_dir, "generated_errors")
@@ -42,7 +55,7 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(generated_dir, exist_ok=True)
 
-    py_dir = os.path.dirname(os.path.abspath(__file__))
+    py_dir = os.path.dirname(os.path.realpath(__file__))
 
     code_script = os.path.join(py_dir, "generate_error_codes.py")
     dict_script = os.path.join(py_dir, "generate_error_dict.py")
