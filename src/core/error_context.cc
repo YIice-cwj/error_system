@@ -82,6 +82,166 @@ namespace error_system::core {
             }
             return capacity;
         }
+
+        void append_location_text(std::string& result, const error_context_t& context) noexcept {
+            if constexpr (error_config_t::LOCATION_ENABLED) {
+                if (error_config_t::is_source_location_enabled() && context.file_name != nullptr) {
+                    result.append(" [Location: ").append(context.file_name).append(":");
+                    append_decimal(result, context.line_number);
+                    result.append(" @ ").append(
+                        context.function_name != nullptr ? context.function_name : "unknown").append("]");
+                }
+            }
+        }
+
+        void append_subheader_text(std::string& result, const error_context_t& context,
+                                     const std::string& subsys_module_str) noexcept {
+            result.append("[Sign: ")
+                .append(context.is_error() ? "Error" : "Success")
+                .append(" Level: ")
+                .append(core::to_string(context.get_code().get_level()))
+                .append(", System: ")
+                .append(domain::to_string(context.get_code().get_system()))
+                .append(", ")
+                .append(subsys_module_str)
+                .append("] Code: ");
+            append_decimal(result, context.get_code().get_number());
+        }
+
+        void append_payload_text(std::string& result, const error_context_t& context) noexcept {
+            if (context.payload_size() == 0) {
+                return;
+            }
+            result.append(" {");
+            bool first = true;
+            context.for_each_payload([&](const std::string& key, const std::string& value) {
+                if (!first) {
+                    result.append(", ");
+                }
+                result.append(key).append("=").append(value);
+                first = false;
+            });
+            result.push_back('}');
+        }
+
+        void append_stacktrace_text(std::string& result, const error_context_t& context) noexcept {
+            if constexpr (error_config_t::STACKTRACE_ENABLED) {
+                if (context.stack_frames.empty()) {
+                    return;
+                }
+                result.append("\n  [Stacktrace]:");
+                for (size_t i = 0; i < context.stack_frames.size(); ++i) {
+                    result.append("\n    #");
+                    append_decimal(result, i);
+                    result.append("  ").append(context.stack_frames[i]);
+                }
+            }
+        }
+
+        bool append_location_json(std::string& json, const error_context_t& context,
+                                    bool& first_field) noexcept {
+            if constexpr (error_config_t::LOCATION_ENABLED) {
+                if (error_config_t::is_source_location_enabled()
+                    && context.file_name != nullptr && context.function_name != nullptr) {
+                    if (!first_field) {
+                        json.push_back(',');
+                    }
+                    first_field = false;
+                    json.append("\"location\":{");
+                    json.append("\"file\":");
+                    append_escaped_json_string(json, context.file_name);
+                    json.append(",\"function\":");
+                    append_escaped_json_string(json, context.function_name);
+                    json.append(",\"line\":");
+                    append_decimal(json, context.line_number);
+                    json.push_back('}');
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        void append_payload_json(std::string& json, const error_context_t& context) noexcept {
+            if (context.payload_size() == 0) {
+                return;
+            }
+            json.append(",\"payload\":{");
+            bool first_payload = true;
+            context.for_each_payload([&](const std::string& key, const std::string& value) {
+                if (!first_payload) {
+                    json.push_back(',');
+                }
+                append_escaped_json_string(json, key);
+                json.push_back(':');
+                append_escaped_json_string(json, value);
+                first_payload = false;
+            });
+            json.push_back('}');
+        }
+
+        void append_stacktrace_json(std::string& json, const error_context_t& context) noexcept {
+            if constexpr (error_config_t::STACKTRACE_ENABLED) {
+                if (context.stack_frames.empty()) {
+                    return;
+                }
+                json.append(",\"stack_frames\":[");
+                bool first_frame = true;
+                for (const auto& frame : context.stack_frames) {
+                    if (!first_frame) {
+                        json.push_back(',');
+                    }
+                    append_escaped_json_string(json, frame);
+                    first_frame = false;
+                }
+                json.push_back(']');
+            }
+        }
+
+        void write_string_len_prefixed(std::string& buf, const std::string& str) noexcept {
+            const uint32_t len = static_cast<uint32_t>(str.size());
+            write_little_endian(buf, len);
+            try {
+                buf.append(str.data(), len);
+            } catch (...) {
+                std::fprintf(stderr, "[error_context] to_binary: write_string append failed\n");
+            }
+        }
+
+        void write_location_binary(std::string& buf, const error_context_t& context) noexcept {
+            uint8_t has_location = 0;
+            if constexpr (error_config_t::LOCATION_ENABLED) {
+                if (error_config_t::is_source_location_enabled()
+                    && context.file_name != nullptr && context.function_name != nullptr) {
+                    has_location = 1;
+                }
+            }
+            buf.push_back(static_cast<char>(has_location));
+            if (has_location) {
+                write_string_len_prefixed(buf, context.file_name);
+                write_string_len_prefixed(buf,
+                    context.function_name != nullptr ? context.function_name : "unknown");
+                write_little_endian(buf, context.line_number);
+            }
+        }
+
+        void write_payload_binary(std::string& buf, const error_context_t& context) noexcept {
+            const size_t total = context.payload_size();
+            write_little_endian(buf, static_cast<uint32_t>(total));
+            context.for_each_payload([&](const std::string& key, const std::string& value) {
+                write_string_len_prefixed(buf, key);
+                write_string_len_prefixed(buf, value);
+            });
+        }
+
+        void write_cause_binary(std::string& buf, const error_context_t& context) noexcept {
+            if (context.cause) {
+                buf.push_back(1);
+                std::string cause_binary = context.cause->to_binary();
+                write_string_len_prefixed(buf, cause_binary);
+            } else {
+                buf.push_back(0);
+            }
+        }
     }  // namespace
 
     void notify_plugins(const error_context_t& context) noexcept {
@@ -345,7 +505,7 @@ namespace error_system::core {
         }
 
         auto& registry = error_system::core::error_registry_t::instance();
-        const error_metadata_t* info = metadata_; 
+        const error_metadata_t* info = metadata_;
         const std::string& desc = info ? info->description : "未注册的未知错误";
         const std::string& name = info ? info->name : "UNKNOWN_ERR_CODE";
 
@@ -377,53 +537,15 @@ namespace error_system::core {
             std::fprintf(stderr, "[error_context] to_string: reserve failed\n");
         }
 
-        if constexpr (error_config_t::LOCATION_ENABLED) {
-            if (error_config_t::is_source_location_enabled() && file_name != nullptr) {
-                result.append(" [Location: ").append(file_name).append(":");
-                append_decimal(result, line_number);
-                result.append(" @ ").append(function_name != nullptr ? function_name : "unknown").append("]");
-            }
-        }
-
-        result.append("[Sign: ")
-            .append(is_error() ? "Error" : "Success")
-            .append(" Level: ")
-            .append(core::to_string(code_.get_level()))
-            .append(", System: ")
-            .append(domain::to_string(code_.get_system()))
-            .append(", ")
-            .append(subsys_module_str)
-            .append("] Code: ");
-        append_decimal(result, code_.get_number());
+        append_location_text(result, *this);
+        append_subheader_text(result, *this, subsys_module_str);
         result.append(" (").append(name).append(") - ");
         if (!message.empty()) {
             result.append(message).append(": ");
         }
         result.append(desc);
-
-        if (payload_count_ > 0 || payload_overflow_) {
-            result.append(" {");
-            bool first = true;
-            for_each_payload([&](const std::string& key, const std::string& value) {
-                if (!first) {
-                    result.append(", ");
-                }
-                result.append(key).append("=").append(value);
-                first = false;
-            });
-            result.push_back('}');
-        }
-
-        if constexpr (error_config_t::STACKTRACE_ENABLED) {
-            if (!stack_frames.empty()) {
-                result.append("\n  [Stacktrace]:");
-                for (size_t i = 0; i < stack_frames.size(); ++i) {
-                    result.append("\n    #");
-                    append_decimal(result, i);
-                    result.append("  ").append(stack_frames[i]);
-                }
-            }
-        }
+        append_payload_text(result, *this);
+        append_stacktrace_text(result, *this);
 
         if (cause) {
             result.append("\n  ↳ Caused by: ").append(cause->to_string());
@@ -441,6 +563,8 @@ namespace error_system::core {
         json.push_back('{');
 
         bool first_field = true;
+        append_location_json(json, *this, first_field);
+
         auto append_separator = [&json, &first_field]() {
             if (!first_field) {
                 json.push_back(',');
@@ -448,55 +572,13 @@ namespace error_system::core {
             first_field = false;
         };
 
-        if constexpr (error_config_t::LOCATION_ENABLED) {
-            if (error_config_t::is_source_location_enabled() && file_name != nullptr && function_name != nullptr) {
-                append_separator();
-                json.append("\"location\":{");
-                json.append("\"file\":");
-                append_escaped_json_string(json, file_name);
-                json.append(",\"function\":");
-                append_escaped_json_string(json, function_name != nullptr ? function_name : "unknown");
-                json.append(",\"line\":");
-                append_decimal(json, line_number);
-                json.push_back('}');
-            }
-        }
-
         append_separator();
         json.append("\"code\":");
         append_decimal(json, code_.get_identity_code());
         json.append(",\"message\":");
         append_escaped_json_string(json, message);
-
-        if (payload_count_ > 0 || payload_overflow_) {
-            json.append(",\"payload\":{");
-            bool first_payload = true;
-            for_each_payload([&](const std::string& key, const std::string& value) {
-                if (!first_payload) {
-                    json.push_back(',');
-                }
-                append_escaped_json_string(json, key);
-                json.push_back(':');
-                append_escaped_json_string(json, value);
-                first_payload = false;
-            });
-            json.push_back('}');
-        }
-
-        if constexpr (error_config_t::STACKTRACE_ENABLED) {
-            if (!stack_frames.empty()) {
-                json.append(",\"stack_frames\":[");
-                bool first_frame = true;
-                for (const auto& frame : stack_frames) {
-                    if (!first_frame) {
-                        json.push_back(',');
-                    }
-                    append_escaped_json_string(json, frame);
-                    first_frame = false;
-                }
-                json.push_back(']');
-            }
-        }
+        append_payload_json(json, *this);
+        append_stacktrace_json(json, *this);
 
         if (cause) {
             json.append(",\"cause\":").append(cause->to_json());
@@ -515,46 +597,11 @@ namespace error_system::core {
             std::fprintf(stderr, "[error_context] to_binary: reserve failed\n");
         }
 
-        auto write_string = [&buf](const std::string& str) noexcept {
-            const uint32_t len = static_cast<uint32_t>(str.size());
-            write_little_endian(buf, len);
-            try {
-                buf.append(str.data(), len);
-            } catch (...) {
-                std::fprintf(stderr, "[error_context] to_binary: write_string append failed\n");
-            }
-        };
-
         write_little_endian(buf, code_.get_code());
-        write_string(message);
-
-        uint8_t has_location = 0;
-        if constexpr (error_config_t::LOCATION_ENABLED) {
-            if (error_config_t::is_source_location_enabled() && file_name != nullptr && function_name != nullptr) {
-                has_location = 1;
-            }
-        }
-        buf.push_back(static_cast<char>(has_location));
-
-        if (has_location) {
-            write_string(file_name);
-            write_string(function_name != nullptr ? function_name : "unknown");
-            write_little_endian(buf, line_number);
-        }
-
-        write_little_endian(buf, static_cast<uint32_t>(total_payload));
-        for_each_payload([&](const std::string& key, const std::string& value) {
-            write_string(key);
-            write_string(value);
-        });
-
-        if (cause) {
-            buf.push_back(1);
-            std::string cause_binary = cause->to_binary();
-            write_string(cause_binary);
-        } else {
-            buf.push_back(0);
-        }
+        write_string_len_prefixed(buf, message);
+        write_location_binary(buf, *this);
+        write_payload_binary(buf, *this);
+        write_cause_binary(buf, *this);
 
         return buf;
     }
