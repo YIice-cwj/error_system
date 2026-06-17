@@ -20,7 +20,7 @@ echo "================================================="
 echo "   🚀 开始一键生成 Error System 错误码与文档..."
 echo "================================================="
 
-if [ ! -d "$JSON_DIR" ]; then
+if [[ ! -d "$JSON_DIR" ]]; then
     echo "❌ 错误: 找不到配置目录 $JSON_DIR"
     exit 1
 fi
@@ -37,7 +37,7 @@ echo " ⚙️ [1/3] 正在生成业务模块 C++ 头文件 (.h)"
 echo "-------------------------------------------------"
 count=0
 for json_file in "$JSON_DIR"/*.json; do
-    if [ -f "$json_file" ]; then
+    if [[ -f "$json_file" ]]; then
         # 提取文件名 (例如 trade_service_errors.json)
         filename=$(basename -- "$json_file")
         # 去除后缀名 (得到 trade_service_errors)
@@ -46,7 +46,7 @@ for json_file in "$JSON_DIR"/*.json; do
         echo "  ⏳ 读取 $filename ➡️ 生成 ${filename_no_ext}.h"
         python3 "$CODE_SCRIPT" "$json_file" "$OUTPUT_DIR"
         
-        if [ $? -eq 0 ]; then
+        if [[ $? -eq 0 ]]; then
             ((count++))
         else
             echo "  ❌ 失败: $filename 生成 ${filename_no_ext}.h 报错！"
@@ -64,7 +64,7 @@ echo "-------------------------------------------------"
 echo "  ⏳ 汇总全部 JSON 数据 ➡️ 生成 error_dict.h"
 python3 "$DICT_SCRIPT" "$JSON_DIR" "$DICT_OUTPUT"
 
-if [ $? -ne 0 ]; then
+if [[ $? -ne 0 ]]; then
     echo "  ❌ 全局字典 error_dict.h 生成失败！"
     exit 1
 fi
@@ -78,7 +78,7 @@ echo "-------------------------------------------------"
 echo "  ⏳ 汇总全部 JSON 数据 ➡️ 生成 error_dictionary.md"
 python3 "$DOCS_SCRIPT" "$JSON_DIR" "$DOCS_OUTPUT"
 
-if [ $? -ne 0 ]; then
+if [[ $? -ne 0 ]]; then
     echo "  ❌ Markdown 文档 error_dictionary.md 生成失败！"
     exit 1
 fi
