@@ -55,12 +55,12 @@ namespace error_system::utils {
          */
         void __start() noexcept {
             bool expected = false;
-            if (running_.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+            if (running_.compare_exchange_strong(expected, true)) {
                 try {
                     worker_ = std::thread(&async_queue_t::__worker_loop, this);
                 } catch (...) {
                     std::fprintf(stderr, "[async_queue] __start: failed to create worker thread\n");
-                    running_.store(false, std::memory_order_release);
+                    running_.store(false);
                 }
             }
         }
@@ -72,10 +72,10 @@ namespace error_system::utils {
          *          因 running_ 仍为 true 而回到 wait 状态，造成 join 死锁。
          */
         void __stop() noexcept {
-            if (!running_.load(std::memory_order_acquire)) {
+            if (!running_.load()) {
                 return;
             }
-            running_.store(false, std::memory_order_release);
+            running_.store(false);
             cv_.notify_all();
             if (worker_.joinable()) {
                 worker_.join();
@@ -88,14 +88,14 @@ namespace error_system::utils {
          *          处理器异常被捕获并忽略，不影响工作线程继续运行。
          */
         void __worker_loop() noexcept {
-            while (running_.load(std::memory_order_acquire)) {
+            while (running_.load()) {
                 value_type item;
                 {
                     std::unique_lock<std::mutex> lock(mutex_);
                     cv_.wait(lock, [this] {
-                        return !queue_.empty() || !running_.load(std::memory_order_relaxed);
+                        return !queue_.empty() || !running_.load();
                     });
-                    if (!running_.load(std::memory_order_relaxed) && queue_.empty()) {
+                    if (!running_.load() && queue_.empty()) {
                         return;
                     }
                     item = std::move(queue_.front());
@@ -139,7 +139,7 @@ namespace error_system::utils {
          * @return bool 是否成功入队
          */
         bool enqueue(value_type item) noexcept {
-            if (!running_.load(std::memory_order_acquire)) {
+            if (!running_.load()) {
                 __start();
             }
             {

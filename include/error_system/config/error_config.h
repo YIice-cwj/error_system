@@ -195,7 +195,7 @@ namespace error_system::config {
          */
         static core::error_level_t get_stacktrace_level() noexcept {
             if constexpr (STACKTRACE_ENABLED) {
-                return __get_min_stacktrace_level().load(std::memory_order_relaxed);
+                return __get_min_stacktrace_level().load();
             } else {
                 return core::error_level_t::warn;
             }
@@ -209,7 +209,7 @@ namespace error_system::config {
          */
         static void set_stacktrace_level(core::error_level_t level) noexcept {
             if constexpr (STACKTRACE_ENABLED) {
-                __get_min_stacktrace_level().store(level, std::memory_order_relaxed);
+                __get_min_stacktrace_level().store(level);
             }
         }
 
@@ -221,7 +221,7 @@ namespace error_system::config {
          */
         static void set_enable_stacktrace(bool enable) noexcept {
             if constexpr (STACKTRACE_ENABLED) {
-                __get_flag_stacktrace().store(enable, std::memory_order_relaxed);
+                __get_flag_stacktrace().store(enable);
             }
         }
 
@@ -234,7 +234,7 @@ namespace error_system::config {
          */
         static bool is_stacktrace_enabled() noexcept {
             if constexpr (STACKTRACE_ENABLED) {
-                return __get_flag_stacktrace().load(std::memory_order_relaxed);
+                return __get_flag_stacktrace().load();
             } else {
                 return false;
             }
@@ -247,7 +247,7 @@ namespace error_system::config {
          */
         static void set_enable_validation(bool enable) noexcept {
             if constexpr (VALIDATION_ENABLED) {
-                __get_flag_validation().store(enable, std::memory_order_relaxed);
+                __get_flag_validation().store(enable);
             }
         }
 
@@ -259,7 +259,7 @@ namespace error_system::config {
          */
         static bool is_validation_enabled() noexcept {
             if constexpr (VALIDATION_ENABLED) {
-                return __get_flag_validation().load(std::memory_order_relaxed);
+                return __get_flag_validation().load();
             } else {
                 return false;
             }
@@ -272,7 +272,7 @@ namespace error_system::config {
          */
         static void set_enable_source_location(bool enable) noexcept {
             if constexpr (LOCATION_ENABLED) {
-                __get_flag_source_location().store(enable, std::memory_order_relaxed);
+                __get_flag_source_location().store(enable);
             }
         }
 
@@ -284,7 +284,7 @@ namespace error_system::config {
          */
         static bool is_source_location_enabled() noexcept {
             if constexpr (LOCATION_ENABLED) {
-                return __get_flag_source_location().load(std::memory_order_relaxed);
+                return __get_flag_source_location().load();
             } else {
                 return false;
             }
@@ -297,7 +297,7 @@ namespace error_system::config {
          */
         static void set_enable_short_filename(bool enable) noexcept {
             if constexpr (LOCATION_ENABLED) {
-                __get_flag_short_filename().store(enable, std::memory_order_relaxed);
+                __get_flag_short_filename().store(enable);
             }
         }
 
@@ -309,7 +309,7 @@ namespace error_system::config {
          */
         static bool is_short_filename_enabled() noexcept {
             if constexpr (LOCATION_ENABLED) {
-                return __get_flag_short_filename().load(std::memory_order_relaxed);
+                return __get_flag_short_filename().load();
             } else {
                 return false;
             }
@@ -321,7 +321,7 @@ namespace error_system::config {
          * @param enable 是否开启文本输出
          */
         static void set_enable_text_output(bool enable) noexcept {
-            __get_flag_text_output().store(enable, std::memory_order_relaxed);
+            __get_flag_text_output().store(enable);
         }
 
         /**
@@ -329,7 +329,7 @@ namespace error_system::config {
          * @return bool 是否开启文本输出
          */
         static bool is_text_output_enabled() noexcept {
-            return __get_flag_text_output().load(std::memory_order_relaxed);
+            return __get_flag_text_output().load();
         }
 
         /**
@@ -337,7 +337,7 @@ namespace error_system::config {
          * @param mode 通知模式
          */
         static void set_notify_mode(notify_mode_t mode) noexcept {
-            __get_notify_mode().store(mode, std::memory_order_relaxed);
+            __get_notify_mode().store(mode);
         }
 
         /**
@@ -345,7 +345,7 @@ namespace error_system::config {
          * @return notify_mode_t 当前通知模式
          */
         static notify_mode_t get_notify_mode() noexcept {
-            return __get_notify_mode().load(std::memory_order_relaxed);
+            return __get_notify_mode().load();
         }
 
         /**
