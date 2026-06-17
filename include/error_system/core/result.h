@@ -119,7 +119,23 @@ namespace error_system::core {
             if (ptr) {
                 return *ptr;
             }
-            static const error_context_t sentinel{};
+            static thread_local const error_context_t sentinel{};
+            return sentinel;
+        }
+
+        /**
+         * @brief 获取错误上下文（可变引用）
+         * @details 使用 std::get_if 安全获取，若当前为成功状态则返回线程局部哨兵值。
+         *          调用方应在调用前通过 is_error() 检查，否则返回的哨兵值无意义。
+         * @return error_context_t& 错误上下文可变引用
+         */
+        error_context_t& error() noexcept {
+            assert(is_error() && "result_t::error() called on a success result");
+            auto* ptr = std::get_if<error_context_t>(&value_or_error_);
+            if (ptr) {
+                return *ptr;
+            }
+            static thread_local error_context_t sentinel{};
             return sentinel;
         }
 
@@ -139,13 +155,13 @@ namespace error_system::core {
             if (ptr) {
                 return *ptr;
             }
-            static const value_type sentinel{};
+            static thread_local const value_type sentinel{};
             return sentinel;
         }
 
         /**
          * @brief 获取成功值（可变引用）
-         * @details 使用 std::get_if 安全获取，若当前为错误状态则返回静态哨兵值（T{}）。
+         * @details 使用 std::get_if 安全获取，若当前为错误状态则返回线程局部哨兵值（T{}）。
          *          调用方应在调用前通过 is_success() 检查，否则返回的哨兵值可能无意义。
          * @return value_type& 成功值
          */
@@ -158,7 +174,7 @@ namespace error_system::core {
             if (ptr) {
                 return *ptr;
             }
-            static value_type sentinel{};
+            static thread_local value_type sentinel{};
             return sentinel;
         }
 
@@ -195,6 +211,17 @@ namespace error_system::core {
         }
 
         /**
+         * @brief 获取成功值，失败时返回指定默认值
+         * @details 若结果为成功，返回包含的值；否则返回用户提供的默认值
+         * @param default_value 失败时的默认值
+         * @return T 成功值或默认值
+         */
+        value_type unwrap_or(value_type default_value) const noexcept {
+            const value_type* ptr = std::get_if<value_type>(&value_or_error_);
+            return ptr ? *ptr : std::move(default_value);
+        }
+
+        /**
          * @brief 布尔转换运算符
          * @return bool 如果结果为成功则返回 true
          */
@@ -220,7 +247,7 @@ namespace error_system::core {
             if (ptr) {
                 return *ptr;
             }
-            static const value_type sentinel{};
+            static thread_local const value_type sentinel{};
             return sentinel;
         }
 
@@ -231,26 +258,40 @@ namespace error_system::core {
          * @return result_t 转换后的结果，错误时传递错误上下文
          */
         template <typename Function>
-        auto map(Function&& function) const& -> result_t<decltype(std::invoke(std::forward<Function>(function),
+        auto map(Function&& function) const& noexcept -> result_t<decltype(std::invoke(std::forward<Function>(function),
                                                                                std::declval<const value_type&>()))> {
             using new_type = decltype(std::invoke(std::forward<Function>(function), std::declval<const value_type&>()));
             if (is_error()) {
                 return result_t<new_type>(error());
             }
-            return result_t<new_type>(std::invoke(std::forward<Function>(function), value()));
+            try {
+                return result_t<new_type>(std::invoke(std::forward<Function>(function), value()));
+            } catch (...) {
+                std::fprintf(stderr, "[result_t] map: std::invoke threw exception\n");
+                return result_t<new_type>(error_context_t{
+                    error_code_t(error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFE),
+                    "map: function threw exception"});
+            }
         }
 
         /**
          * @brief 对成功值进行映射转换（移动语义）
          */
         template <typename Function>
-        auto map(Function&& function) && -> result_t<decltype(std::invoke(std::forward<Function>(function),
+        auto map(Function&& function) && noexcept -> result_t<decltype(std::invoke(std::forward<Function>(function),
                                                                            std::move(value())))> {
             using new_type = decltype(std::invoke(std::forward<Function>(function), std::move(value())));
             if (is_error()) {
                 return result_t<new_type>(std::move(error()));
             }
-            return result_t<new_type>(std::invoke(std::forward<Function>(function), std::move(value())));
+            try {
+                return result_t<new_type>(std::invoke(std::forward<Function>(function), std::move(value())));
+            } catch (...) {
+                std::fprintf(stderr, "[result_t] map(&&): std::invoke threw exception\n");
+                return result_t<new_type>(error_context_t{
+                    error_code_t(error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFE),
+                    "map(&&): function threw exception"});
+            }
         }
 
         /**
@@ -260,9 +301,14 @@ namespace error_system::core {
          * @return result_t 映射后的结果，成功时保持不变
          */
         template <typename Function>
-        result_t<value_type> map_error(Function&& function) const& {
+        result_t<value_type> map_error(Function&& function) const& noexcept {
             if (is_error()) {
-                return result_t<value_type>(std::invoke(std::forward<Function>(function), error()));
+                try {
+                    return result_t<value_type>(std::invoke(std::forward<Function>(function), error()));
+                } catch (...) {
+                    std::fprintf(stderr, "[result_t] map_error: std::invoke threw exception\n");
+                    return result_t<value_type>(error());
+                }
             }
             return result_t<value_type>(value());
         }
@@ -271,9 +317,14 @@ namespace error_system::core {
          * @brief 对错误上下文进行映射转换（移动语义）
          */
         template <typename Function>
-        result_t<value_type> map_error(Function&& function) && {
+        result_t<value_type> map_error(Function&& function) && noexcept {
             if (is_error()) {
-                return result_t<value_type>(std::invoke(std::forward<Function>(function), std::move(error())));
+                try {
+                    return result_t<value_type>(std::invoke(std::forward<Function>(function), std::move(error())));
+                } catch (...) {
+                    std::fprintf(stderr, "[result_t] map_error(&&): std::invoke threw exception\n");
+                    return std::move(*this);
+                }
             }
             return std::move(*this);
         }
@@ -286,13 +337,20 @@ namespace error_system::core {
          *          如果当前结果为错误，则返回包含当前错误的新结果（移动语义）
          */
         template <typename Function>
-        auto and_then(Function&& function) && -> decltype(std::invoke(std::forward<Function>(function),
+        auto and_then(Function&& function) && noexcept -> decltype(std::invoke(std::forward<Function>(function),
                                                                       std::move(value()))) {
             using return_type = decltype(std::invoke(std::forward<Function>(function), std::move(value())));
             if (is_error()) {
                 return return_type(std::move(error()));
             }
-            return std::invoke(std::forward<Function>(function), std::move(value()));
+            try {
+                return std::invoke(std::forward<Function>(function), std::move(value()));
+            } catch (...) {
+                std::fprintf(stderr, "[result_t] and_then(&&): std::invoke threw exception\n");
+                return return_type(error_context_t{
+                    error_code_t(error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFE),
+                    "and_then(&&): function threw exception"});
+            }
         }
 
         /**
@@ -303,12 +361,19 @@ namespace error_system::core {
          *          如果当前结果为错误，则返回包含当前错误的新结果
          */
         template <typename Function>
-        auto and_then(Function&& function) & -> decltype(std::invoke(std::forward<Function>(function), value())) {
+        auto and_then(Function&& function) & noexcept -> decltype(std::invoke(std::forward<Function>(function), value())) {
             using return_type = decltype(std::invoke(std::forward<Function>(function), value()));
             if (is_error()) {
                 return return_type(error());
             }
-            return std::invoke(std::forward<Function>(function), value());
+            try {
+                return std::invoke(std::forward<Function>(function), value());
+            } catch (...) {
+                std::fprintf(stderr, "[result_t] and_then(&): std::invoke threw exception\n");
+                return return_type(error_context_t{
+                    error_code_t(error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFE),
+                    "and_then(&): function threw exception"});
+            }
         }
 
         /**
@@ -319,12 +384,19 @@ namespace error_system::core {
          *          如果当前结果为错误，则返回包含当前错误的新结果
          */
         template <typename Function>
-        auto and_then(Function&& function) const& -> decltype(std::invoke(std::forward<Function>(function), value())) {
+        auto and_then(Function&& function) const& noexcept -> decltype(std::invoke(std::forward<Function>(function), value())) {
             using return_type = decltype(std::invoke(std::forward<Function>(function), value()));
             if (is_error()) {
                 return return_type(error());
             }
-            return std::invoke(std::forward<Function>(function), value());
+            try {
+                return std::invoke(std::forward<Function>(function), value());
+            } catch (...) {
+                std::fprintf(stderr, "[result_t] and_then(const&): std::invoke threw exception\n");
+                return return_type(error_context_t{
+                    error_code_t(error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFE),
+                    "and_then(const&): function threw exception"});
+            }
         }
 
         /**
@@ -335,9 +407,14 @@ namespace error_system::core {
          *          如果当前结果为成功，则返回当前对象（移动语义）
          */
         template <typename Function>
-        result_t<value_type> or_else(Function&& function) && {
+        result_t<value_type> or_else(Function&& function) && noexcept {
             if (is_error()) {
-                return std::invoke(std::forward<Function>(function), std::move(error()));
+                try {
+                    return std::invoke(std::forward<Function>(function), std::move(error()));
+                } catch (...) {
+                    std::fprintf(stderr, "[result_t] or_else(&&): std::invoke threw exception\n");
+                    return std::move(*this);
+                }
             }
             return std::move(*this);
         }
@@ -350,9 +427,14 @@ namespace error_system::core {
          *          如果当前结果为成功，则返回当前对象的副本
          */
         template <typename Function>
-        result_t<value_type> or_else(Function&& function) & {
+        result_t<value_type> or_else(Function&& function) & noexcept {
             if (is_error()) {
-                return std::invoke(std::forward<Function>(function), error());
+                try {
+                    return std::invoke(std::forward<Function>(function), error());
+                } catch (...) {
+                    std::fprintf(stderr, "[result_t] or_else(&): std::invoke threw exception\n");
+                    return *this;
+                }
             }
             return *this;
         }
@@ -490,12 +572,19 @@ namespace error_system::core {
          *          如果当前结果为错误，则返回包含当前错误上下文的新结果（移动语义）
          */
         template <typename Function>
-        auto and_then(Function&& function) && -> decltype(std::invoke(std::forward<Function>(function))) {
+        auto and_then(Function&& function) && noexcept -> decltype(std::invoke(std::forward<Function>(function))) {
             using return_type = decltype(std::invoke(std::forward<Function>(function)));
             if (is_error()) {
                 return return_type(std::move(error_context_));
             }
-            return std::invoke(std::forward<Function>(function));
+            try {
+                return std::invoke(std::forward<Function>(function));
+            } catch (...) {
+                std::fprintf(stderr, "[result_t<void>] and_then(&&): std::invoke threw exception\n");
+                return return_type(error_context_t{
+                    error_code_t(error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFE),
+                    "and_then(&&): function threw exception"});
+            }
         }
 
         /**
@@ -506,12 +595,19 @@ namespace error_system::core {
          *          如果当前结果为错误，则返回包含当前错误上下文的新结果
          */
         template <typename Function>
-        auto and_then(Function&& function) & -> decltype(std::invoke(std::forward<Function>(function))) {
+        auto and_then(Function&& function) & noexcept -> decltype(std::invoke(std::forward<Function>(function))) {
             using return_type = decltype(std::invoke(std::forward<Function>(function)));
             if (is_error()) {
                 return return_type(error_context_);
             }
-            return std::invoke(std::forward<Function>(function));
+            try {
+                return std::invoke(std::forward<Function>(function));
+            } catch (...) {
+                std::fprintf(stderr, "[result_t<void>] and_then(&): std::invoke threw exception\n");
+                return return_type(error_context_t{
+                    error_code_t(error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFE),
+                    "and_then(&): function threw exception"});
+            }
         }
 
         /**
@@ -522,9 +618,14 @@ namespace error_system::core {
          *          如果当前结果为成功，则返回当前对象（移动语义）
          */
         template <typename Function>
-        result_t<void> or_else(Function&& function) && {
+        result_t<void> or_else(Function&& function) && noexcept {
             if (is_error()) {
-                return std::invoke(std::forward<Function>(function), std::move(error_context_));
+                try {
+                    return std::invoke(std::forward<Function>(function), std::move(error_context_));
+                } catch (...) {
+                    std::fprintf(stderr, "[result_t<void>] or_else(&&): std::invoke threw exception\n");
+                    return std::move(*this);
+                }
             }
             return std::move(*this);
         }
@@ -537,9 +638,14 @@ namespace error_system::core {
          *          如果当前结果为成功，则返回当前对象的副本
          */
         template <typename Function>
-        result_t<void> or_else(Function&& function) & {
+        result_t<void> or_else(Function&& function) & noexcept {
             if (is_error()) {
-                return std::invoke(std::forward<Function>(function), error_context_);
+                try {
+                    return std::invoke(std::forward<Function>(function), error_context_);
+                } catch (...) {
+                    std::fprintf(stderr, "[result_t<void>] or_else(&): std::invoke threw exception\n");
+                    return *this;
+                }
             }
             return *this;
         }
