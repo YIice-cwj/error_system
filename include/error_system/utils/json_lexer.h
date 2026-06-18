@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <string>
 #include <string_view>
 
@@ -66,6 +67,12 @@ namespace error_system::utils::detail {
          * @param json_str JSON字符串视图
          */
         explicit json_lexer_t(std::string_view json_str) noexcept;
+
+        ~json_lexer_t() = default;
+        json_lexer_t(const json_lexer_t&) = default;
+        json_lexer_t& operator=(const json_lexer_t&) = default;
+        json_lexer_t(json_lexer_t&&) noexcept = default;
+        json_lexer_t& operator=(json_lexer_t&&) noexcept = default;
 
         /**
          * @brief 获取下一个token

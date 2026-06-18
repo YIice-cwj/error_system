@@ -1,7 +1,8 @@
 #pragma once
-#include <charconv>
 #include <cstddef>
 #include <cstdint>
+
+#include <charconv>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -85,7 +86,7 @@ namespace error_system::utils {
      */
     class string_utils_t {
         private:
-        struct format_appender {
+        struct format_appender_t {
             std::string& result;
             std::string_view format;
             size_t cursor = 0;
@@ -139,7 +140,7 @@ namespace error_system::utils {
                         std::array<char, 32> buffer;
                         auto [pointer, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), addr, 16);
                         if (error == std::errc{}) {
-                            result.append(buffer.data(), pointer - buffer.data());
+                            result.append(buffer.data(), static_cast<size_t>(pointer - buffer.data()));
                         }
                     }
 
@@ -150,7 +151,7 @@ namespace error_system::utils {
                         std::array<char, 64> buffer;
                         auto [pointer, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
                         if (error == std::errc{}) {
-                            result.append(buffer.data(), pointer - buffer.data());
+                            result.append(buffer.data(), static_cast<size_t>(pointer - buffer.data()));
                         }
                     }
                 } else if constexpr (is_member_to_string_v<T>) {
@@ -288,7 +289,7 @@ namespace error_system::utils {
                 std::fprintf(stderr, "[string_utils] format: reserve failed\n");
             }
 
-            format_appender appender{result, format, 0};
+            format_appender_t appender{result, format, 0};
 
             (appender.append_value(std::forward<Args>(args)), ...);
 

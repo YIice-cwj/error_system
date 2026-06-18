@@ -1,6 +1,7 @@
 #pragma once
 #include <filesystem>
 #include <optional>
+#include <string>
 
 /**
  * @file file_utils.h
@@ -19,6 +20,8 @@ namespace error_system::utils {
         ~file_utils_t() = delete;
         file_utils_t(const file_utils_t&) = delete;
         file_utils_t& operator=(const file_utils_t&) = delete;
+        file_utils_t(file_utils_t&&) = delete;
+        file_utils_t& operator=(file_utils_t&&) = delete;
         /**
          * @brief 读取文件内容
          * @details 从指定文件路径读取文件内容，返回文件内容的字符串表示

@@ -1,9 +1,10 @@
 #pragma once
+#include <cstdlib>
+
 #include <string>
 #include <vector>
 
 #if defined(__APPLE__) || defined(__linux__)
-#include <cstdlib>
 #include <cxxabi.h>
 #include <execinfo.h>
 #elif defined(_WIN32) || defined(_WIN64)
@@ -33,6 +34,9 @@ namespace error_system::utils {
 
     class stack_trace_utils_t {
         public:
+        stack_trace_utils_t() = delete;
+        ~stack_trace_utils_t() = delete;
+
         /**
          * @brief 抓取当前线程的函数调用栈
          * @param skip_frames 需要跳过的顶部栈帧数（比如跳过抓取函数自身）

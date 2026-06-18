@@ -1,6 +1,8 @@
 #pragma once
-#include "error_system/core/error_context.h"
+#include <cstdio>
 #include <ostream>
+
+#include "error_system/core/error_context.h"
 
 /**
  * @file error_formatter.h

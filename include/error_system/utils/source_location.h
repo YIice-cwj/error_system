@@ -41,6 +41,12 @@ namespace error_system::utils {
         public:
         constexpr source_location_t() noexcept = default;
 
+        ~source_location_t() = default;
+        source_location_t(const source_location_t&) = default;
+        source_location_t& operator=(const source_location_t&) = default;
+        source_location_t(source_location_t&&) noexcept = default;
+        source_location_t& operator=(source_location_t&&) noexcept = default;
+
         /**
          * @brief 获取源文件位置
          * @param file 源文件路径

@@ -1,8 +1,9 @@
 #pragma once
-#include <atomic>
-#include <cstdio>
-#include <condition_variable>
 #include <cstddef>
+#include <cstdio>
+
+#include <atomic>
+#include <condition_variable>
 #include <mutex>
 #include <queue>
 #include <thread>
@@ -120,7 +121,7 @@ namespace error_system::utils {
         /**
          * @brief 析构函数，自动停止工作线程
          */
-        ~async_queue_t() {
+        ~async_queue_t() noexcept {
             __stop();
         }
 
