@@ -36,6 +36,9 @@ public:
 
     constexpr code_t get_code() const noexcept;
     constexpr uint8_t get_sign() const noexcept;
+    constexpr uint8_t get_reserved() const noexcept;
+    constexpr void set_sign(uint8_t sign) noexcept;
+    constexpr void set_reserved(uint8_t reserved) noexcept;
     constexpr bool is_error_code() const noexcept;
     constexpr bool is_success_code() const noexcept;
     constexpr error_level_t get_level() const noexcept;
