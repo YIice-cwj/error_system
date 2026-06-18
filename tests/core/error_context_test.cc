@@ -1,9 +1,12 @@
-#include "error_system/config/error_config.h"
 #include "error_system/core/error_context.h"
+
+#include <string_view>
+
+#include <gtest/gtest.h>
+
+#include "error_system/config/error_config.h"
 #include "error_system/core/error_registry.h"
 #include "error_system/plugin/plugin_registry.h"
-#include <gtest/gtest.h>
-#include <string_view>
 
 namespace error_system::core {
     namespace {
@@ -12,7 +15,7 @@ namespace error_system::core {
         }
     }  // namespace
 
-    class error_context_test : public ::testing::Test {
+    class error_context_test_t : public ::testing::Test {
         protected:
         void SetUp() override {
             auto& registry = error_registry_t::instance();
@@ -59,7 +62,7 @@ namespace error_system::core {
         error_code_t registered_code_{};
     };
 
-    TEST_F(error_context_test, constructor_with_registered_code_keeps_code_and_message) {
+    TEST_F(error_context_test_t, constructor_with_registered_code_keeps_code_and_message) {
         error_context_t context(registered_code_, "hello {}", "world");
 
         EXPECT_EQ(context.get_code().get_code(), registered_code_.get_code());
@@ -67,7 +70,7 @@ namespace error_system::core {
         EXPECT_TRUE(context.get_payload().empty());
     }
 
-    TEST_F(error_context_test, constructor_with_unregistered_code_marks_context_invalid) {
+    TEST_F(error_context_test_t, constructor_with_unregistered_code_marks_context_invalid) {
         const auto unregistered_code = make_code(99);
         error_context_t context(unregistered_code, "boom");
 
@@ -75,7 +78,7 @@ namespace error_system::core {
         EXPECT_NE(context.message.find("[UNREGISTERED CODE]"), std::string::npos);
 
         const auto& payload = context.get_payload();
-        auto find_val = [&](const std::string& key) -> const std::string& {
+        auto find_val = [&payload](const std::string& key) -> const std::string& {
             static const std::string empty;
             for (const auto& [k, v] : payload) {
                 if (k == key) return v;
@@ -85,12 +88,12 @@ namespace error_system::core {
         EXPECT_EQ(find_val("illegal_raw_code"), std::to_string(unregistered_code.get_code()));
     }
 
-    TEST_F(error_context_test, with_string_view_inserts_payload_without_extra_overload_work) {
+    TEST_F(error_context_test_t, with_string_view_inserts_payload_without_extra_overload_work) {
         error_context_t context(registered_code_, "payload test");
         context.with(std::string_view("user"), std::string_view("alice"));
 
         const auto& payload = context.get_payload();
-        auto find_val = [&](const std::string& key) -> const std::string& {
+        auto find_val = [&payload](const std::string& key) -> const std::string& {
             static const std::string empty;
             for (const auto& [k, v] : payload) {
                 if (k == key) return v;
@@ -100,14 +103,14 @@ namespace error_system::core {
         EXPECT_EQ(find_val("user"), "alice");
     }
 
-    TEST_F(error_context_test, with_multiple_types_inserts_payload) {
+    TEST_F(error_context_test_t, with_multiple_types_inserts_payload) {
         error_context_t context(registered_code_, "multi type test");
         context.with("int_val", 42)
                .with("bool_val", true)
                .with("double_val", 3.14);
 
         const auto& payload = context.get_payload();
-        auto find_val = [&](const std::string& key) -> const std::string& {
+        auto find_val = [&payload](const std::string& key) -> const std::string& {
             static const std::string empty;
             for (const auto& [k, v] : payload) {
                 if (k == key) return v;
@@ -119,7 +122,7 @@ namespace error_system::core {
         EXPECT_EQ(find_val("double_val"), std::to_string(3.14));
     }
 
-    TEST_F(error_context_test, serialization_contains_registered_metadata_and_payload) {
+    TEST_F(error_context_test_t, serialization_contains_registered_metadata_and_payload) {
         error_context_t context(registered_code_, "serialize me");
         context.with("user", "alice");
 
@@ -134,7 +137,7 @@ namespace error_system::core {
 
     // ========== to_binary() 因果链测试 ==========
 
-    TEST_F(error_context_test, to_binary_includes_cause_chain) {
+    TEST_F(error_context_test_t, to_binary_includes_cause_chain) {
         error_context_t cause_context(registered_code_, "root cause");
         error_context_t context(registered_code_, "wrapper error");
         auto wrapped = context.wrap(cause_context);
@@ -148,7 +151,7 @@ namespace error_system::core {
         EXPECT_GT(binary_with_cause.size(), binary_no_cause.size());
     }
 
-    TEST_F(error_context_test, to_binary_without_cause_has_zero_flag) {
+    TEST_F(error_context_test_t, to_binary_without_cause_has_zero_flag) {
         error_context_t context(registered_code_, "no cause");
 
         std::string binary = context.to_binary();
@@ -160,7 +163,7 @@ namespace error_system::core {
 
     // ========== with_batch() 批量添加 payload ==========
 
-    TEST_F(error_context_test, with_batch_adds_multiple_payload_items) {
+    TEST_F(error_context_test_t, with_batch_adds_multiple_payload_items) {
         error_context_t context(registered_code_, "batch test");
         context.with_batch({
             {"host", "192.168.1.1"},
@@ -169,7 +172,7 @@ namespace error_system::core {
         });
 
         const auto& payload = context.get_payload();
-        auto find_val = [&](const std::string& key) -> const std::string& {
+        auto find_val = [&payload](const std::string& key) -> const std::string& {
             static const std::string empty;
             for (const auto& [k, v] : payload) {
                 if (k == key) return v;
@@ -184,13 +187,13 @@ namespace error_system::core {
 
     // ========== is_success() / is_error() ==========
 
-    TEST_F(error_context_test, is_error_for_registered_error_code) {
+    TEST_F(error_context_test_t, is_error_for_registered_error_code) {
         error_context_t context(registered_code_, "error status");
         EXPECT_TRUE(context.is_error());
         EXPECT_FALSE(context.is_success());
     }
 
-    TEST_F(error_context_test, is_success_for_success_code) {
+    TEST_F(error_context_test_t, is_success_for_success_code) {
         error_context_t context(error_code_t::make_success(), "success status");
         EXPECT_TRUE(context.is_success());
         EXPECT_FALSE(context.is_error());
@@ -198,7 +201,7 @@ namespace error_system::core {
 
     // ========== payload overflow（SSO → unordered_map） ==========
 
-    TEST_F(error_context_test, payload_overflow_switches_to_unordered_map) {
+    TEST_F(error_context_test_t, payload_overflow_switches_to_unordered_map) {
         error_context_t context(registered_code_, "overflow test");
         context.with("k1", "v1")
                .with("k2", "v2")
@@ -209,7 +212,7 @@ namespace error_system::core {
         const auto& payload = context.get_payload();
         EXPECT_EQ(payload.size(), 5);
 
-        auto find_val = [&](const std::string& key) -> const std::string& {
+        auto find_val = [&payload](const std::string& key) -> const std::string& {
             static const std::string empty;
             for (const auto& [k, v] : payload) {
                 if (k == key) return v;
@@ -223,7 +226,7 @@ namespace error_system::core {
 
     // ========== operator== / operator!= ==========
 
-    TEST_F(error_context_test, equality_same_code_and_message) {
+    TEST_F(error_context_test_t, equality_same_code_and_message) {
         error_context_t ctx_a{registered_code_, "same message"};
         error_context_t ctx_b{registered_code_, "same message"};
 
@@ -231,7 +234,7 @@ namespace error_system::core {
         EXPECT_FALSE(ctx_a != ctx_b);
     }
 
-    TEST_F(error_context_test, inequality_different_message) {
+    TEST_F(error_context_test_t, inequality_different_message) {
         error_context_t ctx_a{registered_code_, "message A"};
         error_context_t ctx_b{registered_code_, "message B"};
 
@@ -239,7 +242,7 @@ namespace error_system::core {
         EXPECT_TRUE(ctx_a != ctx_b);
     }
 
-    TEST_F(error_context_test, equality_considers_payload) {
+    TEST_F(error_context_test_t, equality_considers_payload) {
         error_context_t ctx_a{registered_code_, "msg"};
         ctx_a.with("key", "val");
 
@@ -255,7 +258,7 @@ namespace error_system::core {
 
     // ========== deep cause chain（depth > 1） ==========
 
-    TEST_F(error_context_test, deep_cause_chain_multiple_levels) {
+    TEST_F(error_context_test_t, deep_cause_chain_multiple_levels) {
         error_context_t root{registered_code_, "root cause"};
         error_context_t middle{registered_code_, "middle error"};
         error_context_t top{registered_code_, "top error"};
@@ -275,9 +278,9 @@ namespace error_system::core {
         EXPECT_EQ(wrapped.cause->cause->cause, nullptr);
     }
 
-// ========== get_payload_value() 测试 ==========
+    // ========== get_payload_value() 测试 ==========
 
-    TEST_F(error_context_test, get_payload_value_returns_existing_key) {
+    TEST_F(error_context_test_t, get_payload_value_returns_existing_key) {
         error_context_t ctx{registered_code_, "test"};
         ctx.with("key1", "value1");
         auto val = ctx.get_payload_value("key1");
@@ -285,7 +288,7 @@ namespace error_system::core {
         EXPECT_EQ(*val, "value1");
     }
 
-    TEST_F(error_context_test, get_payload_value_returns_nullopt_for_missing_key) {
+    TEST_F(error_context_test_t, get_payload_value_returns_nullopt_for_missing_key) {
         error_context_t ctx{registered_code_, "test"};
         auto val = ctx.get_payload_value("nonexistent");
         EXPECT_FALSE(val.has_value());
@@ -293,7 +296,7 @@ namespace error_system::core {
 
     // ========== with() const char* key 测试 ==========
 
-    TEST_F(error_context_test, with_const_char_key_works) {
+    TEST_F(error_context_test_t, with_const_char_key_works) {
         error_context_t ctx{registered_code_, "test"};
         ctx.with("c_string_key", 42);
         auto val = ctx.get_payload_value("c_string_key");
@@ -303,7 +306,7 @@ namespace error_system::core {
 
     // ========== from_exception() 测试 ==========
 
-    TEST_F(error_context_test, from_exception_creates_context_with_what_message) {
+    TEST_F(error_context_test_t, from_exception_creates_context_with_what_message) {
         std::runtime_error ex("something went wrong");
         auto ctx = error_context_t::from_exception(registered_code_, ex);
         EXPECT_EQ(ctx.message, "something went wrong");

@@ -1,11 +1,12 @@
 #include "error_system/utils/stack_trace_utils.h"
 
-#include <gtest/gtest.h>
 #include <string>
+
+#include <gtest/gtest.h>
 
 namespace error_system::utils {
 
-    class stack_trace_utils_test : public ::testing::Test {};
+    class stack_trace_utils_test_t : public ::testing::Test {};
 
     /**
      * @brief 辅助函数：用于验证栈帧中包含当前函数名
@@ -20,12 +21,12 @@ namespace error_system::utils {
         out = stack_trace_utils_t::generate(0);
     }
 
-    TEST_F(stack_trace_utils_test, generate_returns_non_empty) {
+    TEST_F(stack_trace_utils_test_t, generate_returns_non_empty) {
         auto trace = stack_trace_utils_t::generate(0);
         EXPECT_FALSE(trace.empty());
     }
 
-    TEST_F(stack_trace_utils_test, generate_with_skip_reduces_frames) {
+    TEST_F(stack_trace_utils_test_t, generate_with_skip_reduces_frames) {
         auto trace_no_skip = stack_trace_utils_t::generate(0);
         auto trace_skip_1 = stack_trace_utils_t::generate(1);
 
@@ -34,12 +35,12 @@ namespace error_system::utils {
         EXPECT_LE(trace_skip_1.size(), trace_no_skip.size());
     }
 
-    TEST_F(stack_trace_utils_test, generate_with_zero_max_returns_empty) {
+    TEST_F(stack_trace_utils_test_t, generate_with_zero_max_returns_empty) {
         auto trace = stack_trace_utils_t::generate(1, 0);
         EXPECT_TRUE(trace.empty());
     }
 
-    TEST_F(stack_trace_utils_test, generate_contains_current_function) {
+    TEST_F(stack_trace_utils_test_t, generate_contains_current_function) {
         std::vector<std::string> trace;
         helper_for_stacktrace(trace);
 
@@ -53,7 +54,7 @@ namespace error_system::utils {
         EXPECT_TRUE(found) << "栈帧中应包含 helper_for_stacktrace 函数名";
     }
 
-    TEST_F(stack_trace_utils_test, generate_contains_test_function) {
+    TEST_F(stack_trace_utils_test_t, generate_contains_test_function) {
         auto trace = stack_trace_utils_t::generate(0);
 
         bool found_test = false;
@@ -67,20 +68,20 @@ namespace error_system::utils {
         EXPECT_TRUE(found_test) << "栈帧中应包含测试函数相关信息";
     }
 
-    TEST_F(stack_trace_utils_test, generate_frames_are_readable) {
+    TEST_F(stack_trace_utils_test_t, generate_frames_are_readable) {
         auto trace = stack_trace_utils_t::generate(0, 8);
         for (const auto& frame : trace) {
             EXPECT_FALSE(frame.empty());
         }
     }
 
-    TEST_F(stack_trace_utils_test, generate_respects_max_frames) {
+    TEST_F(stack_trace_utils_test_t, generate_respects_max_frames) {
         constexpr int max_frames = 4;
         auto trace = stack_trace_utils_t::generate(0, max_frames);
         EXPECT_LE(static_cast<int>(trace.size()), max_frames);
     }
 
-    TEST_F(stack_trace_utils_test, generate_skip_more_than_available_returns_empty) {
+    TEST_F(stack_trace_utils_test_t, generate_skip_more_than_available_returns_empty) {
         auto trace = stack_trace_utils_t::generate(1000, 64);
         EXPECT_TRUE(trace.empty());
     }

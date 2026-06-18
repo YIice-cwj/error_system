@@ -1,16 +1,19 @@
 #include "error_system/config/error_config.h"
-#include "error_system/core/error_code.h"
-#include "error_system/core/error_context.h"
+
 #include <atomic>
-#include <gtest/gtest.h>
 #include <thread>
 #include <vector>
 
+#include <gtest/gtest.h>
+
+#include "error_system/core/error_code.h"
+#include "error_system/core/error_context.h"
+
 namespace error_system::config {
 
-    class error_config_test : public ::testing::Test {};
+    class error_config_test_t : public ::testing::Test {};
 
-    TEST_F(error_config_test, set_and_get_custom_formatter) {
+    TEST_F(error_config_test_t, set_and_get_custom_formatter) {
         bool formatter_called = false;
         formatter_callback_t formatter = [&formatter_called](const core::error_context_t&) -> std::string {
             formatter_called = true;
@@ -26,18 +29,18 @@ namespace error_system::config {
         EXPECT_TRUE(formatter_called);
     }
 
-    TEST_F(error_config_test, custom_formatter_can_be_null) {
+    TEST_F(error_config_test_t, custom_formatter_can_be_null) {
         error_config_t::set_custom_formatter(nullptr);
         auto retrieved = error_config_t::get_custom_formatter();
         EXPECT_EQ(retrieved, nullptr);
     }
 
-    TEST_F(error_config_test, stacktrace_level_defaults) {
+    TEST_F(error_config_test_t, stacktrace_level_defaults) {
         auto level = error_config_t::get_stacktrace_level();
         EXPECT_GE(static_cast<int>(level), 0);
     }
 
-    TEST_F(error_config_test, set_stacktrace_level_works) {
+    TEST_F(error_config_test_t, set_stacktrace_level_works) {
         auto original = error_config_t::get_stacktrace_level();
 
         error_config_t::set_stacktrace_level(core::error_level_t::fatal);
@@ -46,7 +49,7 @@ namespace error_system::config {
         error_config_t::set_stacktrace_level(original);
     }
 
-    TEST_F(error_config_test, enable_stacktrace_can_be_toggled) {
+    TEST_F(error_config_test_t, enable_stacktrace_can_be_toggled) {
         error_config_t::set_enable_stacktrace(true);
         EXPECT_TRUE(error_config_t::is_stacktrace_enabled());
 
@@ -54,7 +57,7 @@ namespace error_system::config {
         EXPECT_FALSE(error_config_t::is_stacktrace_enabled());
     }
 
-    TEST_F(error_config_test, validation_can_be_toggled) {
+    TEST_F(error_config_test_t, validation_can_be_toggled) {
         error_config_t::set_enable_validation(true);
         EXPECT_TRUE(error_config_t::is_validation_enabled());
 
@@ -62,7 +65,7 @@ namespace error_system::config {
         EXPECT_FALSE(error_config_t::is_validation_enabled());
     }
 
-    TEST_F(error_config_test, source_location_can_be_toggled) {
+    TEST_F(error_config_test_t, source_location_can_be_toggled) {
         error_config_t::set_enable_source_location(true);
         EXPECT_TRUE(error_config_t::is_source_location_enabled());
 
@@ -70,7 +73,7 @@ namespace error_system::config {
         EXPECT_FALSE(error_config_t::is_source_location_enabled());
     }
 
-    TEST_F(error_config_test, short_filename_can_be_toggled) {
+    TEST_F(error_config_test_t, short_filename_can_be_toggled) {
         error_config_t::set_enable_short_filename(true);
         EXPECT_TRUE(error_config_t::is_short_filename_enabled());
 
@@ -78,14 +81,14 @@ namespace error_system::config {
         EXPECT_FALSE(error_config_t::is_short_filename_enabled());
     }
 
-    TEST_F(error_config_test, concurrent_set_and_get_stacktrace_level) {
+    TEST_F(error_config_test_t, concurrent_set_and_get_stacktrace_level) {
         auto original = error_config_t::get_stacktrace_level();
 
         std::vector<std::thread> threads;
         std::atomic<int> success_count{0};
 
         for (int i = 0; i < 10; ++i) {
-            threads.emplace_back([&]() {
+            threads.emplace_back([&success_count]() {
                 for (int j = 0; j < 100; ++j) {
                     error_config_t::set_stacktrace_level(core::error_level_t::error);
                     auto level = error_config_t::get_stacktrace_level();
@@ -104,7 +107,7 @@ namespace error_system::config {
         error_config_t::set_stacktrace_level(original);
     }
 
-    TEST_F(error_config_test, set_and_get_notify_mode) {
+    TEST_F(error_config_test_t, set_and_get_notify_mode) {
         error_config_t::set_notify_mode(error_config_t::notify_mode_t::sync);
         EXPECT_EQ(error_config_t::get_notify_mode(), error_config_t::notify_mode_t::sync);
 
@@ -115,7 +118,7 @@ namespace error_system::config {
         error_config_t::set_notify_mode(error_config_t::notify_mode_t::sync);
     }
 
-    TEST_F(error_config_test, per_code_stacktrace_level_set_and_get) {
+    TEST_F(error_config_test_t, per_code_stacktrace_level_set_and_get) {
         uint64_t id1 = 0x123450000000001ULL;
         uint64_t id2 = 0x543210000000001ULL;
 
@@ -137,7 +140,7 @@ namespace error_system::config {
         EXPECT_FALSE(level3.has_value());
     }
 
-    TEST_F(error_config_test, per_code_stacktrace_level_remove) {
+    TEST_F(error_config_test_t, per_code_stacktrace_level_remove) {
         uint64_t id = 0xABCD0000000001ULL;
 
         error_config_t::set_per_code_stacktrace_level(id, core::error_level_t::warn);
@@ -147,7 +150,7 @@ namespace error_system::config {
         EXPECT_FALSE(error_config_t::get_per_code_stacktrace_level(id).has_value());
     }
 
-    TEST_F(error_config_test, per_code_stacktrace_level_overwrite) {
+    TEST_F(error_config_test_t, per_code_stacktrace_level_overwrite) {
         uint64_t id = 0xDEAD0000000001ULL;
 
         error_config_t::set_per_code_stacktrace_level(id, core::error_level_t::warn);

@@ -3,9 +3,9 @@
 
 namespace error_system::core {
 
-    class error_code_test : public ::testing::Test {};
+    class error_code_test_t : public ::testing::Test {};
 
-    TEST_F(error_code_test, default_constructor_creates_success_code) {
+    TEST_F(error_code_test_t, default_constructor_creates_success_code) {
         error_code_t code;
         EXPECT_EQ(code.get_code(), 0x8000000000000000ULL);
         EXPECT_EQ(code.get_sign(), 1);  // sign=1 = true = 成功
@@ -16,43 +16,43 @@ namespace error_system::core {
         EXPECT_EQ(code.get_number(), 0);
     }
 
-    TEST_F(error_code_test, explicit_constructor_stores_raw_code) {
+    TEST_F(error_code_test_t, explicit_constructor_stores_raw_code) {
         code_t raw = 0x123456789ABCDEF0ULL;
         error_code_t code(raw);
         EXPECT_EQ(code.get_code(), raw);
     }
 
-    TEST_F(error_code_test, implicit_conversion_to_code_t) {
+    TEST_F(error_code_test_t, implicit_conversion_to_code_t) {
         error_code_t code(0x1234);
         code_t raw = code;
         EXPECT_EQ(raw, 0x1234ULL);
     }
 
-    TEST_F(error_code_test, get_module_group_id_extracts_correct_bits) {
+    TEST_F(error_code_test_t, get_module_group_id_extracts_correct_bits) {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::system, 2, 3, 4);
         auto group_id = code.get_module_group_id();
         EXPECT_NE(group_id, 0ULL);
         EXPECT_EQ(group_id & 0xFFFFULL, 0ULL);
     }
 
-    TEST_F(error_code_test, fields_are_correctly_extracted) {
+    TEST_F(error_code_test_t, fields_are_correctly_extracted) {
         error_code_t code(0x0000000000000001ULL);
         EXPECT_EQ(code.get_sign(), 0);
     }
 
-    TEST_F(error_code_test, constexpr_evaluation_works) {
+    TEST_F(error_code_test_t, constexpr_evaluation_works) {
         constexpr error_code_t code(0x1234);
         static_assert(code.get_code() == 0x1234ULL, "constexpr evaluation failed");
         EXPECT_EQ(code.get_code(), 0x1234ULL);
     }
 
-    TEST_F(error_code_test, zero_code_represents_success) {
+    TEST_F(error_code_test_t, zero_code_represents_success) {
         constexpr error_code_t code(0);
         EXPECT_EQ(code.get_sign(), 0);
         EXPECT_EQ(code.get_level(), error_level_t::debug);
     }
 
-    TEST_F(error_code_test, five_parameter_constructor_builds_correct_code) {
+    TEST_F(error_code_test_t, five_parameter_constructor_builds_correct_code) {
         constexpr error_code_t code(
             error_level_t::error,
             domain::system_domain_t::database,
@@ -69,7 +69,7 @@ namespace error_system::core {
         EXPECT_EQ(code.get_number(), 0x0506);
     }
 
-    TEST_F(error_code_test, constexpr_five_parameter_constructor) {
+    TEST_F(error_code_test_t, constexpr_five_parameter_constructor) {
         constexpr error_level_t level = error_level_t::warn;
         constexpr domain::system_domain_t sys = domain::system_domain_t::application;
         constexpr uint16_t subsys = 101;

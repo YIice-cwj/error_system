@@ -1,14 +1,16 @@
 #include "error_system/core/error_registry.h"
+
 #include <atomic>
-#include <gtest/gtest.h>
 #include <set>
 #include <string>
 #include <thread>
 #include <vector>
 
+#include <gtest/gtest.h>
+
 namespace error_system::core {
 
-    class error_registry_test : public ::testing::Test {
+    class error_registry_test_t : public ::testing::Test {
         protected:
         void SetUp() override {
             error_registry_t::instance().unregister_all();
@@ -21,7 +23,7 @@ namespace error_system::core {
         }
     };
 
-    TEST_F(error_registry_test, register_and_retrieve_error) {
+    TEST_F(error_registry_test_t, register_and_retrieve_error) {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
 
         error_registry_t::instance().register_error(code, "ERR_DB_CONN", "Database connection failed");
@@ -34,7 +36,7 @@ namespace error_system::core {
         EXPECT_EQ(info->description, "Database connection failed");
     }
 
-    TEST_F(error_registry_test, register_multiple_errors) {
+    TEST_F(error_registry_test_t, register_multiple_errors) {
         auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
         auto code2 =
             error_code_t(error_level_t::warn, domain::system_domain_t::application, 2, 2, 2);
@@ -49,7 +51,7 @@ namespace error_system::core {
         EXPECT_TRUE(error_registry_t::instance().is_registered(code2));
     }
 
-    TEST_F(error_registry_test, unregister_error_by_code) {
+    TEST_F(error_registry_test_t, unregister_error_by_code) {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
 
         error_registry_t::instance().register_error(code, "ERR_TEST", "Test error");
@@ -59,7 +61,7 @@ namespace error_system::core {
         EXPECT_FALSE(error_registry_t::instance().is_registered(code));
     }
 
-    TEST_F(error_registry_test, unregister_error_by_name) {
+    TEST_F(error_registry_test_t, unregister_error_by_name) {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
 
         error_registry_t::instance().register_error(code, "ERR_BY_NAME", "Test");
@@ -69,7 +71,7 @@ namespace error_system::core {
         EXPECT_FALSE(error_registry_t::instance().is_registered(code));
     }
 
-    TEST_F(error_registry_test, unregister_module_group) {
+    TEST_F(error_registry_test_t, unregister_module_group) {
         auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
         auto code2 = error_code_t(error_level_t::warn, domain::system_domain_t::database, 1, 1, 2);
 
@@ -83,7 +85,7 @@ namespace error_system::core {
         EXPECT_FALSE(error_registry_t::instance().is_registered(code2));
     }
 
-    TEST_F(error_registry_test, unregister_module_clears_subsystem_index) {
+    TEST_F(error_registry_test_t, unregister_module_clears_subsystem_index) {
         auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
         auto code2 = error_code_t(error_level_t::warn, domain::system_domain_t::database, 1, 1, 2);
 
@@ -102,7 +104,7 @@ namespace error_system::core {
         EXPECT_TRUE(errors_after.empty());
     }
 
-    TEST_F(error_registry_test, get_errors_by_subsystem_after_unregister_error) {
+    TEST_F(error_registry_test_t, get_errors_by_subsystem_after_unregister_error) {
         auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
         auto code2 = error_code_t(error_level_t::warn, domain::system_domain_t::database, 1, 1, 2);
 
@@ -121,7 +123,7 @@ namespace error_system::core {
         EXPECT_TRUE(errors_after.empty());
     }
 
-    TEST_F(error_registry_test, get_info_returns_nullptr_for_unregistered) {
+    TEST_F(error_registry_test_t, get_info_returns_nullptr_for_unregistered) {
         auto code =
             error_code_t(error_level_t::error, domain::system_domain_t::database, 99, 99, 99);
 
@@ -129,7 +131,7 @@ namespace error_system::core {
         EXPECT_EQ(info, nullptr);
     }
 
-    TEST_F(error_registry_test, get_errors_by_module) {
+    TEST_F(error_registry_test_t, get_errors_by_module) {
         auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
         auto code2 = error_code_t(error_level_t::warn, domain::system_domain_t::database, 1, 1, 2);
         auto code3 =
@@ -147,7 +149,7 @@ namespace error_system::core {
         EXPECT_EQ(errors[1].get().name, "ERR_2");
     }
 
-    TEST_F(error_registry_test, get_errors_by_subsystem) {
+    TEST_F(error_registry_test_t, get_errors_by_subsystem) {
         auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
         auto code2 = error_code_t(error_level_t::warn, domain::system_domain_t::database, 1, 2, 1);
         auto code3 =
@@ -178,7 +180,7 @@ namespace error_system::core {
         EXPECT_TRUE(errors3.empty());
     }
 
-    TEST_F(error_registry_test, find_by_name) {
+    TEST_F(error_registry_test_t, find_by_name) {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
         error_registry_t::instance().register_error(code, "ERR_FIND_ME", "Find me");
 
@@ -191,13 +193,13 @@ namespace error_system::core {
         EXPECT_FALSE(not_found.has_value());
     }
 
-    TEST_F(error_registry_test, singleton_returns_same_instance) {
+    TEST_F(error_registry_test_t, singleton_returns_same_instance) {
         auto& instance1 = error_registry_t::instance();
         auto& instance2 = error_registry_t::instance();
         EXPECT_EQ(&instance1, &instance2);
     }
 
-    TEST_F(error_registry_test, register_duplicate_keeps_first_metadata) {
+    TEST_F(error_registry_test_t, register_duplicate_keeps_first_metadata) {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
 
         error_registry_t::instance().register_error(code, "OLD_NAME", "Old description");
@@ -210,7 +212,7 @@ namespace error_system::core {
         EXPECT_EQ(info->description, "Old description");
     }
 
-    TEST_F(error_registry_test, duplicate_policy_skip) {
+    TEST_F(error_registry_test_t, duplicate_policy_skip) {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
 
         error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::skip);
@@ -223,7 +225,7 @@ namespace error_system::core {
         EXPECT_EQ(info->name, "FIRST");
     }
 
-    TEST_F(error_registry_test, duplicate_policy_overwrite) {
+    TEST_F(error_registry_test_t, duplicate_policy_overwrite) {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
 
         error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::overwrite);
@@ -236,7 +238,7 @@ namespace error_system::core {
         EXPECT_EQ(info->description, "Second description");
     }
 
-    TEST_F(error_registry_test, duplicate_policy_overwrite_updates_name_index) {
+    TEST_F(error_registry_test_t, duplicate_policy_overwrite_updates_name_index) {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
 
         error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::overwrite);
@@ -250,7 +252,7 @@ namespace error_system::core {
         EXPECT_FALSE(error_registry_t::instance().is_registered(code));
     }
 
-    TEST_F(error_registry_test, duplicate_policy_get_set) {
+    TEST_F(error_registry_test_t, duplicate_policy_get_set) {
         error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::skip);
         EXPECT_EQ(error_registry_t::instance().get_duplicate_policy(), duplicate_policy_t::skip);
 
@@ -261,7 +263,7 @@ namespace error_system::core {
         EXPECT_EQ(error_registry_t::instance().get_duplicate_policy(), duplicate_policy_t::warn);
     }
 
-    TEST_F(error_registry_test, register_errors_returns_count) {
+    TEST_F(error_registry_test_t, register_errors_returns_count) {
         auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
         auto code2 =
             error_code_t(error_level_t::warn, domain::system_domain_t::application, 2, 2, 2);
@@ -274,7 +276,7 @@ namespace error_system::core {
         EXPECT_EQ(count, 2);
     }
 
-    TEST_F(error_registry_test, register_errors_returns_zero_for_mismatched_arrays) {
+    TEST_F(error_registry_test_t, register_errors_returns_zero_for_mismatched_arrays) {
         auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
 
         std::vector<error_code_t> codes = {code1};
@@ -285,7 +287,7 @@ namespace error_system::core {
         EXPECT_EQ(count, 0);
     }
 
-    TEST_F(error_registry_test, register_errors_with_overwrite_policy) {
+    TEST_F(error_registry_test_t, register_errors_with_overwrite_policy) {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
 
         error_registry_t::instance().register_error(code, "ORIGINAL", "Original desc");
@@ -304,7 +306,7 @@ namespace error_system::core {
         EXPECT_EQ(info->description, "Updated desc");
     }
 
-    TEST_F(error_registry_test, duplicate_policy_warn_triggers_callback) {
+    TEST_F(error_registry_test_t, duplicate_policy_warn_triggers_callback) {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
 
         bool callback_called = false;
@@ -330,7 +332,7 @@ namespace error_system::core {
         error_registry_t::instance().set_duplicate_warn_callback(nullptr);
     }
 
-    TEST_F(error_registry_test, duplicate_warn_callback_can_be_set_and_get) {
+    TEST_F(error_registry_test_t, duplicate_warn_callback_can_be_set_and_get) {
         auto& registry = error_registry_t::instance();
 
         // 默认无回调（nullptr）
@@ -346,7 +348,7 @@ namespace error_system::core {
         EXPECT_TRUE(registry.get_duplicate_warn_callback());
     }
 
-    TEST_F(error_registry_test, duplicate_warn_callback_not_called_on_first_registration) {
+    TEST_F(error_registry_test_t, duplicate_warn_callback_not_called_on_first_registration) {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
 
         bool callback_called = false;
@@ -361,7 +363,7 @@ namespace error_system::core {
         error_registry_t::instance().set_duplicate_warn_callback(nullptr);
     }
 
-    TEST_F(error_registry_test, duplicate_warn_keeps_original_metadata) {
+    TEST_F(error_registry_test_t, duplicate_warn_keeps_original_metadata) {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
 
         error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::warn);
@@ -374,7 +376,7 @@ namespace error_system::core {
         EXPECT_EQ(info->description, "Original description");
     }
 
-    TEST_F(error_registry_test, concurrent_register_and_query) {
+    TEST_F(error_registry_test_t, concurrent_register_and_query) {
         auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
         error_registry_t::instance().register_error(code, "CONCURRENT", "Concurrent test");
 
@@ -382,7 +384,7 @@ namespace error_system::core {
         std::atomic<int> success_count{0};
 
         for (int i = 0; i < 10; ++i) {
-            threads.emplace_back([&]() {
+            threads.emplace_back([&success_count, &code]() {
                 for (int j = 0; j < 100; ++j) {
                     if (error_registry_t::instance().is_registered(code)) {
                         const error_metadata_t* info = error_registry_t::instance().get_info(code);
@@ -401,15 +403,16 @@ namespace error_system::core {
         EXPECT_EQ(success_count.load(), 1000);
     }
 
-    TEST_F(error_registry_test, concurrent_register_different_codes) {
+    TEST_F(error_registry_test_t, concurrent_register_different_codes) {
         std::vector<std::thread> threads;
         std::atomic<int> success_count{0};
 
         for (int i = 0; i < 10; ++i) {
-            threads.emplace_back([&, i]() {
+            threads.emplace_back([&success_count, i]() {
                 for (int j = 0; j < 10; ++j) {
                     auto code = error_code_t(
-                        error_level_t::error, domain::system_domain_t::database, i, j, j);
+                        error_level_t::error, domain::system_domain_t::database,
+                        static_cast<uint16_t>(i), static_cast<uint16_t>(j), static_cast<uint16_t>(j));
                     error_registry_t::instance().register_error(code, "CONCURRENT", "Test");
                     if (error_registry_t::instance().is_registered(code)) {
                         success_count.fetch_add(1);
