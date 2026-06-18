@@ -1,5 +1,4 @@
 #pragma once
-#include "error_system/core/error_level.h"
 #include <atomic>
 #include <functional>
 #include <mutex>
@@ -7,6 +6,8 @@
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
+
+#include "error_system/core/error_level.h"
 
 /**
  * @file error_config.h

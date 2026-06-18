@@ -1,6 +1,7 @@
 #pragma once
-#include "error_system/utils/string_utils.h"
 #include <cstdint>
+
+#include "error_system/utils/string_utils.h"
 
 /**
  * @file error_level.h

@@ -1,11 +1,4 @@
 #pragma once
-#include "error_system/config/error_config.h"
-#include "error_system/core/error_code.h"
-#include "error_system/core/error_level.h"
-#include "error_system/core/error_registry.h"
-#include "error_system/utils/source_location.h"
-#include "error_system/utils/stack_trace_utils.h"
-#include "error_system/utils/string_utils.h"
 #include <array>
 #include <exception>
 #include <memory>
@@ -15,7 +8,13 @@
 #include <utility>
 #include <vector>
 
-using error_system::config::error_config_t;
+#include "error_system/config/error_config.h"
+#include "error_system/core/error_code.h"
+#include "error_system/core/error_level.h"
+#include "error_system/core/error_registry.h"
+#include "error_system/utils/source_location.h"
+#include "error_system/utils/stack_trace_utils.h"
+#include "error_system/utils/string_utils.h"
 
 namespace error_system::plugin {
     class plugin_registry_t;
@@ -94,7 +93,7 @@ namespace error_system::core {
          * @brief 源位置信息
          * @details 构造时自动通过 source_location_t::current() 捕获调用位置
          */
-        utils::source_location_t source_location_{};
+        utils::source_location_t source_location{};
 
         /**
          * @brief 执行运行时特性初始化
@@ -116,7 +115,7 @@ namespace error_system::core {
         
         /**
          * @brief 填充源位置信息
-         * @details 从构造时捕获的 source_location_ 成员提取文件名、函数名和行号
+         * @details 从构造时捕获的 source_location 成员提取文件名、函数名和行号
          * @param short_filename_enabled 是否使用短文件名模式
          */
         void __fill_source_location(bool short_filename_enabled) noexcept;
@@ -132,14 +131,14 @@ namespace error_system::core {
             : code_(other.code_), metadata_(other.metadata_),
             payload_count_(other.payload_count_),
             message(other.message) {
-            if constexpr (error_config_t::STACKTRACE_ENABLED) {
+            if constexpr (error_system::config::error_config_t::STACKTRACE_ENABLED) {
                 stack_frames = other.stack_frames;
             }
-            if constexpr (error_config_t::LOCATION_ENABLED) {
+            if constexpr (error_system::config::error_config_t::LOCATION_ENABLED) {
                 file_name = other.file_name;
                 function_name = other.function_name;
                 line_number = other.line_number;
-                source_location_ = other.source_location_;
+                source_location = other.source_location;
             }
             try {
                 for (size_t i = 0; i < payload_count_ && i < PAYLOAD_SSO_CAPACITY; ++i) {
@@ -183,8 +182,8 @@ namespace error_system::core {
             : code_(code),
             metadata_(error_registry_t::instance().get_info(code)),
             message(utils::string_utils_t::format(message_format, std::forward<Args>(args)...)) {
-            if constexpr (error_config_t::LOCATION_ENABLED) {
-                source_location_ = utils::source_location_t::current();
+            if constexpr (error_system::config::error_config_t::LOCATION_ENABLED) {
+                source_location = utils::source_location_t::current();
             }
             if (is_success()) {
                 return;

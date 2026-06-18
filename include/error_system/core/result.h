@@ -1,10 +1,11 @@
 #pragma once
-#include "error_system/core/error_context.h"
 #include <cassert>
 #include <functional>
 #include <string_view>
 #include <type_traits>
 #include <variant>
+
+#include "error_system/core/error_context.h"
 
 /**
  * @file result_t.h
@@ -25,10 +26,10 @@ namespace error_system::core {
     template <typename T>
     class result_t {
         public:
-        using value_type = T;
+        using value_type_t = T;
 
         private:
-        std::variant<value_type, error_context_t> value_or_error_;
+        std::variant<value_type_t, error_context_t> value_or_error_;
 
         public:
         /**
@@ -72,7 +73,7 @@ namespace error_system::core {
          * @param value 成功值
          * @return result_t 成功结果
          */
-        static result_t make_success(value_type value) noexcept {
+        static result_t make_success(value_type_t value) noexcept {
             return result_t(std::move(value));
         }
 
@@ -80,19 +81,24 @@ namespace error_system::core {
          * @brief 构造函数
          * @param value 成功值
          */
-        explicit result_t(const value_type& value) noexcept : value_or_error_(value) {}
+        explicit result_t(const value_type_t& value) noexcept : value_or_error_(value) {}
 
         /**
          * @brief 移动构造函数
          * @param value 成功值
          */
-        explicit result_t(value_type&& value) noexcept : value_or_error_(std::move(value)) {}
+        explicit result_t(value_type_t&& value) noexcept : value_or_error_(std::move(value)) {}
 
         /**
          * @brief 构造函数
          * @param error_context 错误上下文
          */
         explicit result_t(const error_context_t& error_context) noexcept : value_or_error_(error_context) {}
+
+        result_t(const result_t&) noexcept = default;
+        result_t(result_t&&) noexcept = default;
+        result_t& operator=(const result_t&) noexcept = delete;
+        result_t& operator=(result_t&&) noexcept = delete;
 
         public:
         /**
@@ -105,7 +111,7 @@ namespace error_system::core {
          * @brief 检查结果是否为成功
          * @return bool 如果结果为成功则返回true
          */
-        bool is_success() const noexcept { return std::holds_alternative<value_type>(value_or_error_); }
+        bool is_success() const noexcept { return std::holds_alternative<value_type_t>(value_or_error_); }
 
         /**
          * @brief 获取错误上下文
@@ -144,18 +150,18 @@ namespace error_system::core {
          * @details 使用 std::get_if 安全获取，若当前为错误状态则返回静态哨兵值（T{}）。
          *          调用方应在调用前通过 is_success() 检查，否则返回的哨兵值可能无意义。
          *          要求 T 必须可默认构造，若 T 不可默认构造请使用 value_pointer() 替代。
-         * @return const value_type& 成功值
+         * @return const value_type_t& 成功值
          */
-        const value_type& value() const noexcept {
-            static_assert(std::is_default_constructible_v<value_type>,
+        const value_type_t& value() const noexcept {
+            static_assert(std::is_default_constructible_v<value_type_t>,
                           "result_t::value() requires T to be default-constructible. "
                           "Use value_pointer() for non-default-constructible types.");
             assert(is_success() && "result_t::value() called on an error result");
-            auto* ptr = std::get_if<value_type>(&value_or_error_);
+            auto* ptr = std::get_if<value_type_t>(&value_or_error_);
             if (ptr) {
                 return *ptr;
             }
-            static thread_local const value_type sentinel{};
+            static thread_local const value_type_t sentinel{};
             return sentinel;
         }
 
@@ -163,40 +169,40 @@ namespace error_system::core {
          * @brief 获取成功值（可变引用）
          * @details 使用 std::get_if 安全获取，若当前为错误状态则返回线程局部哨兵值（T{}）。
          *          调用方应在调用前通过 is_success() 检查，否则返回的哨兵值可能无意义。
-         * @return value_type& 成功值
+         * @return value_type_t& 成功值
          */
-        value_type& value() noexcept {
-            static_assert(std::is_default_constructible_v<value_type>,
+        value_type_t& value() noexcept {
+            static_assert(std::is_default_constructible_v<value_type_t>,
                           "result_t::value() requires T to be default-constructible. "
                           "Use value_pointer() for non-default-constructible types.");
             assert(is_success() && "result_t::value() called on an error result");
-            auto* ptr = std::get_if<value_type>(&value_or_error_);
+            auto* ptr = std::get_if<value_type_t>(&value_or_error_);
             if (ptr) {
                 return *ptr;
             }
-            static thread_local value_type sentinel{};
+            static thread_local value_type_t sentinel{};
             return sentinel;
         }
 
         /**
          * @brief 安全获取成功值指针
-         * @return const value_type* 成功值指针，如果为错误则返回 nullptr
+         * @return const value_type_t* 成功值指针，如果为错误则返回 nullptr
          */
-        const value_type* value_pointer() const noexcept { return std::get_if<value_type>(&value_or_error_); }
+        const value_type_t* value_pointer() const noexcept { return std::get_if<value_type_t>(&value_or_error_); }
 
         /**
          * @brief 安全获取成功值指针
-         * @return value_type* 成功值指针，如果为错误则返回 nullptr
+         * @return value_type_t* 成功值指针，如果为错误则返回 nullptr
          */
-        value_type* value_pointer() noexcept { return std::get_if<value_type>(&value_or_error_); }
+        value_type_t* value_pointer() noexcept { return std::get_if<value_type_t>(&value_or_error_); }
 
         /**
          * @brief 安全获取成功值，失败时返回默认值
          * @param default_value 默认值引用，调用方保证其生命周期
-         * @return const value_type& 成功值或默认值引用
+         * @return const value_type_t& 成功值或默认值引用
          */
-        const value_type& value_or(const value_type& default_value) const noexcept {
-            auto* ptr = std::get_if<value_type>(&value_or_error_);
+        const value_type_t& value_or(const value_type_t& default_value) const noexcept {
+            auto* ptr = std::get_if<value_type_t>(&value_or_error_);
             return ptr ? *ptr : default_value;
         }
 
@@ -205,9 +211,9 @@ namespace error_system::core {
          * @details 若结果为成功，返回包含的值；否则返回 T{} 默认值
          * @return T 成功值或默认值
          */
-        value_type unwrap() const noexcept {
-            const value_type* ptr = std::get_if<value_type>(&value_or_error_);
-            return ptr ? *ptr : value_type{};
+        value_type_t unwrap() const noexcept {
+            const value_type_t* ptr = std::get_if<value_type_t>(&value_or_error_);
+            return ptr ? *ptr : value_type_t{};
         }
 
         /**
@@ -216,8 +222,8 @@ namespace error_system::core {
          * @param default_value 失败时的默认值
          * @return T 成功值或默认值
          */
-        value_type unwrap_or(value_type default_value) const noexcept {
-            const value_type* ptr = std::get_if<value_type>(&value_or_error_);
+        value_type_t unwrap_or(value_type_t default_value) const noexcept {
+            const value_type_t* ptr = std::get_if<value_type_t>(&value_or_error_);
             return ptr ? *ptr : std::move(default_value);
         }
 
@@ -232,35 +238,35 @@ namespace error_system::core {
          * @details 若当前为成功状态则返回值的只读引用；若为错误状态，在 Debug 模式下触发断言失败，
          *          在 Release 模式下返回静态哨兵值（T{}）。适用于调用方已确认不会出错的场景。
          *          要求 T 必须可默认构造。
-         * @return const value_type& 成功值引用
+         * @return const value_type_t& 成功值引用
          *
          * @example
          * auto result = compute();
          * int value = result.expect();
          */
-        const value_type& expect() const noexcept {
-            static_assert(std::is_default_constructible_v<value_type>,
+        const value_type_t& expect() const noexcept {
+            static_assert(std::is_default_constructible_v<value_type_t>,
                           "result_t::expect() requires T to be default-constructible. "
                           "Use value_pointer() for non-default-constructible types.");
-            auto* ptr = std::get_if<value_type>(&value_or_error_);
+            auto* ptr = std::get_if<value_type_t>(&value_or_error_);
             assert(ptr);
             if (ptr) {
                 return *ptr;
             }
-            static thread_local const value_type sentinel{};
+            static thread_local const value_type_t sentinel{};
             return sentinel;
         }
 
         /**
          * @brief 对成功值进行映射转换
          * @tparam Function 映射函数
-         * @param function 映射函数，接受 value_type 返回新类型
+         * @param function 映射函数，接受 value_type_t 返回新类型
          * @return result_t 转换后的结果，错误时传递错误上下文
          */
         template <typename Function>
         auto map(Function&& function) const& noexcept -> result_t<decltype(std::invoke(std::forward<Function>(function),
-                                                                               std::declval<const value_type&>()))> {
-            using new_type = decltype(std::invoke(std::forward<Function>(function), std::declval<const value_type&>()));
+                                                                               std::declval<const value_type_t&>()))> {
+            using new_type = decltype(std::invoke(std::forward<Function>(function), std::declval<const value_type_t&>()));
             if (is_error()) {
                 return result_t<new_type>(error());
             }
@@ -301,26 +307,26 @@ namespace error_system::core {
          * @return result_t 映射后的结果，成功时保持不变
          */
         template <typename Function>
-        result_t<value_type> map_error(Function&& function) const& noexcept {
+        result_t<value_type_t> map_error(Function&& function) const& noexcept {
             if (is_error()) {
                 try {
-                    return result_t<value_type>(std::invoke(std::forward<Function>(function), error()));
+                    return result_t<value_type_t>(std::invoke(std::forward<Function>(function), error()));
                 } catch (...) {
                     std::fprintf(stderr, "[result_t] map_error: std::invoke threw exception\n");
-                    return result_t<value_type>(error());
+                    return result_t<value_type_t>(error());
                 }
             }
-            return result_t<value_type>(value());
+            return result_t<value_type_t>(value());
         }
 
         /**
          * @brief 对错误上下文进行映射转换（移动语义）
          */
         template <typename Function>
-        result_t<value_type> map_error(Function&& function) && noexcept {
+        result_t<value_type_t> map_error(Function&& function) && noexcept {
             if (is_error()) {
                 try {
-                    return result_t<value_type>(std::invoke(std::forward<Function>(function), std::move(error())));
+                    return result_t<value_type_t>(std::invoke(std::forward<Function>(function), std::move(error())));
                 } catch (...) {
                     std::fprintf(stderr, "[result_t] map_error(&&): std::invoke threw exception\n");
                     return std::move(*this);
@@ -402,12 +408,12 @@ namespace error_system::core {
         /**
          * @brief 对错误结果进行链式操作（右值引用版本）
          * @param function 要执行的操作函数
-         * @return result_t<value_type> 操作结果
+         * @return result_t<value_type_t> 操作结果
          * @details 如果当前结果为错误，则调用 function 处理错误并返回其结果；
          *          如果当前结果为成功，则返回当前对象（移动语义）
          */
         template <typename Function>
-        result_t<value_type> or_else(Function&& function) && noexcept {
+        result_t<value_type_t> or_else(Function&& function) && noexcept {
             if (is_error()) {
                 try {
                     return std::invoke(std::forward<Function>(function), std::move(error()));
@@ -422,12 +428,12 @@ namespace error_system::core {
         /**
          * @brief 对错误结果进行链式操作（左值引用版本）
          * @param function 要执行的操作函数
-         * @return result_t<value_type> 操作结果
+         * @return result_t<value_type_t> 操作结果
          * @details 如果当前结果为错误，则调用 function 处理错误并返回其结果；
          *          如果当前结果为成功，则返回当前对象的副本
          */
         template <typename Function>
-        result_t<value_type> or_else(Function&& function) & noexcept {
+        result_t<value_type_t> or_else(Function&& function) & noexcept {
             if (is_error()) {
                 try {
                     return std::invoke(std::forward<Function>(function), error());
@@ -448,10 +454,10 @@ namespace error_system::core {
          */
         template <typename SuccessFn, typename ErrorFn>
         auto match(SuccessFn&& success_fn, ErrorFn&& error_fn) const noexcept
-            -> decltype(success_fn(std::declval<const value_type&>()))
+            -> decltype(success_fn(std::declval<const value_type_t&>()))
         {
             if (is_success()) {
-                auto* ptr = std::get_if<value_type>(&value_or_error_);
+                auto* ptr = std::get_if<value_type_t>(&value_or_error_);
                 if (ptr) {
                     return success_fn(*ptr);
                 }
@@ -472,7 +478,7 @@ namespace error_system::core {
     template <>
     class result_t<void> {
         public:
-        using value_type = void;
+        using value_type_t = void;
 
         private:
         error_context_t error_context_;
@@ -482,6 +488,11 @@ namespace error_system::core {
          * @brief 构造函数
          */
         result_t() noexcept : error_context_{} {}
+
+        result_t(const result_t&) noexcept = default;
+        result_t(result_t&&) noexcept = default;
+        result_t& operator=(const result_t&) noexcept = delete;
+        result_t& operator=(result_t&&) noexcept = delete;
 
         /**
          * @brief 错误构造工厂函数

@@ -1,6 +1,7 @@
 #pragma once
-#include "error_system/core/error_context.h"
 #include <string>
+
+#include "error_system/core/error_context.h"
 
 /**
  * @file error_exception.h
@@ -26,6 +27,8 @@ namespace error_system::core {
             : context_(std::move(context)), cached_message_(context_.to_string()) {}
 
         error_exception_t(const error_exception_t&) = default;
+
+        ~error_exception_t() noexcept override = default;
 
         error_exception_t& operator=(const error_exception_t&) = delete;
 

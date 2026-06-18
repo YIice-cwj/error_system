@@ -1,6 +1,7 @@
 #pragma once
-#include "error_system/core/error_code.h"
 #include <cstdint>
+
+#include "error_system/core/error_code.h"
 
 /**
  * @file error_builder.h
@@ -22,6 +23,8 @@ namespace error_system::core {
      */
     class error_builder_t {
         public:
+        error_builder_t() = delete;
+
         /**
          * @brief 通过枚举类型构造错误码（编译期类型安全）
          * @details 相比 error_code_t 构造函数直接传 uint16_t，使用强类型枚举可防止

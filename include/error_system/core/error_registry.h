@@ -1,17 +1,18 @@
 #pragma once
-#include "error_system/core/error_code.h"
-#include "error_system/core/error_level.h"
-// IWYU pragma: begin_exports
-#include "error_system/core/error_builder.h"
+#include <functional>
 #include <iosfwd>
 #include <mutex>
-// IWYU pragma: end_exports
-#include <functional>
 #include <shared_mutex>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+
+#include "error_system/core/error_code.h"
+#include "error_system/core/error_level.h"
+// IWYU pragma: begin_exports
+#include "error_system/core/error_builder.h"
+// IWYU pragma: end_exports
 
 /**
  * @file error_registry.h
@@ -346,6 +347,11 @@ namespace error_system::core {
                 code.get_subsys(), code.get_module(), subsys_name, module_name);
             error_registry_t::instance().register_error(code, name, desc);
         }
+
+        error_registrar_t(const error_registrar_t&) = delete;
+        error_registrar_t& operator=(const error_registrar_t&) = delete;
+        error_registrar_t(error_registrar_t&&) = delete;
+        error_registrar_t& operator=(error_registrar_t&&) = delete;
     };
 
 }  // namespace error_system::core

@@ -1,7 +1,8 @@
 #pragma once
+#include <cstdint>
+
 #include "error_system/core/error_level.h"
 #include "error_system/domain/system_domain.h"
-#include <cstdint>
 
 /**
  * @file error_code.h
@@ -50,12 +51,33 @@ namespace error_system::core {
         static constexpr uint64_t MODULE_MASK = 0xFFFFULL;  // 16 bits
         static constexpr uint64_t NUMBER_MASK = 0xFFFFULL;  // 16 bits
 
+        /**
+         * @brief 设置符号位
+         * @param sign 符号位值 (0 = 错误，1 = 成功)
+         */
+        constexpr void __set_sign(uint8_t sign) noexcept {
+            code_ = (code_ & ~SIGN_MASK) | (static_cast<code_t>(sign) << SIGN_SHIFT);
+        }
+
+        /**
+         * @brief 设置预留位
+         * @param reserved 预留位值 (0-7)
+         */
+        constexpr void __set_reserved(uint8_t reserved) noexcept {
+            code_ = (code_ & ~RESERVED_MASK) | (static_cast<code_t>(reserved) << RESERVED_SHIFT);
+        }
+
         public:
         /**
          * @brief 默认构造函数
          * @details 默认构造为成功码（sign=1），所有字段为 0
          */
         constexpr error_code_t() noexcept : code_(1ULL << SIGN_SHIFT) {}
+
+        constexpr error_code_t(const error_code_t&) noexcept = default;
+        constexpr error_code_t(error_code_t&&) noexcept = default;
+        constexpr error_code_t& operator=(const error_code_t&) noexcept = default;
+        constexpr error_code_t& operator=(error_code_t&&) noexcept = default;
 
         /**
          * @brief 创建成功码的工厂方法
@@ -125,23 +147,6 @@ namespace error_system::core {
          */
         constexpr uint8_t get_reserved() const noexcept {
             return static_cast<uint8_t>((code_ >> RESERVED_SHIFT) & RESERVED_MASK);
-        }
-
-        private:
-        /**
-         * @brief 设置符号位
-         * @param sign 符号位值 (0 = 错误，1 = 成功)
-         */
-        constexpr void set_sign(uint8_t sign) noexcept {
-            code_ = (code_ & ~SIGN_MASK) | (static_cast<code_t>(sign) << SIGN_SHIFT);
-        }
-
-        /**
-         * @brief 设置预留位
-         * @param reserved 预留位值 (0-7)
-         */
-        constexpr void set_reserved(uint8_t reserved) noexcept {
-            code_ = (code_ & ~RESERVED_MASK) | (static_cast<code_t>(reserved) << RESERVED_SHIFT);
         }
 
         public:
