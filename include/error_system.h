@@ -21,15 +21,19 @@
 #include "error_system/core/error_level.h"
 #include "error_system/core/error_registry.h"
 #include "error_system/core/result.h"
+// ─── Config ────────────────────────────────────────────────────────────────────
+#include "error_system/config/error_config.h"
 // ─── Domain ───────────────────────────────────────────────────────────────────
 #include "error_system/domain/system_domain.h"
 
 // ─── Plugin ─────────────────────────────────────────────────────────────────────
 #include "error_system/plugin/error_router_plugin.h"
+#include "error_system/plugin/i_error_plugin.h"
 #include "error_system/plugin/plugin_registry.h"
 
 // ─── Utils ─────────────────────────────────────────────────────────────────────
 #include "error_system/utils/async_queue.h"
 #include "error_system/utils/error_formatter.h"
 #include "error_system/utils/stack_trace_utils.h"
+#include "error_system/utils/source_location.h"
 // IWYU pragma: end_exports

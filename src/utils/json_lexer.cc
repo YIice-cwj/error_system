@@ -41,14 +41,14 @@ namespace error_system::utils::detail {
                 } else if (json_str_[pos_] == 'u' && pos_ + 4 < json_str_.size()) {
                     uint32_t codepoint = 0;
                     for (int i = 1; i <= 4; ++i) {
-                        char hex = json_str_[pos_ + i];
+                        char hex = json_str_[pos_ + static_cast<size_t>(i)];
                         codepoint <<= 4;
                         if (hex >= '0' && hex <= '9') {
-                            codepoint |= hex - '0';
+                            codepoint |= static_cast<uint32_t>(hex - '0');
                         } else if (hex >= 'a' && hex <= 'f') {
-                            codepoint |= hex - 'a' + 10;
+                            codepoint |= static_cast<uint32_t>(hex - 'a' + 10);
                         } else if (hex >= 'A' && hex <= 'F') {
-                            codepoint |= hex - 'A' + 10;
+                            codepoint |= static_cast<uint32_t>(hex - 'A' + 10);
                         } else {
                             return {token_type_t::invalid, ""};
                         }

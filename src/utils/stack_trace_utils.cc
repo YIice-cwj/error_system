@@ -178,7 +178,7 @@ namespace error_system::utils {
         if (max_frames > hard_max_frames) {
             max_frames = hard_max_frames;
         }
-        std::vector<void*> callstack(max_frames);
+        std::vector<void*> callstack(static_cast<size_t>(max_frames));
         int frames = capture_os_frames(callstack.data(), max_frames);
 
         if (frames <= skip_frames) {

@@ -23,14 +23,14 @@ namespace error_system::plugin {
         {
             std::shared_lock<std::shared_mutex> lock(mutex_);
 
-            if (auto it = specific_handlers_.find(context.get_code().get_code()); it != specific_handlers_.end()) {
-                handler = it->second;
-            } else if (auto it = module_group_handlers_.find(context.get_code().get_module_group_id());
-                       it != module_group_handlers_.end()) {
-                handler = it->second;
-            } else if (auto it = domain_handlers_.find(context.get_code().get_system());
-                       it != domain_handlers_.end()) {
-                handler = it->second;
+            if (auto it_specific = specific_handlers_.find(context.get_code().get_code()); it_specific != specific_handlers_.end()) {
+                handler = it_specific->second;
+            } else if (auto it_module = module_group_handlers_.find(context.get_code().get_module_group_id());
+                       it_module != module_group_handlers_.end()) {
+                handler = it_module->second;
+            } else if (auto it_domain = domain_handlers_.find(context.get_code().get_system());
+                       it_domain != domain_handlers_.end()) {
+                handler = it_domain->second;
             }
         }
 

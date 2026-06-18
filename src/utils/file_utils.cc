@@ -30,7 +30,7 @@ namespace error_system::utils {
 
             content.resize(static_cast<size_t>(size));
             file.seekg(0, std::ios::beg);
-            file.read(content.data(), content.size());
+            file.read(content.data(), static_cast<std::streamsize>(content.size()));
 
             return content;
         } catch (const std::bad_alloc&) {
@@ -61,7 +61,7 @@ namespace error_system::utils {
             return false;
         }
 
-        file.write(content.data(), content.size());
+        file.write(content.data(), static_cast<std::streamsize>(content.size()));
         return file.good();
     }
 

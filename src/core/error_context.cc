@@ -318,10 +318,10 @@ namespace error_system::core {
 
     void error_context_t::__fill_source_location(bool short_filename_enabled) noexcept {
         if constexpr (error_config_t::LOCATION_ENABLED) {
-            file_name = short_filename_enabled ? utils::extract_short_filename(source_location_.file_name())
-                                               : source_location_.file_name();
-            function_name = source_location_.function_name();
-            line_number = source_location_.line();
+            file_name = short_filename_enabled ? utils::extract_short_filename(source_location.file_name())
+                                               : source_location.file_name();
+            function_name = source_location.function_name();
+            line_number = source_location.line();
         }
     }
 
