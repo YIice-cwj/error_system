@@ -1,7 +1,8 @@
 #pragma once
+#include <string_view>
+
 #include "error_system/core/error_context.h"
 #include "error_system/core/error_level.h"
-#include <string_view>
 
 /**
  * @file i_error_plugin.h
@@ -22,8 +23,8 @@ namespace error_system::plugin {
      *          通过 min_level() 可过滤低于指定级别的错误事件。
      */
     class i_error_plugin_t {
-        public:
-        virtual ~i_error_plugin_t() = default;
+    public:
+        virtual ~i_error_plugin_t() noexcept = default;
 
         /**
          * @brief 获取插件名称

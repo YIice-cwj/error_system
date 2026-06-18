@@ -1,11 +1,12 @@
 #pragma once
-#include "error_system/plugin/i_error_plugin.h"
-#include "error_system/utils/async_queue.h"
 #include <atomic>
 #include <memory>
 #include <shared_mutex>
 #include <string_view>
 #include <vector>
+
+#include "error_system/plugin/i_error_plugin.h"
+#include "error_system/utils/async_queue.h"
 
 /**
  * @file plugin_registry.h
@@ -29,13 +30,13 @@ namespace error_system::plugin {
      *          异步模式下自动启动后台工作线程处理通知队列。
      */
     class plugin_registry_t {
-        public:
+    public:
         using plugin_pointer_t = i_error_plugin_t*;
         using unique_plugin_ptr_t = std::unique_ptr<i_error_plugin_t>;
         using shared_plugin_ptr_t = std::shared_ptr<i_error_plugin_t>;
         using plugin_list_t = std::vector<plugin_pointer_t>;
 
-        private:
+    private:
         /**
          * @brief RCU 插件快照
          * @details shared_ptr 保证旧快照在所有读者完成后安全释放。
@@ -71,10 +72,10 @@ namespace error_system::plugin {
          */
         utils::async_queue_t<std::shared_ptr<core::error_context_t>, __context_processor_t> async_queue_{{__context_processor_t{}}};
 
-        private:
+    private:
         plugin_registry_t() = default;
 
-        ~plugin_registry_t() = default;
+        ~plugin_registry_t() noexcept = default;
 
         plugin_registry_t(const plugin_registry_t&) = delete;
 
@@ -100,7 +101,7 @@ namespace error_system::plugin {
                               std::static_pointer_cast<const plugin_list_t>(new_snapshot_ptr));
         }
 
-        public:
+    public:
         /**
          * @brief 注册插件（转移所有权）
          * @details 注册表接管插件所有权，插件生命周期由注册表管理。
@@ -177,7 +178,7 @@ namespace error_system::plugin {
          */
         size_t get_max_queue_size() const noexcept;
 
-        public:
+    public:
         /**
          * @brief 获取单例实例
          * @return plugin_registry_t& 单例引用

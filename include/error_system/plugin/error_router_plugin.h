@@ -1,12 +1,13 @@
 #pragma once
-#include "error_system/core/error_code.h"
-#include "error_system/plugin/i_error_plugin.h"
 #include <functional>
 // IWYU pragma: begin_exports
 #include <mutex>
 // IWYU pragma: end_exports
 #include <shared_mutex>
 #include <unordered_map>
+
+#include "error_system/core/error_code.h"
+#include "error_system/plugin/i_error_plugin.h"
 
 /**
  * @file error_router_plugin.h
@@ -31,7 +32,7 @@ namespace error_system::plugin {
      * @details 错误路由插件负责将错误事件路由到对应的处理函数
      */
     class error_router_plugin_t : public i_error_plugin_t {
-        private:
+    private:
         std::unordered_map<core::code_t, error_handler_t> specific_handlers_{};
 
         std::unordered_map<core::module_group_id_t, error_handler_t> module_group_handlers_{};
@@ -42,7 +43,7 @@ namespace error_system::plugin {
 
         mutable std::shared_mutex mutex_;
 
-        private:
+    private:
         error_router_plugin_t() = default;
 
         error_router_plugin_t(const error_router_plugin_t&) = delete;
@@ -53,7 +54,7 @@ namespace error_system::plugin {
 
         error_router_plugin_t& operator=(error_router_plugin_t&&) = delete;
 
-        public:
+    public:
         /**
          * @brief 获取插件名称
          * @details 用于标识插件，注册时若名称重复则替换旧插件
@@ -108,7 +109,7 @@ namespace error_system::plugin {
          */
         void unregister_handler_by_domain(domain::system_domain_t domain) noexcept;
 
-        public:
+    public:
         /**
          * @brief 获取路由插件单例
          * @return error_router_plugin_t& 插件的全局单例引用
