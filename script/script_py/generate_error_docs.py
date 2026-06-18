@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
 import sys
 import glob
+import tempfile
 from datetime import datetime
 
 
@@ -31,8 +33,12 @@ def generate_markdown(json_dir, out_file):
     # 1. 读取所有 JSON 数据
     services_data = []
     for filepath in glob.glob(os.path.join(json_dir, '*.json')):
-        with open(filepath, 'r', encoding='utf-8') as f:
-            services_data.append(json.load(f))
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                services_data.append(json.load(f))
+        except json.JSONDecodeError as e:
+            print(f"[错误] JSON 解析失败: {filepath}, 错误: {e}", file=sys.stderr)
+            sys.exit(1)
     
     # 按 subsystem_id 排序，保证每次生成的文档顺序稳定
     services_data.sort(key=lambda x: x.get('subsystem_id', 9999))
@@ -43,7 +49,7 @@ def generate_markdown(json_dir, out_file):
         service_name = data.get('service_name', '未知服务')
         subsys_id = data.get('subsystem_id', 0)
         # Markdown 锚点链接规范：转小写，空格换横杠
-        anchor = f"{service_name}-subsys-{subsys_id}".replace(" ", "-").lower()
+        anchor = re.sub(r'[^a-z0-9-]', '', f"{service_name}-subsys-{subsys_id}".replace(" ", "-").lower())
         lines.append(f"- [{service_name} (ID: {subsys_id})](#{anchor})")
     lines.append("\n---\n")
 
@@ -66,7 +72,7 @@ def generate_markdown(json_dir, out_file):
 
         # 填充错误码表格内容
         for err in data.get('errors', []):
-            name = f"`{err['name']}`"
+            name = f"`{err.get('name', '')}`"
             
             # 用 emoji 让错误级别更直观
             level = err.get('level', 'info')
@@ -79,15 +85,26 @@ def generate_markdown(json_dir, out_file):
             module_desc = modules_map.get(err.get('module'), err.get('module'))
             desc = err.get('desc', '')
 
-            lines.append(f"| {name} | {level_str} | {module_desc} | {desc} |")
+            safe_name = str(name).replace('|', '\\|').replace('\n', ' ')
+            safe_level_str = str(level_str).replace('|', '\\|').replace('\n', ' ')
+            safe_module_desc = str(module_desc).replace('|', '\\|').replace('\n', ' ')
+            safe_desc = str(desc).replace('|', '\\|').replace('\n', ' ')
+
+            lines.append(f"| {safe_name} | {safe_level_str} | {safe_module_desc} | {safe_desc} |")
         
         lines.append("\n[⬆️ 回到顶部](#-目录)\n")
         lines.append("---\n")
 
     # 4. 写入文件
     os.makedirs(os.path.dirname(out_file), exist_ok=True)
-    with open(out_file, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(lines))
+    fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(out_file), suffix='.md')
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(lines) + '\n')
+    except:
+        os.unlink(tmp_path)
+        raise
+    os.replace(tmp_path, out_file)
     print(f"✅ 成功生成 Markdown 文档: {out_file}")
 
 if __name__ == "__main__":

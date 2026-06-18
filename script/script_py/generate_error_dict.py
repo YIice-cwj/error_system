@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import glob
+import tempfile
 
 
 def __validate_safe_path(path, base_dir):
@@ -29,30 +30,40 @@ def generate_dict(json_dir, out_file):
 
     # 1. 扫描目录下所有的 json 文件
     for filepath in glob.glob(os.path.join(json_dir, '*.json')):
-        with open(filepath, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            subsys_id = data.get('subsystem_id')
-            subsys_name = data.get('service_name', f'Unknown_{subsys_id}')
-            if subsys_id is not None:
-                subsystems[subsys_id] = subsys_name
-            for mod_key, mod_info in data.get('modules', {}).items():
-                mod_id = mod_info.get('id')
-                mod_desc = mod_info.get('desc')
-                if mod_id is not None and subsys_id is not None:
-                    modules[(subsys_id, mod_id)] = mod_desc
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except json.JSONDecodeError as e:
+            print(f"[错误] JSON 解析失败: {filepath}, 错误: {e}", file=sys.stderr)
+            sys.exit(1)
 
-                # 冲突检测：遍历每个模块下的每个错误码
-                for err in mod_info.get('errors', []):
-                    err_number = err.get('number')
-                    err_name = err.get('name', 'UNNAMED')
-                    if err_number is not None and mod_id is not None and subsys_id is not None:
-                        key = (subsys_id, mod_id, err_number)
-                        if key not in id_conflict_map:
-                            id_conflict_map[key] = []
-                        id_conflict_map[key].append(
-                            f"  file='{os.path.basename(filepath)}', service='{subsys_name}', "
-                            f"module='{mod_desc}' (id={mod_id}), "
-                            f"error='{err_name}' (number=0x{err_number:04X})")
+        subsys_id = data.get('subsystem_id')
+        subsys_name = data.get('service_name', f'Unknown_{subsys_id}')
+        if subsys_id is not None:
+            subsystems[subsys_id] = subsys_name
+        for mod_key, mod_info in data.get('modules', {}).items():
+            mod_id = mod_info.get('id')
+            mod_desc = mod_info.get('desc')
+            if mod_id is not None and subsys_id is not None:
+                modules[(subsys_id, mod_id)] = mod_desc
+
+        # 冲突检测：遍历顶层每个错误码，通过 module 字段关联模块
+        for err in data.get('errors', []):
+            err_module = err.get('module')
+            err_number = err.get('number')
+            err_name = err.get('name', 'UNNAMED')
+            if err_number is not None and subsys_id is not None:
+                mod_info = data.get('modules', {}).get(err_module, {})
+                mod_id = mod_info.get('id')
+                mod_desc = mod_info.get('desc', err_module)
+                if mod_id is not None:
+                    key = (subsys_id, mod_id, err_number)
+                    if key not in id_conflict_map:
+                        id_conflict_map[key] = []
+                    id_conflict_map[key].append(
+                        f"  file='{os.path.basename(filepath)}', service='{subsys_name}', "
+                        f"module='{mod_desc}' (id={mod_id}), "
+                        f"error='{err_name}' (number=0x{err_number:04X})")
 
     # 2. ID 冲突检测
     conflicts = {k: v for k, v in id_conflict_map.items() if len(v) > 1}
@@ -98,8 +109,14 @@ def generate_dict(json_dir, out_file):
 
     # 4. 写入文件
     os.makedirs(os.path.dirname(out_file), exist_ok=True)
-    with open(out_file, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(lines))
+    fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(out_file), suffix='.h')
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(lines) + '\n')
+    except:
+        os.unlink(tmp_path)
+        raise
+    os.replace(tmp_path, out_file)
     print(f"✅ 成功生成子系统/模块名称注册宏: {out_file}")
 
 if __name__ == "__main__":

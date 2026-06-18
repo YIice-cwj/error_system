@@ -1,10 +1,11 @@
 #!/bin/bash
 
 # 1. 动态获取项目根目录
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # 2. 定义目录和脚本路径
+PYTHON="$(command -v python3 || command -v python)"
 JSON_DIR="$PROJECT_ROOT/config/errors"
 OUTPUT_DIR="$PROJECT_ROOT/build/generated_errors/include"
 GENERATED_DIR="$PROJECT_ROOT/build/generated_errors"
@@ -44,7 +45,7 @@ for json_file in "$JSON_DIR"/*.json; do
         filename_no_ext="${filename%.*}"
         
         echo "  ⏳ 读取 $filename ➡️ 生成 ${filename_no_ext}.h"
-        python3 "$CODE_SCRIPT" "$json_file" "$OUTPUT_DIR"
+        $PYTHON "$CODE_SCRIPT" "$json_file" "$OUTPUT_DIR"
         
         if [[ $? -eq 0 ]]; then
             ((count++))
@@ -62,7 +63,7 @@ echo "-------------------------------------------------"
 echo " ⚙️ [2/3] 正在生成 C++ 全局极速字典"
 echo "-------------------------------------------------"
 echo "  ⏳ 汇总全部 JSON 数据 ➡️ 生成 error_dict.h"
-python3 "$DICT_SCRIPT" "$JSON_DIR" "$DICT_OUTPUT"
+$PYTHON "$DICT_SCRIPT" "$JSON_DIR" "$DICT_OUTPUT"
 
 if [[ $? -ne 0 ]]; then
     echo "  ❌ 全局字典 error_dict.h 生成失败！"
@@ -76,7 +77,7 @@ echo "-------------------------------------------------"
 echo " ⚙️ [3/3] 正在生成 Markdown 错误码字典文档"
 echo "-------------------------------------------------"
 echo "  ⏳ 汇总全部 JSON 数据 ➡️ 生成 error_dictionary.md"
-python3 "$DOCS_SCRIPT" "$JSON_DIR" "$DOCS_OUTPUT"
+$PYTHON "$DOCS_SCRIPT" "$JSON_DIR" "$DOCS_OUTPUT"
 
 if [[ $? -ne 0 ]]; then
     echo "  ❌ Markdown 文档 error_dictionary.md 生成失败！"

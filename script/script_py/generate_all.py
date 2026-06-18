@@ -19,7 +19,7 @@ def __resolve_safe_path(base_path, relative_path):
     """将相对路径解析为 base_path 下的绝对路径，并校验不越界"""
     resolved = os.path.realpath(os.path.join(base_path, relative_path))
     base_real = os.path.realpath(base_path)
-    if not resolved.startswith(base_real + os.sep) and resolved != base_real:
+    if os.path.commonpath([resolved, base_real]) != base_real:
         print(f"[错误] 路径越界: {resolved} 不在项目目录 {base_real} 内", file=sys.stderr)
         sys.exit(1)
     return resolved
@@ -61,6 +61,11 @@ def main():
     dict_script = os.path.join(py_dir, "generate_error_dict.py")
     docs_script = os.path.join(py_dir, "generate_error_docs.py")
 
+    for script_path in (code_script, dict_script, docs_script):
+        if not os.path.isfile(script_path):
+            print(f"[错误] 脚本文件不存在: {script_path}", file=sys.stderr)
+            sys.exit(1)
+
     dict_output = os.path.join(output_dir, "error_dict.h")
     docs_output = os.path.join(generated_dir, "error_dictionary.md")
 
@@ -70,6 +75,9 @@ def main():
 
     # 阶段一：业务头文件
     print("\n[1/3] 生成业务模块 C++ 头文件...")
+    if not os.path.isdir(json_dir):
+        print(f"[错误] JSON 配置目录不存在: {json_dir}", file=sys.stderr)
+        sys.exit(1)
     count = 0
     for filename in sorted(os.listdir(json_dir)):
         if not filename.endswith(".json"):
@@ -81,7 +89,8 @@ def main():
             [sys.executable, code_script, json_file, output_dir],
             capture_output=True, text=True)
         if result.returncode != 0:
-            print(f"  失败: {result.stderr.strip()}")
+            err_msg = result.stderr.strip() or result.stdout.strip()
+            print(f"  失败: {err_msg}")
             sys.exit(1)
         count += 1
     print(f"  成功生成 {count} 个头文件")
@@ -92,7 +101,8 @@ def main():
         [sys.executable, dict_script, json_dir, dict_output],
         capture_output=True, text=True)
     if result.returncode != 0:
-        print(f"  失败: {result.stderr.strip()}")
+        err_msg = result.stderr.strip() or result.stdout.strip()
+        print(f"  失败: {err_msg}")
         sys.exit(1)
     print(result.stdout.strip())
 
@@ -102,7 +112,8 @@ def main():
         [sys.executable, docs_script, json_dir, docs_output],
         capture_output=True, text=True)
     if result.returncode != 0:
-        print(f"  失败: {result.stderr.strip()}")
+        err_msg = result.stderr.strip() or result.stdout.strip()
+        print(f"  失败: {err_msg}")
         sys.exit(1)
     print(result.stdout.strip())
 
