@@ -5,7 +5,7 @@ foreach(test_source IN LISTS TEST_SOURCES)
     add_executable(${test_name} ${test_source})
     target_link_libraries(${test_name}
         PRIVATE
-        error_system
+        error_system::error_system
         GTest::gtest_main
     )
     error_system_apply_warnings_only(${test_name})

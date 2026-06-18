@@ -13,7 +13,12 @@ function(error_system_apply_warnings target_name)
         return()
     endif()
 
-    target_compile_options(${target_name} PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(${target_name} PRIVATE
+        -Wall -Wextra -Wpedantic
+        -Wshadow -Wconversion -Wsign-conversion
+        -Wdouble-promotion -Wnull-dereference
+        -Wformat=2 -Wnon-virtual-dtor
+    )
     if(ERROR_SYSTEM_WARNINGS_AS_ERRORS)
         target_compile_options(${target_name} PRIVATE -Werror)
     endif()

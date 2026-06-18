@@ -11,6 +11,11 @@ set(DESCRIPTION_STRING "error_system_v${VERSION_STRING}: c++17 错误码系统�
 
 project(${PROJECT_NAME} VERSION ${VERSION_STRING} DESCRIPTION ${DESCRIPTION_STRING} LANGUAGES CXX)
 
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type" FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "RelWithDebInfo" "MinSizeRel")
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON) 
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -35,7 +40,7 @@ if(Python3_FOUND)
     set(ERROR_JSON_DIR "${CMAKE_SOURCE_DIR}/config/errors")
     set(ERROR_DOCS_OUT_DIR "${CMAKE_BINARY_DIR}/generated_errors")
 
-    file(GLOB ERROR_JSON_FILES "${ERROR_JSON_DIR}/*.json")
+    file(GLOB ERROR_JSON_FILES CONFIGURE_DEPENDS "${ERROR_JSON_DIR}/*.json")
     set(ALL_GENERATED_HEADERS "")
 
     foreach(JSON_FILE ${ERROR_JSON_FILES})
@@ -85,8 +90,6 @@ else()
     )
 endif()
 
-include_directories(${ERROR_GENERATED_DIR})
-
 set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_registry.cc
@@ -104,13 +107,6 @@ add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 error_system_apply_project_options(${PROJECT_NAME})
 
-if (WIN32 AND NOT MSVC)
-    target_compile_options(${PROJECT_NAME} PRIVATE -g)
-    if (BUILD_SHARED_LIBS)
-        target_link_options(${PROJECT_NAME} PRIVATE -Wl,--export-all-symbols)
-    endif()
-endif()
-
 if (BUILD_SHARED_LIBS)
     target_compile_definitions(${PROJECT_NAME} PRIVATE ERROR_SYSTEM_BUILDING_SHARED)
     target_compile_definitions(${PROJECT_NAME} PUBLIC ERROR_SYSTEM_USING_SHARED)
@@ -125,6 +121,7 @@ include(GNUInstallDirs)
 target_include_directories(${PROJECT_NAME}
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${ERROR_GENERATED_DIR}>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
@@ -132,6 +129,8 @@ if (ERROR_SYSTEM_ENABLE_STACKTRACE)
     target_compile_definitions(${PROJECT_NAME} PUBLIC ERROR_SYSTEM_ENABLE_STACKTRACE)
     if (WIN32)
         target_link_libraries(${PROJECT_NAME} PRIVATE dbghelp)
+    elseif(UNIX AND NOT APPLE)
+        target_link_libraries(${PROJECT_NAME} PRIVATE ${CMAKE_DL_LIBS})
     endif()
 endif()
 
@@ -154,10 +153,12 @@ if(ERROR_SYSTEM_BUILD_TESTS)
       GIT_REPOSITORY https://github.com/google/googletest.git
       GIT_TAG        v1.14.0
     )
-    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-    
+    if(MSVC)
+        set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    endif()
+
     set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
-    
+
     FetchContent_MakeAvailable(googletest)
 
     enable_testing()
@@ -223,9 +224,9 @@ if(NOT TARGET uninstall)
         COMMAND ${CMAKE_COMMAND} -E echo "开始强制卸载文件..."
         COMMAND sh -c "[ -f install_manifest.txt ] && xargs rm -vf < install_manifest.txt || echo '⚠️ 未找到 install_manifest.txt，跳过文件逐一删除。'"
         COMMAND ${CMAKE_COMMAND} -E echo "清理残留的空目录..."
-        COMMAND rm -rf ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}
-        COMMAND rm -rf ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
-        COMMAND rm -rf ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}
+        COMMAND ${CMAKE_COMMAND} -E rm -Rf ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}
+        COMMAND ${CMAKE_COMMAND} -E rm -Rf ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
+        COMMAND ${CMAKE_COMMAND} -E rm -Rf ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT "Uninstalling the project and cleaning up directories..."
         VERBATIM
