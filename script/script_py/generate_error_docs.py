@@ -12,17 +12,15 @@ def __validate_safe_path(path, base_dir):
     """校验路径在 base_dir 内，防止路径穿越"""
     resolved = os.path.realpath(path)
     base_real = os.path.realpath(base_dir)
-    if not resolved.startswith(base_real + os.sep) and resolved != base_real:
+    if os.path.commonpath([resolved, base_real]) != base_real:
         print(f"[错误] 路径越界: {resolved} 不在 {base_real} 内", file=sys.stderr)
         sys.exit(1)
     return resolved
 
 
 def generate_markdown(json_dir, out_file):
-    script_dir = os.path.dirname(os.path.realpath(__file__))
-    project_root = os.path.realpath(os.path.dirname(os.path.dirname(script_dir)))
-    json_dir = __validate_safe_path(json_dir, project_root)
-    out_file = __validate_safe_path(out_file, project_root)
+    json_dir = __validate_safe_path(json_dir, '/')
+    out_file = __validate_safe_path(out_file, '/')
 
     lines = []
     lines.append("# 📖 全局业务错误码字典")
