@@ -1,0 +1,12 @@
+if(NOT EXISTS "${MANIFEST}")
+    message(STATUS "未找到 install_manifest.txt，跳过文件逐一删除。")
+    return()
+endif()
+
+file(STRINGS "${MANIFEST}" files)
+foreach(file IN LISTS files)
+    if(EXISTS "${file}")
+        file(REMOVE "${file}")
+        message(STATUS "Removed: ${file}")
+    endif()
+endforeach()

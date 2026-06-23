@@ -16,8 +16,6 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "RelWithDebInfo" "MinSizeRel")
 endif()
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON) 
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -30,8 +28,11 @@ option(ERROR_SYSTEM_ENABLE_PGO_USE "启用 PGO 使用阶段" OFF)
 option(ERROR_SYSTEM_ENABLE_ASAN "启用地址安全检查器" OFF)
 option(ERROR_SYSTEM_ENABLE_UBSAN "启用未定义行为检测器" OFF)
 option(ERROR_SYSTEM_WARNINGS_AS_ERRORS "将警告视为错误" ON)
+option(ERROR_SYSTEM_BUILD_TESTS "Build tests for error_system" ON)
+option(ERROR_SYSTEM_BUILD_EXAMPLES "Build examples for error_system" ON)
+option(ERROR_SYSTEM_BUILD_PERF_TESTS "Build performance tests" ON)
 
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ErrorSystemPerformance.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/error_system_performance.cmake)
 find_package(Python3 COMPONENTS Interpreter QUIET)
 
 set(ERROR_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated_errors/include")
@@ -142,10 +143,6 @@ if (ERROR_SYSTEM_ENABLE_LOCATION)
     target_compile_definitions(${PROJECT_NAME} PUBLIC ERROR_SYSTEM_ENABLE_LOCATION)
 endif()
 
-option(ERROR_SYSTEM_BUILD_TESTS "Build tests for error_system" ON)
-option(ERROR_SYSTEM_BUILD_EXAMPLES "Build examples for error_system" ON)
-option(ERROR_SYSTEM_BUILD_PERF_TESTS "Build performance tests" ON)
-
 if(ERROR_SYSTEM_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
@@ -165,6 +162,7 @@ install(TARGETS ${PROJECT_NAME}
 
 install(DIRECTORY include/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.inl"
 )
 
 include(CMakePackageConfigHelpers)
@@ -176,7 +174,7 @@ if(Python3_FOUND)
     )
 endif()
 
-install(FILES cmake/ErrorSystemHelpers.cmake
+install(FILES cmake/error_system_helpers.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
 )
 
@@ -186,10 +184,10 @@ write_basic_package_version_file(
     COMPATIBILITY SameMajorVersion
 )
 
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
-    "include(\"\${CMAKE_CURRENT_LIST_DIR}/${PROJECT_NAME}Targets.cmake\")\n"
-    "set(ERROR_SYSTEM_SCRIPTS_DIR \"\${CMAKE_CURRENT_LIST_DIR}/../../../${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/scripts\")\n"
-    "include(\"\${CMAKE_CURRENT_LIST_DIR}/ErrorSystemHelpers.cmake\")\n"
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/error_system_config.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
+    INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
 )
 
 install(FILES
@@ -207,7 +205,7 @@ install(EXPORT ${PROJECT_NAME}Targets
 if(NOT TARGET uninstall)
     add_custom_target(uninstall
         COMMAND ${CMAKE_COMMAND} -E echo "开始强制卸载文件..."
-        COMMAND sh -c "[ -f install_manifest.txt ] && xargs rm -vf < install_manifest.txt || echo '⚠️ 未找到 install_manifest.txt，跳过文件逐一删除。'"
+        COMMAND ${CMAKE_COMMAND} -D "MANIFEST=${CMAKE_CURRENT_BINARY_DIR}/install_manifest.txt" -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/uninstall_manifest.cmake"
         COMMAND ${CMAKE_COMMAND} -E echo "清理残留的空目录..."
         COMMAND ${CMAKE_COMMAND} -E rm -Rf ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}
         COMMAND ${CMAKE_COMMAND} -E rm -Rf ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
