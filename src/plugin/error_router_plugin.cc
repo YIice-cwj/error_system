@@ -1,4 +1,5 @@
 #include "error_system/plugin/error_router_plugin.h"
+
 #include <cstdio>
 
 namespace error_system::plugin {

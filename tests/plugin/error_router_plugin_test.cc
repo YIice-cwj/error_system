@@ -1,4 +1,5 @@
 #include "error_system/plugin/error_router_plugin.h"
+
 #include <gtest/gtest.h>
 
 namespace error_system::plugin {

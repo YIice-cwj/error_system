@@ -1,11 +1,12 @@
+#include <iostream>
+#include <unordered_map>
+#include <atomic>
+
 #include "error_system.h"
 #include "trade_service_errors.h"
 #include "payment_service_errors.h"
 #include "user_service_errors.h"
 #include "redis_component_errors.h"
-#include <iostream>
-#include <unordered_map>
-#include <atomic>
 
 using namespace error_system::core;
 using namespace error_system::plugin;

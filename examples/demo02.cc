@@ -1,10 +1,13 @@
+#include <iostream>
+
 #include "error_system.h"
 #include "payment_service_errors.h"
 #include "trade_service_errors.h"
-#include <iostream>
 
 using namespace error_system::core;
 using namespace error_system::domain;
+
+namespace {
 
 // 模拟订单查询
 result_t<int> query_order(int order_id) {
@@ -29,6 +32,8 @@ result_t<std::string> process_payment(int user_id, int amount) {
     }
     return result_t<std::string>{std::string("PAY_") + std::to_string(user_id) + "_" + std::to_string(amount)};
 }
+
+}  // namespace
 
 int main() {
     std::cout << "===== Demo 2: result_t 错误处理 =====" << std::endl;

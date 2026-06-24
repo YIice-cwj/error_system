@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "error_system.h"
 #include "error_system/config/error_config.h"
 #include "error_system/core/error_registry.h"
@@ -5,7 +7,6 @@
 #include "payment_service_errors.h"
 #include "trade_service_errors.h"
 // IWYU pragma: end_exports
-#include <iostream>
 
 using namespace error_system::core;
 using namespace error_system::config;

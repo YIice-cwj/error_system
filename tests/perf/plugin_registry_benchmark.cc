@@ -1,10 +1,11 @@
-#include "error_system/core/error_context.h"
-#include "error_system/plugin/i_error_plugin.h"
-#include "error_system/plugin/plugin_registry.h"
 #include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <iostream>
+
+#include "error_system/core/error_context.h"
+#include "error_system/plugin/i_error_plugin.h"
+#include "error_system/plugin/plugin_registry.h"
 
 namespace {
 using error_system::core::error_context_t;

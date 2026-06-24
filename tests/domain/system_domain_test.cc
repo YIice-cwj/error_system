@@ -1,4 +1,5 @@
 #include "error_system/domain/system_domain.h"
+
 #include <gtest/gtest.h>
 
 namespace error_system::domain {

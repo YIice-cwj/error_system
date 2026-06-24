@@ -1,11 +1,12 @@
+#include <chrono>
+#include <cstddef>
+#include <iostream>
+
 #include "error_system/config/error_config.h"
 #include "error_system/core/error_context.h"
 #include "error_system/core/error_registry.h"
 #include "error_system/domain/system_domain.h"
 #include "error_system/plugin/plugin_registry.h"
-#include <chrono>
-#include <cstddef>
-#include <iostream>
 
 namespace {
 using error_system::config::error_config_t;

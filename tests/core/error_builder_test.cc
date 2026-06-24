@@ -1,4 +1,5 @@
 #include "error_system/core/error_builder.h"
+
 #include <gtest/gtest.h>
 
 namespace error_system::core {

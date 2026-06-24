@@ -1,13 +1,16 @@
 // 注意：本示例演示 error_exception_t 的异常传递机制。
 // 项目规范要求所有函数 noexcept，生产代码应优先使用 result_t 模式。
 // 此处 throw 仅为演示 error_exception_t 的用法。
+#include <iostream>
+
 #include "error_system.h"
 #include "payment_service_errors.h"
 #include "trade_service_errors.h"
-#include <iostream>
 
 using namespace error_system::core;
 using namespace error_system::domain;
+
+namespace {
 
 // 模拟可能抛出异常的函数
 void process_order(int order_id) {
@@ -38,6 +41,8 @@ void process_payment(int user_id, int amount) {
 
     std::cout << "用户 " << user_id << " 支付 " << amount << " 成功" << std::endl;
 }
+
+}  // namespace
 
 int main() {
     std::cout << "===== Demo 4: 异常处理 =====" << std::endl;
