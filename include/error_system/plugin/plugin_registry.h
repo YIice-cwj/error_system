@@ -38,6 +38,17 @@ namespace error_system::plugin {
 
     private:
         /**
+         * @brief 异步队列处理器
+         * @details 将 async_queue_t 出队的 shared_ptr<error_context_t> 转发给 notify_error
+         *          通过 instance() 获取单例，无需存储 this 指针
+         */
+        struct context_processor_t {
+            void operator()(std::shared_ptr<core::error_context_t>& context) const noexcept {
+                plugin_registry_t::instance().notify_error(*context);
+            }
+        };
+
+        /**
          * @brief RCU 插件快照
          * @details shared_ptr 保证旧快照在所有读者完成后安全释放。
          *          register/unregister 时拷贝-修改-原子交换，
@@ -55,24 +66,12 @@ namespace error_system::plugin {
         std::vector<unique_plugin_ptr_t> owned_plugins_{};
 
         /**
-         * @brief 异步队列处理器
-         * @details 将 async_queue_t 出队的 shared_ptr<error_context_t> 转发给 notify_error
-         *          通过 instance() 获取单例，无需存储 this 指针
-         */
-        struct __context_processor_t {
-            void operator()(std::shared_ptr<core::error_context_t>& context) const noexcept {
-                plugin_registry_t::instance().notify_error(*context);
-            }
-        };
-
-        /**
          * @brief 异步通知队列（仅在 async_queue 模式下使用）
          * @details 基于 async_queue_t 模版类，自动管理后台线程生命周期。
          *          元素类型为 shared_ptr<error_context_t>，避免拷贝。
          */
-        utils::async_queue_t<std::shared_ptr<core::error_context_t>, __context_processor_t> async_queue_{{__context_processor_t{}}};
+        utils::async_queue_t<std::shared_ptr<core::error_context_t>, context_processor_t> async_queue_{{context_processor_t{}}};
 
-    private:
         plugin_registry_t() = default;
 
         ~plugin_registry_t() noexcept = default;
@@ -92,7 +91,7 @@ namespace error_system::plugin {
          * @param modifier 修改新副本的回调函数
          */
         template <typename Modifier>
-        void __update_snapshot(Modifier&& modifier) noexcept {
+        void update_snapshot_(Modifier&& modifier) noexcept {
             std::unique_lock<std::shared_mutex> lock(plugins_mutex_);
             auto old_snapshot = std::atomic_load(&plugins_snapshot_);
             auto new_snapshot_ptr = std::make_shared<plugin_list_t>(*old_snapshot);
@@ -178,7 +177,6 @@ namespace error_system::plugin {
          */
         size_t get_max_queue_size() const noexcept;
 
-    public:
         /**
          * @brief 获取单例实例
          * @return plugin_registry_t& 单例引用

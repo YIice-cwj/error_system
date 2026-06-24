@@ -40,9 +40,9 @@ namespace error_system::core {
     struct error_metadata_t {
         std::string name;
         std::string description;
-        uint16_t module_id;
-        uint16_t error_number;
-        error_level_t level;
+        uint16_t module_id{0};
+        uint16_t error_number{0};
+        error_level_t level{error_level_t::info};
     };
 
     /**
@@ -60,7 +60,7 @@ namespace error_system::core {
      * @details 用于注册和查找错误码
      */
     class error_registry_t {
-        private:
+    private:
         /**
          * @brief 主索引，根据错误码快速查找元数据
          */
@@ -105,12 +105,59 @@ namespace error_system::core {
          */
         std::function<void(code_t, const error_metadata_t&)> duplicate_warn_callback_{nullptr};
 
-        private:
         error_registry_t() = default;
 
-        ~error_registry_t() = default;
+        ~error_registry_t() noexcept = default;
 
-        public:
+        /**
+         * @brief 处理 skip 策略
+         * @param raw_code 错误码原始值
+         * @return bool 是否继续注册流程（skip 返回 false）
+         */
+        bool handle_duplicate_skip_(code_t raw_code) noexcept;
+
+        /**
+         * @brief 处理 overwrite 策略
+         * @param raw_code 错误码原始值
+         * @return bool 是否继续注册流程（overwrite 返回 true）
+         */
+        bool handle_duplicate_overwrite_(code_t raw_code) noexcept;
+
+        /**
+         * @brief 处理 warn 策略
+         * @param raw_code 错误码原始值
+         * @return bool 是否继续注册流程（warn 返回 false）
+         */
+        bool handle_duplicate_warn_(code_t raw_code) noexcept;
+
+        /**
+         * @brief 根据当前策略处理重复错误码
+         * @param raw_code 错误码原始值
+         * @return bool 是否继续注册流程
+         */
+        bool apply_duplicate_policy_(code_t raw_code) noexcept;
+
+        /**
+         * @brief 为批量注册提前预留索引容量
+         * @param additional_entries 新增条目数量
+         */
+        void reserve_for_registration_(size_t additional_entries) noexcept;
+
+        /**
+         * @brief 从模块索引中移除指定错误码
+         * @param module_group_id 模块组 ID
+         * @param identity_code 错误码 identity
+         */
+        void erase_from_module_index_(module_group_id_t module_group_id, code_t identity_code) noexcept;
+
+        /**
+         * @brief 从子系统索引中移除空的模块组条目
+         * @param subsys_id 子系统 ID
+         * @param module_group_id 模块组 ID
+         */
+        void erase_from_subsystem_index_(uint16_t subsys_id, module_group_id_t module_group_id) noexcept;
+
+    public:
         error_registry_t(const error_registry_t&) = delete;
 
         error_registry_t& operator=(const error_registry_t&) = delete;
@@ -119,56 +166,6 @@ namespace error_system::core {
 
         error_registry_t& operator=(error_registry_t&&) = delete;
 
-        private:
-        /**
-         * @brief 处理 skip 策略
-         * @param raw_code 错误码原始值
-         * @return bool 是否继续注册流程（skip 返回 false）
-         */
-        bool __handle_duplicate_skip(code_t raw_code) noexcept;
-
-        /**
-         * @brief 处理 overwrite 策略
-         * @param raw_code 错误码原始值
-         * @return bool 是否继续注册流程（overwrite 返回 true）
-         */
-        bool __handle_duplicate_overwrite(code_t raw_code) noexcept;
-
-        /**
-         * @brief 处理 warn 策略
-         * @param raw_code 错误码原始值
-         * @return bool 是否继续注册流程（warn 返回 false）
-         */
-        bool __handle_duplicate_warn(code_t raw_code) noexcept;
-
-        /**
-         * @brief 根据当前策略处理重复错误码
-         * @param raw_code 错误码原始值
-         * @return bool 是否继续注册流程
-         */
-        bool __apply_duplicate_policy(code_t raw_code) noexcept;
-
-        /**
-         * @brief 为批量注册提前预留索引容量
-         * @param additional_entries 新增条目数量
-         */
-        void __reserve_for_registration(size_t additional_entries) noexcept;
-
-        /**
-         * @brief 从模块索引中移除指定错误码
-         * @param module_group_id 模块组 ID
-         * @param identity_code 错误码 identity
-         */
-        void __erase_from_module_index(module_group_id_t module_group_id, code_t identity_code) noexcept;
-
-        /**
-         * @brief 从子系统索引中移除空的模块组条目
-         * @param subsys_id 子系统 ID
-         * @param module_group_id 模块组 ID
-         */
-        void __erase_from_subsystem_index(uint16_t subsys_id, module_group_id_t module_group_id) noexcept;
-
-        public:
         /**
          * @brief 注册错误码
          * @param code 错误码
@@ -276,7 +273,6 @@ namespace error_system::core {
          */
         const subsystem_module_info_t& get_subsystem_module_info(uint16_t subsys_id, uint16_t module_id) const noexcept;
 
-        public:
         /**
          * @brief 设置重复处理策略
          * @param policy 重复处理策略

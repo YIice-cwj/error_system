@@ -19,7 +19,7 @@ namespace error_system::utils::detail {
      * @details 定义JSON词法分析器相关的操作，如解析JSON字符串为JSON字典
      */
     class json_lexer_t {
-        public:
+    public:
         /**
          * @brief JSON词法分析器的token类型枚举
          * @details
@@ -40,11 +40,11 @@ namespace error_system::utils::detail {
          * @details 定义JSON词法分析器的token结构体，包含token类型和token值
          */
         struct token_t {
-            token_type_t type;  // token类型
+            token_type_t type{token_type_t::eof};  // token类型
             std::string value;  // 保存解析后的字符串内容
         };
 
-        private:
+    private:
         std::string_view json_str_{};
 
         size_t pos_{0};
@@ -52,15 +52,15 @@ namespace error_system::utils::detail {
          * @brief 跳过JSON字符串中的空格字符
          * @details 跳过JSON字符串中的空格字符，直到遇到非空格字符
          */
-        void __skip_whitespace() noexcept;
+        void skip_whitespace_() noexcept;
 
         /**
          * @brief 解析JSON字符串中的字符串token
          * @details 解析JSON字符串中的字符串token，直到遇到非字符串字符
          */
-        token_t __parse_string() noexcept;
+        token_t parse_string_() noexcept;
 
-        public:
+    public:
         /**
          * @brief 构造函数
          * @details 构造函数，初始化JSON字符串
@@ -68,7 +68,7 @@ namespace error_system::utils::detail {
          */
         explicit json_lexer_t(std::string_view json_str) noexcept;
 
-        ~json_lexer_t() = default;
+        ~json_lexer_t() noexcept = default;
         json_lexer_t(const json_lexer_t&) = default;
         json_lexer_t& operator=(const json_lexer_t&) = default;
         json_lexer_t(json_lexer_t&&) noexcept = default;

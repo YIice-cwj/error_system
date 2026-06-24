@@ -32,15 +32,15 @@ namespace error_system::utils {
      */
     template <typename T, typename Processor>
     class async_queue_t {
-        public:
-        using value_type = T;
-        using pointer = value_type*;
-        using const_pointer = const value_type*;
-        using reference = value_type&;
-        using const_reference = const value_type&;
+    public:
+        using value_type_t = T;
+        using pointer_t = value_type_t*;
+        using const_pointer_t = const value_type_t*;
+        using reference_t = value_type_t&;
+        using const_reference_t = const value_type_t&;
         using processor_t = Processor;
 
-        private:
+    private:
         processor_t processor_;
         std::queue<T> queue_;
         mutable std::mutex mutex_;
@@ -49,18 +49,18 @@ namespace error_system::utils {
         std::atomic<bool> running_{false};
         size_t max_size_{0};
 
-        private:
+    private:
         /**
          * @brief 启动后台工作线程
          * @details 使用 CAS 保证仅启动一次，线程安全
          */
-        void __start() noexcept {
+        void start_() noexcept {
             bool expected = false;
             if (running_.compare_exchange_strong(expected, true)) {
                 try {
-                    worker_ = std::thread(&async_queue_t::__worker_loop, this);
+                    worker_ = std::thread(&async_queue_t::worker_loop_, this);
                 } catch (...) {
-                    std::fprintf(stderr, "[async_queue] __start: failed to create worker thread\n");
+                    std::fprintf(stderr, "[async_queue] start_: failed to create worker thread\n");
                     running_.store(false);
                 }
             }
@@ -72,7 +72,7 @@ namespace error_system::utils {
          *          必须在设置 running_ = false 之后再 notify，否则 worker 可能
          *          因 running_ 仍为 true 而回到 wait 状态，造成 join 死锁。
          */
-        void __stop() noexcept {
+        void stop_() noexcept {
             if (!running_.load()) {
                 return;
             }
@@ -88,9 +88,9 @@ namespace error_system::utils {
          * @details 阻塞等待队列有数据或退出信号，取出任务后调用处理器。
          *          处理器异常被捕获并忽略，不影响工作线程继续运行。
          */
-        void __worker_loop() noexcept {
+        void worker_loop_() noexcept {
             while (running_.load()) {
-                value_type item;
+                value_type_t item;
                 {
                     std::unique_lock<std::mutex> lock(mutex_);
                     cv_.wait(lock, [this] {
@@ -110,7 +110,7 @@ namespace error_system::utils {
             }
         }
 
-        public:
+    public:
         /**
          * @brief 构造函数
          * @param processor 任务处理器，对每个出队元素调用 processor(item)
@@ -122,7 +122,7 @@ namespace error_system::utils {
          * @brief 析构函数，自动停止工作线程
          */
         ~async_queue_t() noexcept {
-            __stop();
+            stop_();
         }
 
         async_queue_t(const async_queue_t&) = delete;
@@ -139,9 +139,9 @@ namespace error_system::utils {
          * @param item 要处理的任务（移动语义）
          * @return bool 是否成功入队
          */
-        bool enqueue(value_type item) noexcept {
+        bool enqueue(value_type_t item) noexcept {
             if (!running_.load()) {
-                __start();
+                start_();
             }
             {
                 std::lock_guard<std::mutex> lock(mutex_);

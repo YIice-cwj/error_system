@@ -7,7 +7,7 @@ namespace error_system::core {
      * @param raw_code 错误码原始值
      * @return bool 是否继续注册流程
      */
-    bool error_registry_t::__handle_duplicate_skip(code_t /*raw_code*/) noexcept {
+    bool error_registry_t::handle_duplicate_skip_(code_t /*raw_code*/) noexcept {
         return false;
     }
 
@@ -16,14 +16,14 @@ namespace error_system::core {
      * @param raw_code 错误码原始值
      * @return bool 是否继续注册流程
      */
-    bool error_registry_t::__handle_duplicate_overwrite(code_t raw_code) noexcept {
+    bool error_registry_t::handle_duplicate_overwrite_(code_t raw_code) noexcept {
         auto primary_it = primary_index_.find(raw_code);
         if (primary_it == primary_index_.end()) {
             return true;
         }
 
         const uint64_t old_group_id = error_code_t{raw_code}.get_module_group_id();
-        __erase_from_module_index(old_group_id, raw_code);
+        erase_from_module_index_(old_group_id, raw_code);
         name_index_.erase(primary_it->second.name);
         primary_index_.erase(primary_it);
         return true;
@@ -34,7 +34,7 @@ namespace error_system::core {
      * @param raw_code 错误码原始值
      * @return bool 是否继续注册流程
      */
-    bool error_registry_t::__handle_duplicate_warn(code_t raw_code) noexcept {
+    bool error_registry_t::handle_duplicate_warn_(code_t raw_code) noexcept {
         auto it = primary_index_.find(raw_code);
         if (it == primary_index_.end()) {
             return false;
@@ -50,19 +50,19 @@ namespace error_system::core {
      * @param raw_code 错误码原始值
      * @return bool 是否继续注册流程
      */
-    bool error_registry_t::__apply_duplicate_policy(code_t raw_code) noexcept {
+    bool error_registry_t::apply_duplicate_policy_(code_t raw_code) noexcept {
         switch (duplicate_policy_) {
             case duplicate_policy_t::skip:
-                return __handle_duplicate_skip(raw_code);
+                return handle_duplicate_skip_(raw_code);
             case duplicate_policy_t::overwrite:
-                return __handle_duplicate_overwrite(raw_code);
+                return handle_duplicate_overwrite_(raw_code);
             case duplicate_policy_t::warn:
-                return __handle_duplicate_warn(raw_code);
+                return handle_duplicate_warn_(raw_code);
         }
         return false;
     }
 
-    void error_registry_t::__reserve_for_registration(size_t additional_entries) noexcept {
+    void error_registry_t::reserve_for_registration_(size_t additional_entries) noexcept {
         if (additional_entries == 0) {
             return;
         }
@@ -72,7 +72,7 @@ namespace error_system::core {
         module_index_.reserve(module_index_.size() + (additional_entries / 8) + 1);
     }
 
-    void error_registry_t::__erase_from_module_index(module_group_id_t module_group_id, code_t identity_code) noexcept {
+    void error_registry_t::erase_from_module_index_(module_group_id_t module_group_id, code_t identity_code) noexcept {
         auto mod_it = module_index_.find(module_group_id);
         if (mod_it == module_index_.end()) {
             return;
@@ -85,7 +85,7 @@ namespace error_system::core {
         }
     }
 
-    void error_registry_t::__erase_from_subsystem_index(uint16_t subsys_id,
+    void error_registry_t::erase_from_subsystem_index_(uint16_t subsys_id,
                                                         module_group_id_t module_group_id) noexcept {
         auto it = subsystem_index_.find(subsys_id);
         if (it == subsystem_index_.end()) {
@@ -148,13 +148,13 @@ namespace error_system::core {
                                           const std::string_view name,
                                           const std::string_view description) noexcept {
         std::unique_lock<std::shared_mutex> lock(index_mutex_);
-        __reserve_for_registration(1);
+        reserve_for_registration_(1);
         module_index_[code.get_module_group_id()].reserve(module_index_[code.get_module_group_id()].size() + 1);
 
         code_t identity_code = code.get_identity_code();
         auto it = primary_index_.find(identity_code);
         if (it != primary_index_.end()) {
-            if (!__apply_duplicate_policy(identity_code)) {
+            if (!apply_duplicate_policy_(identity_code)) {
                 return;
             }
         }
@@ -189,7 +189,7 @@ namespace error_system::core {
             return 0;
         }
         std::unique_lock<std::shared_mutex> lock(index_mutex_);
-        __reserve_for_registration(codes.size());
+        reserve_for_registration_(codes.size());
 
         std::unordered_map<module_group_id_t, size_t> module_group_counts;
         module_group_counts.reserve((codes.size() / 8) + 1);
@@ -206,7 +206,7 @@ namespace error_system::core {
             code_t identity_code = codes[i].get_identity_code();
             auto it = primary_index_.find(identity_code);
             if (it != primary_index_.end()) {
-                if (!__apply_duplicate_policy(identity_code)) {
+                if (!apply_duplicate_policy_(identity_code)) {
                     continue;
                 }
             }
@@ -249,11 +249,10 @@ namespace error_system::core {
         }
         uint64_t group_id = code.get_module_group_id();
         name_index_.erase(it->second.name);
-        __erase_from_module_index(group_id, identity_code);
+        erase_from_module_index_(group_id, identity_code);
 
-        // 若模块组已空，同步清理子系统索引
         if (module_index_.find(group_id) == module_index_.end()) {
-            __erase_from_subsystem_index(code.get_subsys(), group_id);
+            erase_from_subsystem_index_(code.get_subsys(), group_id);
         }
 
         primary_index_.erase(it);
@@ -286,9 +285,9 @@ namespace error_system::core {
 
         error_code_t code{identity_code};
         uint64_t group_id = code.get_module_group_id();
-        __erase_from_module_index(group_id, identity_code);
+        erase_from_module_index_(group_id, identity_code);
         if (module_index_.find(group_id) == module_index_.end()) {
-            __erase_from_subsystem_index(code.get_subsys(), group_id);
+            erase_from_subsystem_index_(code.get_subsys(), group_id);
         }
 
         primary_index_.erase(primary_it);
@@ -313,7 +312,7 @@ namespace error_system::core {
             }
         }
         uint16_t subsys_id = static_cast<uint16_t>((module_group_id >> 32) & 0xFFFF);
-        __erase_from_subsystem_index(subsys_id, module_group_id);
+        erase_from_subsystem_index_(subsys_id, module_group_id);
 
         module_index_.erase(mod_it);
     }

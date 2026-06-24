@@ -1,4 +1,5 @@
 #include "error_system/core/error_context.h"
+
 #include "error_system/plugin/plugin_registry.h"
 
 using error_system::config::error_config_t;
@@ -248,7 +249,7 @@ namespace error_system::core {
         plugin::plugin_registry_t::instance().notify_error(context);
     }
 
-    void error_context_t::__finalize_runtime_features() noexcept {
+    void error_context_t::finalize_runtime_features_() noexcept {
         const bool validation_enabled = error_config_t::is_validation_enabled();
         const bool stacktrace_enabled = error_config_t::is_stacktrace_enabled();
         const bool location_enabled = error_config_t::is_source_location_enabled();
@@ -273,18 +274,18 @@ namespace error_system::core {
         }();
 
         if (validation_enabled) {
-            __fill_validation_fields();
+            fill_validation_fields_();
         }
 
         if constexpr (error_config_t::STACKTRACE_ENABLED) {
             if (stacktrace_enabled && code_.get_level() >= stacktrace_level) {
-                __fill_stacktrace();
+                fill_stacktrace_();
             }
         }
 
         if constexpr (error_config_t::LOCATION_ENABLED) {
             if (location_enabled) {
-                __fill_source_location(short_filename_enabled);
+                fill_source_location_(short_filename_enabled);
             }
         }
 
@@ -295,7 +296,7 @@ namespace error_system::core {
         }
     }
 
-    void error_context_t::__fill_validation_fields() noexcept {
+    void error_context_t::fill_validation_fields_() noexcept {
         if (error_registry_t::instance().is_registered(code_)) {
             return;
         }
@@ -304,19 +305,19 @@ namespace error_system::core {
         try {
             message.insert(0, "[UNREGISTERED CODE] ");
         } catch (...) {
-            std::fprintf(stderr, "[error_context] __fill_validation_fields: std::bad_alloc\n");
+            std::fprintf(stderr, "[error_context] fill_validation_fields_: std::bad_alloc\n");
         }
         code_ = error_code_t(error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFF);
         metadata_ = error_registry_t::instance().get_info(code_);
     }
 
-    void error_context_t::__fill_stacktrace() noexcept {
+    void error_context_t::fill_stacktrace_() noexcept {
         if constexpr (error_config_t::STACKTRACE_ENABLED) {
             stack_frames = utils::stack_trace_utils_t::generate(1);
         }
     }
 
-    void error_context_t::__fill_source_location(bool short_filename_enabled) noexcept {
+    void error_context_t::fill_source_location_(bool short_filename_enabled) noexcept {
         if constexpr (error_config_t::LOCATION_ENABLED) {
             file_name = short_filename_enabled ? utils::extract_short_filename(source_location.file_name())
                                                : source_location.file_name();

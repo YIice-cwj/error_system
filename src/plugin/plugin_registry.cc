@@ -1,6 +1,8 @@
 #include "error_system/plugin/plugin_registry.h"
-#include <algorithm>
+
 #include <cstdio>
+
+#include <algorithm>
 
 namespace error_system::plugin {
 
@@ -10,7 +12,7 @@ namespace error_system::plugin {
         }
 
         i_error_plugin_t* raw_ptr = plugin.get();
-        __update_snapshot([raw_ptr](std::vector<i_error_plugin_t*>& snapshot) {
+        update_snapshot_([raw_ptr](std::vector<i_error_plugin_t*>& snapshot) {
             auto it = std::find_if(snapshot.begin(), snapshot.end(), [raw_ptr](const i_error_plugin_t* registered) {
                 return registered->name() == raw_ptr->name();
             });
@@ -34,7 +36,7 @@ namespace error_system::plugin {
 
     void plugin_registry_t::register_plugin_ref(i_error_plugin_t& plugin) noexcept {
         i_error_plugin_t* raw_ptr = &plugin;
-        __update_snapshot([raw_ptr](std::vector<i_error_plugin_t*>& snapshot) {
+        update_snapshot_([raw_ptr](std::vector<i_error_plugin_t*>& snapshot) {
             auto it = std::find_if(snapshot.begin(), snapshot.end(), [raw_ptr](const i_error_plugin_t* registered) {
                 return registered->name() == raw_ptr->name();
             });
@@ -47,7 +49,7 @@ namespace error_system::plugin {
     }
 
     void plugin_registry_t::unregister_plugin(std::string_view name) noexcept {
-        __update_snapshot([name](std::vector<i_error_plugin_t*>& snapshot) {
+        update_snapshot_([name](std::vector<i_error_plugin_t*>& snapshot) {
             snapshot.erase(std::remove_if(snapshot.begin(), snapshot.end(),
                                           [name](const i_error_plugin_t* plugin) { return plugin->name() == name; }),
                            snapshot.end());
@@ -92,7 +94,7 @@ namespace error_system::plugin {
     }
 
     void plugin_registry_t::clear() noexcept {
-        __update_snapshot([](std::vector<i_error_plugin_t*>& snapshot) { snapshot.clear(); });
+        update_snapshot_([](std::vector<i_error_plugin_t*>& snapshot) { snapshot.clear(); });
         owned_plugins_.clear();
     }
 

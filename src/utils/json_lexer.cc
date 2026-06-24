@@ -6,7 +6,7 @@ namespace error_system::utils::detail {
      * @brief 跳过JSON字符串中的空格字符
      * @details 跳过JSON字符串中的空格字符，直到遇到非空格字符
      */
-    void json_lexer_t::__skip_whitespace() noexcept {
+    void json_lexer_t::skip_whitespace_() noexcept {
         while (pos_ < json_str_.size() && std::isspace(static_cast<unsigned char>(json_str_[pos_]))) {
             ++pos_;
         }
@@ -16,12 +16,12 @@ namespace error_system::utils::detail {
      * @brief 解析JSON字符串中的字符串token
      * @details 解析JSON字符串中的字符串token，直到遇到非字符串字符
      */
-    json_lexer_t::token_t json_lexer_t::__parse_string() noexcept {
+    json_lexer_t::token_t json_lexer_t::parse_string_() noexcept {
         std::string str{};
         try {
             str.reserve(32);
         } catch (...) {
-            std::fprintf(stderr, "[json_lexer] __parse_string: reserve failed\n");
+            std::fprintf(stderr, "[json_lexer] parse_string_: reserve failed\n");
         }
         ++pos_;
 
@@ -98,7 +98,7 @@ namespace error_system::utils::detail {
      * @return token_t 下一个token
      */
     json_lexer_t::token_t json_lexer_t::next() noexcept {
-        __skip_whitespace();
+        skip_whitespace_();
         if (pos_ >= json_str_.size()) {
             return {token_type_t::eof, ""};
         }
@@ -122,7 +122,7 @@ namespace error_system::utils::detail {
         }
 
         if (c == '"') {
-            return __parse_string();
+            return parse_string_();
         }
 
         return {token_type_t::invalid, {}};

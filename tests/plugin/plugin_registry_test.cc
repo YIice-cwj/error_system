@@ -298,7 +298,7 @@ namespace error_system::plugin {
         level_filter_plugin_t plugin;
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
-        // 注册不同等级的错误码，防止 __fill_validation_fields 替换为哨兵值
+        // 注册不同等级的错误码，防止 fill_validation_fields_ 替换为哨兵值
         error_system::core::error_registry_t::instance().register_error(
             core::error_code_t(core::error_level_t::debug, domain::system_domain_t::application, 1, 1, 1),
             "TEST_DEBUG_1", "debug test");

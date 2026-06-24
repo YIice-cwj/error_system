@@ -61,7 +61,7 @@ namespace error_system::core {
          */
         static constexpr size_t PAYLOAD_SSO_CAPACITY = 4;
 
-        private:
+    private:
         error_code_t code_{};
         /**
          * @brief 缓存的元数据指针
@@ -82,7 +82,7 @@ namespace error_system::core {
          */
         uint8_t payload_count_{0};
 
-        public:
+    public:
         std::string message{};
         std::shared_ptr<error_context_t> cause{nullptr};
         std::vector<std::string> stack_frames{};
@@ -99,28 +99,28 @@ namespace error_system::core {
          * @brief 执行运行时特性初始化
          * @details 根据全局配置依次完成：错误码校验 → 堆栈捕获 → 源位置记录 → 插件通知
          */
-        void __finalize_runtime_features() noexcept;
+        void finalize_runtime_features_() noexcept;
 
         /**
          * @brief 校验错误码是否已注册
          * @details 若未注册且校验开关开启，则将 code 替换为 fatal 级别的未注册标记
          */
-        void __fill_validation_fields() noexcept;
+        void fill_validation_fields_() noexcept;
         
         /**
          * @brief 捕获当前调用栈
          * @details 仅在 ERROR_SYSTEM_ENABLE_STACKTRACE 宏开启且等级达到阈值时执行
          */
-        void __fill_stacktrace() noexcept;
+        void fill_stacktrace_() noexcept;
         
         /**
          * @brief 填充源位置信息
          * @details 从构造时捕获的 source_location 成员提取文件名、函数名和行号
          * @param short_filename_enabled 是否使用短文件名模式
          */
-        void __fill_source_location(bool short_filename_enabled) noexcept;
+        void fill_source_location_(bool short_filename_enabled) noexcept;
 
-        public: 
+    public:
         constexpr error_context_t() noexcept = default;
 
         /**
@@ -158,6 +158,7 @@ namespace error_system::core {
         error_context_t& operator=(const error_context_t&) = delete;
         error_context_t& operator=(error_context_t&&) = delete;
         error_context_t(error_context_t&&) noexcept = default;
+        ~error_context_t() noexcept = default;
 
         /**
          * @brief 构造函数（直接接受错误码，自动捕获调用位置和堆栈）
@@ -188,7 +189,7 @@ namespace error_system::core {
             if (is_success()) {
                 return;
             }
-            __finalize_runtime_features();
+            finalize_runtime_features_();
         }
 
         /**

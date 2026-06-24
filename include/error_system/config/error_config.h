@@ -69,7 +69,7 @@ namespace error_system::config {
          * @details 保护自定义格式化函数的互斥锁
          * @return std::shared_mutex& 共享锁引用
          */
-        static std::shared_mutex& __get_formatter_mutex() noexcept {
+        static std::shared_mutex& get_formatter_mutex_() noexcept {
             static std::shared_mutex mutex;
             return mutex;
         }
@@ -79,7 +79,7 @@ namespace error_system::config {
          * @details 保护全局配置项并发访问的互斥锁
          * @return formatter_callback_t& 自定义格式化函数引用
          */
-        static formatter_callback_t& __get_custom_formatter() noexcept {
+        static formatter_callback_t& get_custom_formatter_() noexcept {
             static formatter_callback_t formatter{nullptr};
             return formatter;
         }
@@ -89,7 +89,7 @@ namespace error_system::config {
          * @details 保护全局配置项并发访问的互斥锁
          * @return std::atomic<core::error_level_t>& 触发堆栈追踪的最小错误等级引用
          */
-        static std::atomic<core::error_level_t>& __get_min_stacktrace_level() noexcept {
+        static std::atomic<core::error_level_t>& get_min_stacktrace_level_() noexcept {
             static std::atomic<core::error_level_t> level{core::error_level_t::error};
             return level;
         }
@@ -99,7 +99,7 @@ namespace error_system::config {
          * @details 保护全局配置项并发访问的互斥锁
          * @return std::atomic<bool>& 是否启用堆栈追踪标志位引用
          */
-        static std::atomic<bool>& __get_flag_stacktrace() noexcept {
+        static std::atomic<bool>& get_flag_stacktrace_() noexcept {
             static std::atomic<bool> enabled{true};
             return enabled;
         }
@@ -109,7 +109,7 @@ namespace error_system::config {
          * @details 保护全局配置项并发访问的互斥锁
          * @return std::atomic<bool>& 是否启用错误码验证标志位引用
          */
-        static std::atomic<bool>& __get_flag_validation() noexcept {
+        static std::atomic<bool>& get_flag_validation_() noexcept {
             static std::atomic<bool> enabled{true};
             return enabled;
         }
@@ -119,7 +119,7 @@ namespace error_system::config {
          * @details 保护全局配置项并发访问的互斥锁
          * @return std::atomic<bool>& 是否启用错误源位置(文件/行号)标志位引用
          */
-        static std::atomic<bool>& __get_flag_source_location() noexcept {
+        static std::atomic<bool>& get_flag_source_location_() noexcept {
             static std::atomic<bool> enabled{true};
             return enabled;
         }
@@ -129,7 +129,7 @@ namespace error_system::config {
          * @details 保护全局配置项并发访问的互斥锁
          * @return std::atomic<bool>& 是否启用缩短源文件名标志位引用
          */
-        static std::atomic<bool>& __get_flag_short_filename() noexcept {
+        static std::atomic<bool>& get_flag_short_filename_() noexcept {
             static std::atomic<bool> enabled{true};
             return enabled;
         }
@@ -137,7 +137,7 @@ namespace error_system::config {
         /**
          * @brief 是否启用文本输出模式（子系统和模块名称）
          */
-        static std::atomic<bool>& __get_flag_text_output() noexcept {
+        static std::atomic<bool>& get_flag_text_output_() noexcept {
             static std::atomic<bool> enabled{true};
             return enabled;
         }
@@ -145,7 +145,7 @@ namespace error_system::config {
         /**
          * @brief 通知模式存储
          */
-        static std::atomic<notify_mode_t>& __get_notify_mode() noexcept {
+        static std::atomic<notify_mode_t>& get_notify_mode_() noexcept {
             static std::atomic<notify_mode_t> mode{notify_mode_t::sync};
             return mode;
         }
@@ -153,7 +153,7 @@ namespace error_system::config {
         /**
          * @brief per-code 堆栈追踪等级映射表
          */
-        static std::unordered_map<uint64_t, core::error_level_t>& __get_per_code_stacktrace_map() noexcept {
+        static std::unordered_map<uint64_t, core::error_level_t>& get_per_code_stacktrace_map_() noexcept {
             static std::unordered_map<uint64_t, core::error_level_t> map;
             return map;
         }
@@ -161,21 +161,25 @@ namespace error_system::config {
         /**
          * @brief per-code 配置专用互斥锁
          */
-        static std::shared_mutex& __get_per_code_mutex() noexcept {
+        static std::shared_mutex& get_per_code_mutex_() noexcept {
             static std::shared_mutex mutex;
             return mutex;
         }
 
     public:
         error_config_t() = delete;
+        error_config_t(const error_config_t&) = delete;
+        error_config_t& operator=(const error_config_t&) = delete;
+        error_config_t(error_config_t&&) = delete;
+        error_config_t& operator=(error_config_t&&) = delete;
 
         /**
          * @brief 设置自定义格式化函数
          * @param formatter 自定义格式化函数
          */
         static void set_custom_formatter(formatter_callback_t formatter) noexcept {
-            std::unique_lock<std::shared_mutex> lock(__get_formatter_mutex());
-            __get_custom_formatter() = std::move(formatter);
+            std::unique_lock<std::shared_mutex> lock(get_formatter_mutex_());
+            get_custom_formatter_() = std::move(formatter);
         }
 
         /**
@@ -184,8 +188,8 @@ namespace error_system::config {
          * @return formatter_callback_t 格式化函数副本
          */
         static formatter_callback_t get_custom_formatter() noexcept {
-            std::shared_lock<std::shared_mutex> lock(__get_formatter_mutex());
-            return __get_custom_formatter();
+            std::shared_lock<std::shared_mutex> lock(get_formatter_mutex_());
+            return get_custom_formatter_();
         }
 
         /**
@@ -196,7 +200,7 @@ namespace error_system::config {
          */
         static core::error_level_t get_stacktrace_level() noexcept {
             if constexpr (STACKTRACE_ENABLED) {
-                return __get_min_stacktrace_level().load();
+                return get_min_stacktrace_level_().load();
             } else {
                 return core::error_level_t::warn;
             }
@@ -210,7 +214,7 @@ namespace error_system::config {
          */
         static void set_stacktrace_level(core::error_level_t level) noexcept {
             if constexpr (STACKTRACE_ENABLED) {
-                __get_min_stacktrace_level().store(level);
+                get_min_stacktrace_level_().store(level);
             }
         }
 
@@ -222,7 +226,7 @@ namespace error_system::config {
          */
         static void set_enable_stacktrace(bool enable) noexcept {
             if constexpr (STACKTRACE_ENABLED) {
-                __get_flag_stacktrace().store(enable);
+                get_flag_stacktrace_().store(enable);
             }
         }
 
@@ -235,7 +239,7 @@ namespace error_system::config {
          */
         static bool is_stacktrace_enabled() noexcept {
             if constexpr (STACKTRACE_ENABLED) {
-                return __get_flag_stacktrace().load();
+                return get_flag_stacktrace_().load();
             } else {
                 return false;
             }
@@ -248,7 +252,7 @@ namespace error_system::config {
          */
         static void set_enable_validation(bool enable) noexcept {
             if constexpr (VALIDATION_ENABLED) {
-                __get_flag_validation().store(enable);
+                get_flag_validation_().store(enable);
             }
         }
 
@@ -260,7 +264,7 @@ namespace error_system::config {
          */
         static bool is_validation_enabled() noexcept {
             if constexpr (VALIDATION_ENABLED) {
-                return __get_flag_validation().load();
+                return get_flag_validation_().load();
             } else {
                 return false;
             }
@@ -273,7 +277,7 @@ namespace error_system::config {
          */
         static void set_enable_source_location(bool enable) noexcept {
             if constexpr (LOCATION_ENABLED) {
-                __get_flag_source_location().store(enable);
+                get_flag_source_location_().store(enable);
             }
         }
 
@@ -285,7 +289,7 @@ namespace error_system::config {
          */
         static bool is_source_location_enabled() noexcept {
             if constexpr (LOCATION_ENABLED) {
-                return __get_flag_source_location().load();
+                return get_flag_source_location_().load();
             } else {
                 return false;
             }
@@ -298,7 +302,7 @@ namespace error_system::config {
          */
         static void set_enable_short_filename(bool enable) noexcept {
             if constexpr (LOCATION_ENABLED) {
-                __get_flag_short_filename().store(enable);
+                get_flag_short_filename_().store(enable);
             }
         }
 
@@ -310,7 +314,7 @@ namespace error_system::config {
          */
         static bool is_short_filename_enabled() noexcept {
             if constexpr (LOCATION_ENABLED) {
-                return __get_flag_short_filename().load();
+                return get_flag_short_filename_().load();
             } else {
                 return false;
             }
@@ -322,7 +326,7 @@ namespace error_system::config {
          * @param enable 是否开启文本输出
          */
         static void set_enable_text_output(bool enable) noexcept {
-            __get_flag_text_output().store(enable);
+            get_flag_text_output_().store(enable);
         }
 
         /**
@@ -330,7 +334,7 @@ namespace error_system::config {
          * @return bool 是否开启文本输出
          */
         static bool is_text_output_enabled() noexcept {
-            return __get_flag_text_output().load();
+            return get_flag_text_output_().load();
         }
 
         /**
@@ -338,7 +342,7 @@ namespace error_system::config {
          * @param mode 通知模式
          */
         static void set_notify_mode(notify_mode_t mode) noexcept {
-            __get_notify_mode().store(mode);
+            get_notify_mode_().store(mode);
         }
 
         /**
@@ -346,7 +350,7 @@ namespace error_system::config {
          * @return notify_mode_t 当前通知模式
          */
         static notify_mode_t get_notify_mode() noexcept {
-            return __get_notify_mode().load();
+            return get_notify_mode_().load();
         }
 
         /**
@@ -359,8 +363,8 @@ namespace error_system::config {
          */
         static void set_per_code_stacktrace_level(uint64_t identity_code, core::error_level_t level) noexcept {
             if constexpr (STACKTRACE_ENABLED) {
-                std::unique_lock<std::shared_mutex> lock(__get_per_code_mutex());
-                __get_per_code_stacktrace_map()[identity_code] = level;
+                std::unique_lock<std::shared_mutex> lock(get_per_code_mutex_());
+                get_per_code_stacktrace_map_()[identity_code] = level;
             }
         }
 
@@ -372,8 +376,8 @@ namespace error_system::config {
          */
         static std::optional<core::error_level_t> get_per_code_stacktrace_level(uint64_t identity_code) noexcept {
             if constexpr (STACKTRACE_ENABLED) {
-                std::shared_lock<std::shared_mutex> lock(__get_per_code_mutex());
-                const auto& map = __get_per_code_stacktrace_map();
+                std::shared_lock<std::shared_mutex> lock(get_per_code_mutex_());
+                const auto& map = get_per_code_stacktrace_map_();
                 auto it = map.find(identity_code);
                 if (it != map.end()) {
                     return it->second;
@@ -389,8 +393,8 @@ namespace error_system::config {
          */
         static void remove_per_code_stacktrace_level(uint64_t identity_code) noexcept {
             if constexpr (STACKTRACE_ENABLED) {
-                std::unique_lock<std::shared_mutex> lock(__get_per_code_mutex());
-                __get_per_code_stacktrace_map().erase(identity_code);
+                std::unique_lock<std::shared_mutex> lock(get_per_code_mutex_());
+                get_per_code_stacktrace_map_().erase(identity_code);
             }
         }
     };
