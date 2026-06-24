@@ -23,7 +23,7 @@
 
 /**
  * @file stack_trace_utils.h
- * @brief 堆栈跟踪工具 error_exception_test.cc
+ * @brief 堆栈跟踪工具
  * @details 提供当前线程的函数调用栈抓取功能
  * @author yiice
  * @version 2.3.0
@@ -33,9 +33,13 @@
 namespace error_system::utils {
 
     class stack_trace_utils_t {
-        public:
+    public:
         stack_trace_utils_t() = delete;
-        ~stack_trace_utils_t() = delete;
+        ~stack_trace_utils_t() noexcept = delete;
+        stack_trace_utils_t(const stack_trace_utils_t&) = delete;
+        stack_trace_utils_t& operator=(const stack_trace_utils_t&) = delete;
+        stack_trace_utils_t(stack_trace_utils_t&&) = delete;
+        stack_trace_utils_t& operator=(stack_trace_utils_t&&) = delete;
 
         /**
          * @brief 抓取当前线程的函数调用栈

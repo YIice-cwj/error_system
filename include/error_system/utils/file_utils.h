@@ -15,9 +15,9 @@
 namespace error_system::utils {
 
     class file_utils_t {
-        public:
+    public:
         file_utils_t() = delete;
-        ~file_utils_t() = delete;
+        ~file_utils_t() noexcept = delete;
         file_utils_t(const file_utils_t&) = delete;
         file_utils_t& operator=(const file_utils_t&) = delete;
         file_utils_t(file_utils_t&&) = delete;

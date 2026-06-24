@@ -85,7 +85,7 @@ namespace error_system::utils {
      * @details 定义字符串相关的工具函数，用于处理字符串
      */
     class string_utils_t {
-        private:
+    private:
         struct format_appender_t {
             std::string& result;
             std::string_view format;
@@ -171,10 +171,10 @@ namespace error_system::utils {
             }
         };
 
-        private:
+    private:
         string_utils_t() = delete;
 
-        ~string_utils_t() = delete;
+        ~string_utils_t() noexcept = delete;
 
         string_utils_t(const string_utils_t&) = delete;
 
@@ -184,7 +184,7 @@ namespace error_system::utils {
 
         string_utils_t& operator=(string_utils_t&&) = delete;
 
-        public:
+    public:
         /**
          * @brief 计算字符串的哈希值
          * @details 计算字符串的哈希值
@@ -193,16 +193,16 @@ namespace error_system::utils {
          * @return size_t 字符串的哈希值
          */
         static constexpr uint64_t hash(std::string_view string) noexcept {
-            constexpr uint64_t fnv_prime = 1099511628211ULL;
-            constexpr uint64_t fnv_offset_basis = 14695981039346656037ULL;
-            uint64_t hash = fnv_offset_basis;
+            constexpr uint64_t FNV_PRIME = 1099511628211ULL;
+            constexpr uint64_t FNV_OFFSET_BASIS = 14695981039346656037ULL;
+            uint64_t hash_value = FNV_OFFSET_BASIS;
 
             for (char ch : string) {
-                hash ^= static_cast<uint64_t>(ch);
-                hash *= fnv_prime;
+                hash_value ^= static_cast<uint64_t>(ch);
+                hash_value *= FNV_PRIME;
             }
 
-            return hash;
+            return hash_value;
         }
 
         /**

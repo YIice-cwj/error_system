@@ -55,6 +55,8 @@ namespace error_system::plugin {
         error_router_plugin_t& operator=(error_router_plugin_t&&) = delete;
 
     public:
+        ~error_router_plugin_t() noexcept override = default;
+
         /**
          * @brief 获取插件名称
          * @details 用于标识插件，注册时若名称重复则替换旧插件

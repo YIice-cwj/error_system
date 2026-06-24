@@ -15,11 +15,11 @@
 namespace error_system::core {
 
     class error_exception_t : public std::exception {
-        private:
+    private:
         error_context_t context_;
         std::string cached_message_;
 
-        public:
+    public:
         /**
          * @brief 从错误上下文构造异常
          */

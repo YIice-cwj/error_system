@@ -25,13 +25,13 @@ namespace error_system::core {
      */
     template <typename T>
     class result_t {
-        public:
+    public:
         using value_type_t = T;
 
-        private:
+    private:
         std::variant<value_type_t, error_context_t> value_or_error_;
 
-        public:
+    public:
         /**
          * @brief 错误构造工厂函数（推荐）
          * @details 替代直接使用构造函数构造错误结果，语义更清晰。
@@ -99,8 +99,9 @@ namespace error_system::core {
         result_t(result_t&&) noexcept = default;
         result_t& operator=(const result_t&) noexcept = delete;
         result_t& operator=(result_t&&) noexcept = delete;
+        ~result_t() noexcept = default;
 
-        public:
+    public:
         /**
          * @brief 检查结果是否为错误
          * @return bool 如果结果为错误则返回true
@@ -477,13 +478,13 @@ namespace error_system::core {
      */
     template <>
     class result_t<void> {
-        public:
+    public:
         using value_type_t = void;
 
-        private:
+    private:
         error_context_t error_context_;
 
-        public:
+    public:
         /**
          * @brief 构造函数
          */
@@ -493,6 +494,7 @@ namespace error_system::core {
         result_t(result_t&&) noexcept = default;
         result_t& operator=(const result_t&) noexcept = delete;
         result_t& operator=(result_t&&) noexcept = delete;
+        ~result_t() noexcept = default;
 
         /**
          * @brief 错误构造工厂函数

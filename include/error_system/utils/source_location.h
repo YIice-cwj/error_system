@@ -31,17 +31,17 @@ namespace error_system::utils {
      * @details 定义源文件位置相关的操作，如获取源文件位置
      */
     class source_location_t {
-        private:
+    private:
         const char* file_name_{"unknown"};
 
         const char* function_name_{"unknown"};
 
         uint32_t line_{0};
 
-        public:
+    public:
         constexpr source_location_t() noexcept = default;
 
-        ~source_location_t() = default;
+        ~source_location_t() noexcept = default;
         source_location_t(const source_location_t&) = default;
         source_location_t& operator=(const source_location_t&) = default;
         source_location_t(source_location_t&&) noexcept = default;

@@ -61,18 +61,22 @@ namespace error_system::utils {
 #elif defined(_WIN32)
 
         struct dbghelp_manager_t {
-            HANDLE process;
+            HANDLE process = GetCurrentProcess();
             std::mutex mutex;
 
-            dbghelp_manager_t() {
-                process = GetCurrentProcess();
+            dbghelp_manager_t() noexcept {
                 SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
                 SymInitialize(process, nullptr, TRUE);
             }
 
-            ~dbghelp_manager_t() { SymCleanup(process); }
+            ~dbghelp_manager_t() noexcept { SymCleanup(process); }
 
-            static dbghelp_manager_t& instance() {
+            dbghelp_manager_t(const dbghelp_manager_t&) = delete;
+            dbghelp_manager_t& operator=(const dbghelp_manager_t&) = delete;
+            dbghelp_manager_t(dbghelp_manager_t&&) = delete;
+            dbghelp_manager_t& operator=(dbghelp_manager_t&&) = delete;
+
+            static dbghelp_manager_t& instance() noexcept {
                 static dbghelp_manager_t instance;
                 return instance;
             }
@@ -171,12 +175,12 @@ namespace error_system::utils {
         return {};
 
 #else
-        constexpr int hard_max_frames = 32;
+        constexpr int HARD_MAX_FRAMES = 32;
         if (max_frames <= 0) {
             return {};
         }
-        if (max_frames > hard_max_frames) {
-            max_frames = hard_max_frames;
+        if (max_frames > HARD_MAX_FRAMES) {
+            max_frames = HARD_MAX_FRAMES;
         }
         std::vector<void*> callstack(static_cast<size_t>(max_frames));
         int frames = capture_os_frames(callstack.data(), max_frames);

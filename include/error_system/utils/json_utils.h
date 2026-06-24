@@ -19,10 +19,10 @@ namespace error_system::utils {
      * @details 定义JSON字典相关的操作，如解析、序列化、验证等
      */
     class json_dict_t {
-        private:
+    private:
         std::unordered_map<std::string, std::string> dict_{};
 
-        public:
+    public:
         json_dict_t() noexcept = default;
 
         ~json_dict_t() noexcept = default;
@@ -35,7 +35,7 @@ namespace error_system::utils {
 
         json_dict_t& operator=(json_dict_t&&) noexcept = default;
 
-        public:
+    public:
         /**
          * @brief 获取JSON字典中的字符串值
          * @details 根据键获取JSON字典中的字符串值
@@ -84,7 +84,7 @@ namespace error_system::utils {
          */
         size_t size() const noexcept;
 
-        public:
+    public:
         /**
          * @brief 从文件加载JSON字典
          * @details 从指定文件路径加载JSON字典，若文件不存在或解析失败则返回空可选

@@ -22,8 +22,13 @@ namespace error_system::core {
      *          其他场景使用 error_code_t 便捷构造函数
      */
     class error_builder_t {
-        public:
+    public:
         error_builder_t() = delete;
+
+        error_builder_t(const error_builder_t&) = delete;
+        error_builder_t& operator=(const error_builder_t&) = delete;
+        error_builder_t(error_builder_t&&) = delete;
+        error_builder_t& operator=(error_builder_t&&) = delete;
 
         /**
          * @brief 通过枚举类型构造错误码（编译期类型安全）

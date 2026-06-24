@@ -32,7 +32,7 @@ namespace error_system::core {
      * @details 封装64位错误码，提供字段解析和访问功能。基于位移操作实现，100% 避免严格别名规则与位域排布未定义行为。
      */
     class error_code_t {
-        private:
+    private:
         code_t code_{0};
 
         static constexpr uint32_t SIGN_SHIFT = 63;      // 符号位位移
@@ -51,7 +51,7 @@ namespace error_system::core {
         static constexpr uint64_t MODULE_MASK = 0xFFFFULL;  // 16 bits
         static constexpr uint64_t NUMBER_MASK = 0xFFFFULL;  // 16 bits
 
-        public:
+    public:
         /**
          * @brief 默认构造函数
          * @details 默认构造为成功码（sign=1），所有字段为 0
@@ -61,6 +61,8 @@ namespace error_system::core {
         constexpr error_code_t(error_code_t&&) noexcept = default;
         constexpr error_code_t& operator=(const error_code_t&) noexcept = default;
         constexpr error_code_t& operator=(error_code_t&&) noexcept = default;
+
+        ~error_code_t() noexcept = default;
 
         /**
          * @brief 创建成功码的工厂方法
