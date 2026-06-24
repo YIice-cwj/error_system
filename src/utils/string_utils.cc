@@ -1,4 +1,5 @@
 #include "error_system/utils/string_utils.h"
+
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -109,12 +110,12 @@ namespace error_system::utils {
      * @return std::string_view 移除空白符后的字符串视图
      */
     std::string_view string_utils_t::trim(std::string_view string) noexcept {
-        constexpr std::string_view whitespace = " \t\n\r\f\v";
-        size_t first = string.find_first_not_of(whitespace);
+        constexpr std::string_view WHITESPACE = " \t\n\r\f\v";
+        size_t first = string.find_first_not_of(WHITESPACE);
         if (first == std::string_view::npos) {
             return {};
         }
-        size_t last = string.find_last_not_of(whitespace);
+        size_t last = string.find_last_not_of(WHITESPACE);
         return string.substr(first, (last - first + 1));
     }
 
