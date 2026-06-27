@@ -122,12 +122,12 @@ namespace error_system::utils {
             std::lock_guard<std::mutex> lock(dbghelp.mutex);
 
             char buffer[sizeof(SYMBOL_INFO) + MAX_SYM_NAME * sizeof(TCHAR)];
-            PSYMBOL_INFO symbol = (PSYMBOL_INFO)buffer;
+            PSYMBOL_INFO symbol = reinterpret_cast<PSYMBOL_INFO>(buffer);
             symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
             symbol->MaxNameLen = MAX_SYM_NAME;
 
             for (int i = skip_frames; i < frames; i++) {
-                DWORD64 address = (DWORD64)(callstack[i]);
+                DWORD64 address = reinterpret_cast<DWORD64>(callstack[i]);
                 DWORD64 displacement = 0;
 
                 if (SymFromAddr(dbghelp.process, address, &displacement, symbol)) {

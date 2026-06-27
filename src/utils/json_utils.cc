@@ -1,5 +1,10 @@
 #include "error_system/utils/json_utils.h"
 
+#include <array>
+#include <charconv>
+#include <cstdint>
+#include <cstdio>
+
 #include "error_system/utils/file_utils.h"
 #include "error_system/utils/json_lexer.h"
 
@@ -274,5 +279,64 @@ namespace error_system::utils {
             std::fprintf(stderr, "[json_utils] parse exception caught and ignored\n");
             return std::nullopt;
         }
+    }
+
+    /**
+     * @brief 安全转义 JSON 字符串
+     * @details 将包含控制字符的字符串转义为合法的 JSON 字符串格式
+     * @param value 输入字符串视图
+     * @return std::string 转义后的字符串
+     */
+    std::string json_serializer_t::escape_json(std::string_view value) noexcept {
+        std::string result{};
+        try {
+            result.reserve(value.size() + 16);
+        } catch (...) {
+            std::fprintf(stderr, "[json_serializer] escape_json: reserve failed\n");
+        }
+
+        for (char c : value) {
+            switch (c) {
+                case '"':
+                    result.append("\\\"");
+                    break;
+                case '\\':
+                    result.append("\\\\");
+                    break;
+                case '\b':
+                    result.append("\\b");
+                    break;
+                case '\f':
+                    result.append("\\f");
+                    break;
+                case '\n':
+                    result.append("\\n");
+                    break;
+                case '\r':
+                    result.append("\\r");
+                    break;
+                case '\t':
+                    result.append("\\t");
+                    break;
+                default:
+                    if (static_cast<unsigned char>(c) < 0x20) {
+                        result.append("\\u00");
+                        std::array<char, 2> buffer;
+                        auto [ptr, ec] =
+                            std::to_chars(buffer.data(), buffer.data() + buffer.size(), static_cast<uint8_t>(c), 16);
+                        if (ec == std::errc{}) {
+                            if (ptr - buffer.data() == 1) {
+                                result.push_back('0');
+                                result.push_back(buffer[0]);
+                            } else {
+                                result.append(buffer.data(), 2);
+                            }
+                        }
+                    } else {
+                        result.push_back(c);
+                    }
+            }
+        }
+        return result;
     }
 }  // namespace error_system::utils

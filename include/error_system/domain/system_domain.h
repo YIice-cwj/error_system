@@ -27,7 +27,7 @@ namespace error_system::domain {
         database = 3,     // 数据库层 (MySQL, PostgreSQL等)
         application = 4,  // 内部业务应用/微服务层 (90% 的业务错误码填这个)
         third_party = 5,  // 外部/第三方依赖层 (专门用于记录调用外部 API 失败)
-        _count            // 占位符：表示系统域的总数
+        count             // 占位符：表示系统域的总数（仅用于边界判断，不作为合法域值）
     };
 
     /**
@@ -55,7 +55,7 @@ namespace error_system::domain {
      * @return const char* 系统域字符串
      */
     constexpr const char* to_string(system_domain_t domain) noexcept {
-        if (to_int(domain) >= to_int(system_domain_t::_count)) {
+        if (to_int(domain) >= to_int(system_domain_t::count)) {
             return "unknown";
         }
         return SYSTEM_DOMAIN_STRING[to_int(domain)];
@@ -68,7 +68,7 @@ namespace error_system::domain {
      * @return bool 系统域整数是否有效
      */
     constexpr bool is_valid(uint8_t domain) noexcept {
-        return domain < to_int(system_domain_t::_count);
+        return domain < to_int(system_domain_t::count);
     }
 
     /**

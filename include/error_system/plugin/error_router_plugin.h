@@ -114,11 +114,12 @@ namespace error_system::plugin {
     public:
         /**
          * @brief 获取路由插件单例
+         * @details 使用 std::call_once + std::once_flag 保证线程安全初始化（规范 22）
          * @return error_router_plugin_t& 插件的全局单例引用
          */
-        static error_router_plugin_t& instance() noexcept {
-            static error_router_plugin_t instance;
-            return instance;
-        }
+        static error_router_plugin_t& instance() noexcept;
+
+    private:
+        static std::once_flag once_flag_;
     };
 }  // namespace error_system::plugin

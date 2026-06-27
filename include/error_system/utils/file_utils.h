@@ -16,6 +16,12 @@ namespace error_system::utils {
 
     class file_utils_t {
     public:
+        /**
+         * @brief 读取文件的最大字节数阈值
+         * @details 超过此大小的文件将被拒绝读取，避免内存耗尽攻击
+         */
+        static constexpr size_t MAX_READ_FILE_SIZE = 64 * 1024 * 1024;  // 64 MB
+
         file_utils_t() = delete;
         ~file_utils_t() noexcept = delete;
         file_utils_t(const file_utils_t&) = delete;
@@ -24,9 +30,10 @@ namespace error_system::utils {
         file_utils_t& operator=(file_utils_t&&) = delete;
         /**
          * @brief 读取文件内容
-         * @details 从指定文件路径读取文件内容，返回文件内容的字符串表示
+         * @details 从指定文件路径读取文件内容，返回文件内容的字符串表示。
+         *          文件大小超过 MAX_READ_FILE_SIZE 时返回 nullopt，避免 OOM
          * @param path 文件路径
-         * @return std::optional<std::string> 文件内容的字符串表示，如果文件不存在则返回空可选
+         * @return std::optional<std::string> 文件内容的字符串表示，如果文件不存在或过大则返回空可选
          */
         static std::optional<std::string> read_file(const std::filesystem::path& path) noexcept;
 

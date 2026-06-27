@@ -102,4 +102,33 @@ namespace error_system::utils {
         static std::optional<json_dict_t> parse(const std::string& json_content) noexcept;
     };
 
+    /**
+     * @brief JSON 序列化工具
+     * @details 提供 JSON 字符串转义等序列化辅助功能
+     * @since 2.4.0
+     */
+    class json_serializer_t {
+    private:
+        json_serializer_t() = delete;
+
+        ~json_serializer_t() noexcept = delete;
+
+        json_serializer_t(const json_serializer_t&) = delete;
+
+        json_serializer_t& operator=(const json_serializer_t&) = delete;
+
+        json_serializer_t(json_serializer_t&&) = delete;
+
+        json_serializer_t& operator=(json_serializer_t&&) = delete;
+
+    public:
+        /**
+         * @brief 安全转义 JSON 字符串
+         * @details 将包含控制字符的字符串转义为合法的 JSON 字符串格式
+         * @param value 输入字符串视图
+         * @return std::string 转义后的字符串
+         */
+        static std::string escape_json(std::string_view value) noexcept;
+    };
+
 }  // namespace error_system::utils

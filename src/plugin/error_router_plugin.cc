@@ -1,8 +1,11 @@
 #include "error_system/plugin/error_router_plugin.h"
 
 #include <cstdio>
+#include <mutex>
 
 namespace error_system::plugin {
+
+    std::once_flag error_router_plugin_t::once_flag_;
 
     /**
      * @brief 获取插件名称
@@ -124,5 +127,14 @@ namespace error_system::plugin {
     void error_router_plugin_t::unregister_handler_by_domain(domain::system_domain_t domain) noexcept {
         std::unique_lock<std::shared_mutex> lock(mutex_);
         domain_handlers_.erase(domain);
+    }
+
+    error_router_plugin_t& error_router_plugin_t::instance() noexcept {
+        static error_router_plugin_t* instance_ptr = nullptr;
+        std::call_once(once_flag_, [] {
+            static error_router_plugin_t instance;
+            instance_ptr = &instance;
+        });
+        return *instance_ptr;
     }
 }  // namespace error_system::plugin

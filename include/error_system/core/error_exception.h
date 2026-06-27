@@ -2,6 +2,7 @@
 #include <string>
 
 #include "error_system/core/error_context.h"
+#include "error_system/core/error_context_serializer.h"
 
 /**
  * @file error_exception.h
@@ -24,7 +25,7 @@ namespace error_system::core {
          * @brief 从错误上下文构造异常
          */
         explicit error_exception_t(error_context_t context) noexcept
-            : context_(std::move(context)), cached_message_(context_.to_string()) {}
+            : context_(std::move(context)), cached_message_(error_context_serializer_t::to_string(context_)) {}
 
         error_exception_t(const error_exception_t&) = default;
 

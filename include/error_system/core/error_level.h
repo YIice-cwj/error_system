@@ -94,12 +94,17 @@ namespace error_system::core {
 
     /**
      * @brief 错误等级字符串
-     * @details 用于将错误等级转换为错误等级字符串
+     * @details 用于将错误等级转换为错误等级字符串。
+     *          内置范围校验，非法值返回 "unknown"，避免数组越界
      * @param level 错误等级
      * @return const char* 错误等级字符串
      */
     constexpr const char* to_string(error_level_t level) noexcept {
-        return ERROR_LEVEL_STRING[to_int(level)];
+        const uint8_t idx = to_int(level);
+        if (!is_valid(idx)) {
+            return "unknown";
+        }
+        return ERROR_LEVEL_STRING[idx];
     }
 
     /**

@@ -3,6 +3,7 @@
 #include <ostream>
 
 #include "error_system/core/error_context.h"
+#include "error_system/core/error_context_serializer.h"
 
 /**
  * @file error_formatter.h
@@ -23,7 +24,7 @@ namespace error_system::core {
  */
 inline std::ostream& operator<<(std::ostream& os, const error_context_t& context) noexcept {
     try {
-        return os << context.to_string();
+        return os << error_context_serializer_t::to_string(context);
     } catch (...) {
         std::fprintf(stderr, "[error_formatter] operator<< threw exception\n");
         return os;

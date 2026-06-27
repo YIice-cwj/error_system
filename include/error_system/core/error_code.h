@@ -136,34 +136,40 @@ namespace error_system::core {
 
         /**
          * @brief 设置符号位
+         * @details 仅接受 0/1，超范围值视为 0（错误），避免污染其他位
          * @param sign 符号位值 (0 = 错误，1 = 成功)
          */
         constexpr void set_sign(uint8_t sign) noexcept {
-            code_ = (code_ & ~SIGN_MASK) | (static_cast<code_t>(sign) << SIGN_SHIFT);
+            const code_t v = (sign <= 1) ? static_cast<code_t>(sign) : 0ULL;
+            code_ = (code_ & ~(SIGN_MASK << SIGN_SHIFT)) | (v << SIGN_SHIFT);
         }
 
         /**
          * @brief 设置预留位
+         * @details 仅接受 0-7，超范围值视为 0，避免污染其他位
          * @param reserved 预留位值 (0-7)
          */
         constexpr void set_reserved(uint8_t reserved) noexcept {
-            code_ = (code_ & ~RESERVED_MASK) | (static_cast<code_t>(reserved) << RESERVED_SHIFT);
+            const code_t v = (reserved <= 7) ? static_cast<code_t>(reserved) : 0ULL;
+            code_ = (code_ & ~(RESERVED_MASK << RESERVED_SHIFT)) | (v << RESERVED_SHIFT);
         }
 
         /**
          * @brief 获取错误等级
+         * @details 通过 from_int 校验，非法值（5-15）回退为 fatal，避免下游越界
          * @return error_level_t 错误等级 (bits 59-56)
          */
         constexpr error_level_t get_level() const noexcept {
-            return static_cast<error_level_t>((code_ >> LEVEL_SHIFT) & LEVEL_MASK);
+            return from_int(static_cast<uint8_t>((code_ >> LEVEL_SHIFT) & LEVEL_MASK));
         }
 
         /**
          * @brief 获取系统域
+         * @details 通过 from_int 校验，非法值回退为 none，避免下游越界
          * @return domain::system_domain_t 系统域 (bits 55-48)
          */
         constexpr domain::system_domain_t get_system() const noexcept {
-            return static_cast<domain::system_domain_t>((code_ >> SYSTEM_SHIFT) & SYSTEM_MASK);
+            return domain::from_int(static_cast<uint8_t>((code_ >> SYSTEM_SHIFT) & SYSTEM_MASK));
         }
 
         /**
@@ -208,9 +214,10 @@ namespace error_system::core {
 
         /**
          * @brief 类型转换运算符
-         * @details 支持将隐式或显式地将 error_code_t 转换为 64位整型 code_t
+         * @details 支持显式地将 error_code_t 转换为 64位整型 code_t。
+         *          标记 explicit 防止意外隐式转换(如 if(error_code) 的布尔上下文误用)。
          */
-        constexpr operator code_t() const noexcept { return code_; }
+        explicit constexpr operator code_t() const noexcept { return code_; }
 
         /**
          * @brief 相等比较运算符

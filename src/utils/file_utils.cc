@@ -1,14 +1,16 @@
 #include "error_system/utils/file_utils.h"
 
+#include <cstdio>
 #include <fstream>
 
 namespace error_system::utils {
 
     /**
      * @brief 读取文件内容
-     * @details 从指定文件路径读取文件内容，返回文件内容的字符串表示
+     * @details 从指定文件路径读取文件内容，返回文件内容的字符串表示。
+     *          文件大小超过 MAX_READ_FILE_SIZE 时返回 nullopt，避免内存耗尽
      * @param path 文件路径
-     * @return std::optional<std::string> 文件内容的字符串表示，如果文件不存在则返回空可选
+     * @return std::optional<std::string> 文件内容的字符串表示，如果文件不存在或过大则返回空可选
      */
     std::optional<std::string> file_utils_t::read_file(const std::filesystem::path& path) noexcept {
         std::error_code ec{};
@@ -22,13 +24,19 @@ namespace error_system::utils {
         }
 
         try {
-            std::string content{};
             file.seekg(0, std::ios::end);
             auto size = file.tellg();
             if (size < 0) {
                 return std::nullopt;
             }
+            // 文件大小校验，避免恶意大文件导致 OOM
+            if (static_cast<size_t>(size) > MAX_READ_FILE_SIZE) {
+                std::fprintf(stderr, "[file_utils] read_file: file too large (%lld bytes, max=%zu)\n",
+                             static_cast<long long>(size), MAX_READ_FILE_SIZE);
+                return std::nullopt;
+            }
 
+            std::string content{};
             content.resize(static_cast<size_t>(size));
             file.seekg(0, std::ios::beg);
             file.read(content.data(), static_cast<std::streamsize>(content.size()));

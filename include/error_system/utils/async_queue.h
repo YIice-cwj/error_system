@@ -51,32 +51,20 @@ namespace error_system::utils {
 
     private:
         /**
-         * @brief 启动后台工作线程
-         * @details 使用 CAS 保证仅启动一次，线程安全
-         */
-        void start_() noexcept {
-            bool expected = false;
-            if (running_.compare_exchange_strong(expected, true)) {
-                try {
-                    worker_ = std::thread(&async_queue_t::worker_loop_, this);
-                } catch (...) {
-                    std::fprintf(stderr, "[async_queue] start_: failed to create worker thread\n");
-                    running_.store(false);
-                }
-            }
-        }
-
-        /**
          * @brief 停止后台工作线程
-         * @details 先设置退出标志，再唤醒线程，最后 join 等待退出。
+         * @details 先在锁内设置退出标志，再释放锁后唤醒线程并 join，
+         *          避免 worker 在持锁状态下被唤醒后又阻塞获取锁造成死锁。
          *          必须在设置 running_ = false 之后再 notify，否则 worker 可能
          *          因 running_ 仍为 true 而回到 wait 状态，造成 join 死锁。
          */
         void stop_() noexcept {
-            if (!running_.load()) {
-                return;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (!running_.load()) {
+                    return;
+                }
+                running_.store(false);
             }
-            running_.store(false);
             cv_.notify_all();
             if (worker_.joinable()) {
                 worker_.join();
@@ -89,14 +77,14 @@ namespace error_system::utils {
          *          处理器异常被捕获并忽略，不影响工作线程继续运行。
          */
         void worker_loop_() noexcept {
-            while (running_.load()) {
+            while (true) {
                 value_type_t item;
                 {
                     std::unique_lock<std::mutex> lock(mutex_);
                     cv_.wait(lock, [this] {
                         return !queue_.empty() || !running_.load();
                     });
-                    if (!running_.load() && queue_.empty()) {
+                    if (queue_.empty() && !running_.load()) {
                         return;
                     }
                     item = std::move(queue_.front());
@@ -135,16 +123,25 @@ namespace error_system::utils {
 
         /**
          * @brief 将任务推入队列
-         * @details 首次调用时自动启动工作线程。若队列已满则拒绝。
+         * @details 首次调用时在锁内启动工作线程，避免「CAS 成功但线程创建失败」窗口期
+         *          内其他线程看到 running_=true 却无 worker 处理任务（启动竞态）。
+         *          若队列已满则拒绝。
          * @param item 要处理的任务（移动语义）
          * @return bool 是否成功入队
          */
         bool enqueue(value_type_t item) noexcept {
-            if (!running_.load()) {
-                start_();
-            }
             {
                 std::lock_guard<std::mutex> lock(mutex_);
+                if (!running_.load()) {
+                    // 在锁内创建线程：保证 running_=true 与 worker_ 就绪原子可见
+                    try {
+                        worker_ = std::thread(&async_queue_t::worker_loop_, this);
+                        running_.store(true);
+                    } catch (...) {
+                        std::fprintf(stderr, "[async_queue] enqueue: failed to create worker thread\n");
+                        return false;  // 线程启动失败，拒绝入队
+                    }
+                }
                 if (max_size_ > 0 && queue_.size() >= max_size_) {
                     return false;
                 }

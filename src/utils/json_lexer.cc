@@ -1,6 +1,66 @@
 #include "error_system/utils/json_lexer.h"
 
+#include <cstdint>
+#include <optional>
+
 namespace error_system::utils::detail {
+
+    namespace {
+        /**
+         * @brief 将 Unicode 码点编码为 UTF-8 并追加到目标字符串
+         * @details 根据 RFC 3629 将码点 [0, 0x10FFFF] 编码为 1~4 字节 UTF-8。
+         *          非法码点（>0x10FFFF 或落在 0xD800~0xDFFF 代理区）被静默丢弃。
+         * @param out 输出字符串
+         * @param codepoint 待编码的 Unicode 码点
+         */
+        void append_utf8(std::string& out, uint32_t codepoint) noexcept {
+            if (codepoint > 0x10FFFF || (codepoint >= 0xD800 && codepoint <= 0xDFFF)) {
+                return; 
+            }
+            if (codepoint <= 0x7F) {
+                out.push_back(static_cast<char>(codepoint));
+            } else if (codepoint <= 0x7FF) {
+                out.push_back(static_cast<char>(0xC0 | (codepoint >> 6)));
+                out.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+            } else if (codepoint <= 0xFFFF) {
+                out.push_back(static_cast<char>(0xE0 | (codepoint >> 12)));
+                out.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+                out.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+            } else {
+                out.push_back(static_cast<char>(0xF0 | (codepoint >> 18)));
+                out.push_back(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
+                out.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+                out.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+            }
+        }
+
+        /**
+         * @brief 从 json_str[pos+1..pos+4] 解析 4 位十六进制 \u 转义
+         * @details 调用方需保证 pos+4 < json_str.size()。成功时返回码点并前移 pos；
+         *          失败（非法十六进制）返回 std::nullopt。
+         * @param json_str 源 JSON 串
+         * @param pos 指向 'u' 的位置，函数返回时 pos 指向最后一个十六进制位
+         * @return std::optional<uint32_t> 解析出的码点；失败返回空
+         */
+        std::optional<uint32_t> parse_hex4(std::string_view json_str, size_t& pos) noexcept {
+            uint32_t codepoint = 0;
+            for (int i = 1; i <= 4; ++i) {
+                const char hex = json_str[pos + static_cast<size_t>(i)];
+                codepoint <<= 4;
+                if (hex >= '0' && hex <= '9') {
+                    codepoint |= static_cast<uint32_t>(hex - '0');
+                } else if (hex >= 'a' && hex <= 'f') {
+                    codepoint |= static_cast<uint32_t>(hex - 'a' + 10);
+                } else if (hex >= 'A' && hex <= 'F') {
+                    codepoint |= static_cast<uint32_t>(hex - 'A' + 10);
+                } else {
+                    return std::nullopt;
+                }
+            }
+            pos += 4;
+            return codepoint;
+        }
+    }  // namespace
 
     /**
      * @brief 跳过JSON字符串中的空格字符
@@ -14,7 +74,11 @@ namespace error_system::utils::detail {
 
     /**
      * @brief 解析JSON字符串中的字符串token
-     * @details 解析JSON字符串中的字符串token，直到遇到非字符串字符
+     * @details 解析JSON字符串中的字符串token，直到遇到非字符串字符。
+     *          支持 \uXXXX 转义，并正确处理 UTF-16 代理对（RFC 8259 §7）：
+     *          高代理（0xD800~0xDBFF）后必须紧跟 \uXXXX 低代理（0xDC00~0xDFFF），
+     *          二者组合为 0x10000~0x10FFFF 范围内的码点，再编码为 UTF-8。
+     *          孤立的代理码点按非法码点处理（不输出）。
      */
     json_lexer_t::token_t json_lexer_t::parse_string_() noexcept {
         std::string str{};
@@ -39,36 +103,24 @@ namespace error_system::utils::detail {
                 } else if (json_str_[pos_] == 'f') {
                     str += '\f';
                 } else if (json_str_[pos_] == 'u' && pos_ + 4 < json_str_.size()) {
-                    uint32_t codepoint = 0;
-                    for (int i = 1; i <= 4; ++i) {
-                        char hex = json_str_[pos_ + static_cast<size_t>(i)];
-                        codepoint <<= 4;
-                        if (hex >= '0' && hex <= '9') {
-                            codepoint |= static_cast<uint32_t>(hex - '0');
-                        } else if (hex >= 'a' && hex <= 'f') {
-                            codepoint |= static_cast<uint32_t>(hex - 'a' + 10);
-                        } else if (hex >= 'A' && hex <= 'F') {
-                            codepoint |= static_cast<uint32_t>(hex - 'A' + 10);
-                        } else {
-                            return {token_type_t::invalid, ""};
+                    auto hex_opt = parse_hex4(json_str_, pos_);
+                    if (!hex_opt) {
+                        return {token_type_t::invalid, ""};
+                    }
+                    uint32_t codepoint = *hex_opt;
+                    if (codepoint >= 0xD800 && codepoint <= 0xDBFF &&
+                        pos_ + 6 < json_str_.size() &&
+                        json_str_[pos_ + 1] == '\\' && json_str_[pos_ + 2] == 'u') {
+                        size_t low_pos = pos_ + 2;
+                        auto low_opt = parse_hex4(json_str_, low_pos);
+                        if (low_opt && *low_opt >= 0xDC00 && *low_opt <= 0xDFFF) {
+                            codepoint = 0x10000 +
+                                ((codepoint - 0xD800) << 10) +
+                                (*low_opt - 0xDC00);
+                            pos_ = low_pos;
                         }
                     }
-                    pos_ += 4;
-                    if (codepoint <= 0x7F) {
-                        str += static_cast<char>(codepoint);
-                    } else if (codepoint <= 0x7FF) {
-                        str += static_cast<char>(0xC0 | (codepoint >> 6));
-                        str += static_cast<char>(0x80 | (codepoint & 0x3F));
-                    } else if (codepoint <= 0xFFFF) {
-                        str += static_cast<char>(0xE0 | (codepoint >> 12));
-                        str += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
-                        str += static_cast<char>(0x80 | (codepoint & 0x3F));
-                    } else if (codepoint <= 0x10FFFF) {
-                        str += static_cast<char>(0xF0 | (codepoint >> 18));
-                        str += static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F));
-                        str += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
-                        str += static_cast<char>(0x80 | (codepoint & 0x3F));
-                    }
+                    append_utf8(str, codepoint);
                 } else {
                     str += json_str_[pos_];
                 }
