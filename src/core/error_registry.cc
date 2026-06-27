@@ -1,66 +1,11 @@
 #include "error_system/core/error_registry.h"
 
+#include <mutex>
+#include <new>
+
 namespace error_system::core {
 
-    /**
-     * @brief 处理 skip 策略
-     * @param raw_code 错误码原始值
-     * @return bool 是否继续注册流程
-     */
-    bool error_registry_t::handle_duplicate_skip_(code_t /*raw_code*/) noexcept {
-        return false;
-    }
-
-    /**
-     * @brief 处理 overwrite 策略
-     * @param raw_code 错误码原始值
-     * @return bool 是否继续注册流程
-     */
-    bool error_registry_t::handle_duplicate_overwrite_(code_t raw_code) noexcept {
-        auto primary_it = primary_index_.find(raw_code);
-        if (primary_it == primary_index_.end()) {
-            return true;
-        }
-
-        const uint64_t old_group_id = error_code_t{raw_code}.get_module_group_id();
-        erase_from_module_index_(old_group_id, raw_code);
-        name_index_.erase(primary_it->second.name);
-        primary_index_.erase(primary_it);
-        return true;
-    }
-
-    /**
-     * @brief 处理 warn 策略
-     * @param raw_code 错误码原始值
-     * @return bool 是否继续注册流程
-     */
-    bool error_registry_t::handle_duplicate_warn_(code_t raw_code) noexcept {
-        auto it = primary_index_.find(raw_code);
-        if (it == primary_index_.end()) {
-            return false;
-        }
-        if (duplicate_warn_callback_) {
-            duplicate_warn_callback_(raw_code, it->second);
-        }
-        return false;
-    }
-
-    /**
-     * @brief 根据当前策略处理重复错误码
-     * @param raw_code 错误码原始值
-     * @return bool 是否继续注册流程
-     */
-    bool error_registry_t::apply_duplicate_policy_(code_t raw_code) noexcept {
-        switch (duplicate_policy_) {
-            case duplicate_policy_t::skip:
-                return handle_duplicate_skip_(raw_code);
-            case duplicate_policy_t::overwrite:
-                return handle_duplicate_overwrite_(raw_code);
-            case duplicate_policy_t::warn:
-                return handle_duplicate_warn_(raw_code);
-        }
-        return false;
-    }
+    std::once_flag error_registry_t::once_flag_;
 
     void error_registry_t::reserve_for_registration_(size_t additional_entries) noexcept {
         if (additional_entries == 0) {
@@ -98,47 +43,6 @@ namespace error_system::core {
     }
 
     /**
-     * @brief 注册子系统/模块名称
-     * @param subsys_id 子系统 ID
-     * @param module_id 模块 ID
-     * @param subsystem_name 子系统名称
-     * @param module_name 模块名称
-     */
-    void error_registry_t::register_subsystem_module(uint16_t subsys_id,
-                                                     uint16_t module_id,
-                                                     const std::string_view subsystem_name,
-                                                     const std::string_view module_name) noexcept {
-        std::unique_lock<std::shared_mutex> lock(index_mutex_);
-        uint32_t key = (static_cast<uint32_t>(subsys_id) << 16) | module_id;
-        if (subsystem_module_index_.find(key) == subsystem_module_index_.end()) {
-            try {
-                subsystem_module_index_.emplace(
-                    key, subsystem_module_info_t{std::string(subsystem_name), std::string(module_name)});
-            } catch (...) {
-                fprintf(stderr, "[error_registry] register_subsystem_module: std::bad_alloc\n");
-            }
-        }
-    }
-
-    /**
-     * @brief 查询子系统/模块名称
-     * @param subsys_id 子系统 ID
-     * @param module_id 模块 ID
-     * @return const subsystem_module_info_t& 子系统/模块名称信息
-     */
-    const subsystem_module_info_t& error_registry_t::get_subsystem_module_info(uint16_t subsys_id,
-                                                                               uint16_t module_id) const noexcept {
-        std::shared_lock<std::shared_mutex> lock(index_mutex_);
-        uint32_t key = (static_cast<uint32_t>(subsys_id) << 16) | module_id;
-        auto it = subsystem_module_index_.find(key);
-        if (it != subsystem_module_index_.end()) {
-            return it->second;
-        }
-        static const subsystem_module_info_t unknown{"未知子系统", "未知模块"};
-        return unknown;
-    }
-
-    /**
      * @brief 注册错误码
      * @param code 错误码
      * @param name 错误码宏名称
@@ -149,14 +53,17 @@ namespace error_system::core {
                                           const std::string_view description) noexcept {
         std::unique_lock<std::shared_mutex> lock(index_mutex_);
         reserve_for_registration_(1);
-        module_index_[code.get_module_group_id()].reserve(module_index_[code.get_module_group_id()].size() + 1);
 
         code_t identity_code = code.get_identity_code();
         auto it = primary_index_.find(identity_code);
         if (it != primary_index_.end()) {
-            if (!apply_duplicate_policy_(identity_code)) {
+            if (!duplicate_handler_.apply_duplicate_policy(identity_code, &it->second)) {
                 return;
             }
+            const uint64_t old_group_id = error_code_t{identity_code}.get_module_group_id();
+            erase_from_module_index_(old_group_id, identity_code);
+            name_index_.erase(it->second.name);
+            primary_index_.erase(it);
         }
 
         try {
@@ -168,7 +75,13 @@ namespace error_system::core {
             fprintf(stderr, "[error_registry] register_error: std::bad_alloc\n");
             return;
         }
-        module_index_[code.get_module_group_id()].push_back(identity_code);
+        try {
+            auto& module_codes = module_index_[code.get_module_group_id()];
+            module_codes.reserve(module_codes.size() + 1);
+            module_codes.push_back(identity_code);
+        } catch (const std::bad_alloc&) {
+            fprintf(stderr, "[error_registry] register_error: module_index std::bad_alloc\n");
+        }
         {
             uint16_t subsys_id = code.get_subsys();
             subsystem_index_[subsys_id].insert(code.get_module_group_id());
@@ -196,9 +109,13 @@ namespace error_system::core {
         for (const auto& code : codes) {
             ++module_group_counts[code.get_module_group_id()];
         }
-        for (const auto& [module_group_id, count] : module_group_counts) {
-            auto& module_codes = module_index_[module_group_id];
-            module_codes.reserve(module_codes.size() + count);
+        try {
+            for (const auto& [module_group_id, count] : module_group_counts) {
+                auto& module_codes = module_index_[module_group_id];
+                module_codes.reserve(module_codes.size() + count);
+            }
+        } catch (const std::bad_alloc&) {
+            fprintf(stderr, "[error_registry] register_errors: module_index reserve std::bad_alloc\n");
         }
 
         size_t registered_count = 0;
@@ -206,9 +123,13 @@ namespace error_system::core {
             code_t identity_code = codes[i].get_identity_code();
             auto it = primary_index_.find(identity_code);
             if (it != primary_index_.end()) {
-                if (!apply_duplicate_policy_(identity_code)) {
+                if (!duplicate_handler_.apply_duplicate_policy(identity_code, &it->second)) {
                     continue;
                 }
+                const uint64_t old_group_id = error_code_t{identity_code}.get_module_group_id();
+                erase_from_module_index_(old_group_id, identity_code);
+                name_index_.erase(it->second.name);
+                primary_index_.erase(it);
             }
 
             try {
@@ -325,8 +246,8 @@ namespace error_system::core {
         decltype(primary_index_)().swap(primary_index_);
         decltype(name_index_)().swap(name_index_);
         decltype(module_index_)().swap(module_index_);
-        decltype(subsystem_module_index_)().swap(subsystem_module_index_);
         decltype(subsystem_index_)().swap(subsystem_index_);
+        subsystem_module_registry_.clear();
     }
 
     /**
@@ -340,30 +261,40 @@ namespace error_system::core {
     }
 
     /**
-     * @brief 通过 64 位错误码 获取详情
+     * @brief 通过 64 位错误码 获取详情（值副本，线程安全）
+     * @details 在锁内完成拷贝，避免锁释放后另一线程注销导致 use-after-free
      * @param code 错误码
-     * @return const error_metadata_t* 错误码元数据指针，若未注册则返回 nullptr
+     * @return std::optional<error_metadata_t> 错误码元数据副本，未注册返回 nullopt
      */
-    const error_metadata_t* error_registry_t::get_info(const error_code_t code) const noexcept {
+    std::optional<error_metadata_t> error_registry_t::get_info(const error_code_t code) const noexcept {
         std::shared_lock<std::shared_mutex> lock(index_mutex_);
         auto it = primary_index_.find(code.get_identity_code());
-        if (it != primary_index_.end()) {
-            return &it->second;
+        if (it == primary_index_.end()) {
+            return std::nullopt;
         }
-        return nullptr;
+        try {
+            return it->second;
+        } catch (...) {
+            fprintf(stderr, "[error_registry] get_info: std::bad_alloc\n");
+            return std::nullopt;
+        }
     }
 
     /**
-     * @brief 通过模块组 ID 获取所有错误码
+     * @brief 通过模块组 ID 获取所有错误码（值副本，线程安全）
+     * @details 在锁内完成拷贝，避免悬垂引用
      * @param module_group_id 模块组 ID
-     * @return std::vector<std::reference_wrapper<const error_metadata_t>> 模块组内所有错误码的元数据引用
+     * @return std::vector<error_metadata_t> 模块组内所有错误码的元数据副本
      */
-    std::vector<std::reference_wrapper<const error_metadata_t>>
+    std::vector<error_metadata_t>
     error_registry_t::get_errors_by_module(const module_group_id_t module_group_id) const noexcept {
         std::shared_lock<std::shared_mutex> lock(index_mutex_);
+        std::vector<error_metadata_t> errors;
         auto it = module_index_.find(module_group_id);
-        if (it != module_index_.end()) {
-            std::vector<std::reference_wrapper<const error_metadata_t>> errors;
+        if (it == module_index_.end()) {
+            return errors;
+        }
+        try {
             errors.reserve(it->second.size());
             for (code_t raw_code : it->second) {
                 auto primary_it = primary_index_.find(raw_code);
@@ -371,38 +302,44 @@ namespace error_system::core {
                     errors.push_back(primary_it->second);
                 }
             }
-            return errors;
+        } catch (...) {
+            fprintf(stderr, "[error_registry] get_errors_by_module: std::bad_alloc\n");
         }
-        return {};
+        return errors;
     }
 
     /**
-     * @brief 通过子系统 ID 获取该子系统下所有错误码
+     * @brief 通过子系统 ID 获取该子系统下所有错误码（值副本，线程安全）
+     * @details 在锁内完成拷贝，避免悬垂引用
      * @param subsys_id 子系统 ID
-     * @return std::vector<std::reference_wrapper<const error_metadata_t>> 子系统下所有错误码的元数据
+     * @return std::vector<error_metadata_t> 子系统下所有错误码的元数据副本
      */
-    std::vector<std::reference_wrapper<const error_metadata_t>>
+    std::vector<error_metadata_t>
     error_registry_t::get_errors_by_subsystem(uint16_t subsys_id) const noexcept {
         std::shared_lock<std::shared_mutex> lock(index_mutex_);
-        std::vector<std::reference_wrapper<const error_metadata_t>> errors;
+        std::vector<error_metadata_t> errors;
 
         auto it = subsystem_index_.find(subsys_id);
         if (it == subsystem_index_.end()) {
             return errors;
         }
 
-        for (module_group_id_t module_group_id : it->second) {
-            auto mod_it = module_index_.find(module_group_id);
-            if (mod_it == module_index_.end()) {
-                continue;
-            }
-            errors.reserve(errors.size() + mod_it->second.size());
-            for (code_t raw_code : mod_it->second) {
-                auto primary_it = primary_index_.find(raw_code);
-                if (primary_it != primary_index_.end()) {
-                    errors.emplace_back(primary_it->second);
+        try {
+            for (module_group_id_t module_group_id : it->second) {
+                auto mod_it = module_index_.find(module_group_id);
+                if (mod_it == module_index_.end()) {
+                    continue;
+                }
+                errors.reserve(errors.size() + mod_it->second.size());
+                for (code_t raw_code : mod_it->second) {
+                    auto primary_it = primary_index_.find(raw_code);
+                    if (primary_it != primary_index_.end()) {
+                        errors.push_back(primary_it->second);
+                    }
                 }
             }
+        } catch (...) {
+            fprintf(stderr, "[error_registry] get_errors_by_subsystem: std::bad_alloc\n");
         }
         return errors;
     }
@@ -427,4 +364,14 @@ namespace error_system::core {
         }
         return std::nullopt;
     }
+
+    error_registry_t& error_registry_t::instance() noexcept {
+        static error_registry_t* instance_ptr = nullptr;
+        std::call_once(once_flag_, [] {
+            static error_registry_t instance;
+            instance_ptr = &instance;
+        });
+        return *instance_ptr;
+    }
+
 }  // namespace error_system::core

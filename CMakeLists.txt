@@ -92,8 +92,12 @@ else()
 endif()
 
 set(SOURCE_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/duplicate_policy.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context_initializer.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context_serializer.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_registry.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/domain/subsystem_module_registry.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/error_router_plugin.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/plugin_registry.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/file_utils.cc

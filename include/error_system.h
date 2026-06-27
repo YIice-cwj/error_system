@@ -14,19 +14,26 @@
 // IWYU pragma: begin_exports
 
 // ─── Core ─────────────────────────────────────────────────────────────────────
+#include "error_system/core/duplicate_policy.h"
 #include "error_system/core/error_builder.h"
 #include "error_system/core/error_code.h"
 #include "error_system/core/error_context.h"
+#include "error_system/core/error_context_initializer.h"
+#include "error_system/core/error_context_serializer.h"
 #include "error_system/core/error_exception.h"
 #include "error_system/core/error_level.h"
 #include "error_system/core/error_registry.h"
 #include "error_system/core/result.h"
 // ─── Config ────────────────────────────────────────────────────────────────────
 #include "error_system/config/error_config.h"
+#include "error_system/config/feature_flags.h"
+#include "error_system/config/formatter_config.h"
+#include "error_system/config/stacktrace_config.h"
 // ─── Domain ───────────────────────────────────────────────────────────────────
 #include "error_system/domain/system_domain.h"
 
 // ─── Plugin ─────────────────────────────────────────────────────────────────────
+#include "error_system/plugin/async_notification_channel.h"
 #include "error_system/plugin/error_router_plugin.h"
 #include "error_system/plugin/i_error_plugin.h"
 #include "error_system/plugin/plugin_registry.h"
@@ -34,6 +41,9 @@
 // ─── Utils ─────────────────────────────────────────────────────────────────────
 #include "error_system/utils/async_queue.h"
 #include "error_system/utils/error_formatter.h"
+#include "error_system/utils/json_utils.h"
 #include "error_system/utils/stack_trace_utils.h"
 #include "error_system/utils/source_location.h"
+#include "error_system/utils/string_format.h"
+#include "error_system/utils/string_utils.h"
 // IWYU pragma: end_exports

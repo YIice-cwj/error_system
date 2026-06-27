@@ -6,171 +6,25 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <vector>
 
 /**
  * @file string_utils.h
  * @brief 字符串工具函数
- * @details 定义字符串相关的工具函数，用于处理字符串
+ * @details 定义字符串相关的工具函数，用于处理字符串的哈希、变换、解析等操作
  * @author yiice
- * @version 2.3.0
- * @date 2026-04-27
+ * @version 3.0.0
+ * @date 2026-06-27
  * @copyright Copyright (c) 2026
  */
 namespace error_system::utils {
     /**
-     * @brief 检查类型 T 是否具有成员函数 to_string()
-     * @tparam T 待检查类型
-     * @details 基于 SFINAE 检测 T::to_string() 是否存在
-     *          默认模板（无匹配时）继承 std::false_type
-     * @return bool 是否有成员函数 to_string()
-     */
-    template <typename T, typename = std::void_t<>>
-    struct is_member_to_string_t : std::false_type {};
-
-    /**
-     * @brief 检查类型 T 是否具有成员函数 to_string()
-     * @tparam T 待检查类型
-     * @details 基于 SFINAE 检测 T::to_string() 是否存在
-     *          默认模板（无匹配时）继承 std::false_type
-     * @return bool 是否有成员函数 to_string()
-     */
-    template <typename T>
-    struct is_member_to_string_t<T, std::void_t<decltype(std::declval<const T&>().to_string())>>
-        : std::is_convertible<decltype(std::declval<const T&>().to_string()), std::string_view> {};
-    /**
-     * @brief 检查类型 T 是否具有全局函数 to_string()
-     * @tparam T 待检查类型
-     * @details 基于 SFINAE 检测 to_string(T) 是否存在
-     *          默认模板（无匹配时）继承 std::false_type
-     * @return bool 是否有全局函数 to_string()
-     */
-    template <typename T, typename = std::void_t<>>
-    struct is_global_to_string_t : std::false_type {};
-
-    /**
-     * @brief 检查类型 T 是否具有全局函数 to_string()
-     * @tparam T 待检查类型
-     * @details 基于 SFINAE 检测 to_string(T) 是否存在
-     *          默认模板（无匹配时）继承 std::false_type
-     * @return bool 是否有全局函数 to_string()
-     */
-    template <typename T>
-    struct is_global_to_string_t<T, std::void_t<decltype(to_string(std::declval<const T&>()))>>
-        : std::is_convertible<decltype(to_string(std::declval<const T&>())), std::string_view> {};
-
-    /**
-     * @brief 检查类型 T 是否具有成员函数 to_string()
-     * @tparam T 待检查类型
-     * @details 基于 SFINAE 检测 T::to_string() 是否存在
-     *          默认模板（无匹配时）继承 std::false_type
-     * @return bool 是否有成员函数 to_string()
-     */
-    template <typename T>
-    constexpr bool is_member_to_string_v = is_member_to_string_t<T>::value;
-
-    /**
-     * @brief 检查类型 T 是否具有全局函数 to_string()
-     * @tparam T 待检查类型
-     * @details 基于 SFINAE 检测 to_string(T) 是否存在
-     *          默认模板（无匹配时）继承 std::false_type
-     * @return bool 是否有全局函数 to_string()
-     */
-    template <typename T>
-    constexpr bool is_global_to_string_v = is_global_to_string_t<T>::value;
-
-    /**
      * @brief 字符串工具函数
-     * @details 定义字符串相关的工具函数，用于处理字符串
+     * @details 提供通用字符串操作: 哈希计算、前缀/后缀检测、数字解析、字符串变换等
+     *          格式化功能已迁移至 string_format_t
+     *          JSON 转义功能已迁移至 json_serializer_t
      */
     class string_utils_t {
-    private:
-        struct format_appender_t {
-            std::string& result;
-            std::string_view format;
-            size_t cursor = 0;
-
-            void append_literal_braces() noexcept {
-                while (cursor < format.size()) {
-                    if (format[cursor] == '{') {
-                        if (cursor + 1 < format.size() && format[cursor + 1] == '{') {
-                            result.push_back('{');
-                            cursor += 2;
-                            continue;
-                        }
-                        break;
-                    }
-                    if (format[cursor] == '}') {
-                        if (cursor + 1 < format.size() && format[cursor + 1] == '}') {
-                            result.push_back('}');
-                            cursor += 2;
-                            continue;
-                        }
-                    }
-                    result.push_back(format[cursor]);
-                    ++cursor;
-                }
-            }
-
-            template <typename T>
-            void append_value(const T& value) noexcept {
-                append_literal_braces();
-
-                if (cursor >= format.size() || format[cursor] != '{') {
-                    return;
-                }
-                cursor++;
-                if (cursor < format.size() && format[cursor] == '}') {
-                    cursor++;
-                } else {
-                    return;
-                }
-
-                if constexpr (std::is_convertible_v<T, std::string_view>) {
-                    result.append(std::string_view(value));
-                } else if constexpr (std::is_same_v<T, char>) {
-                    result.push_back(value);
-                } else if constexpr (std::is_pointer_v<std::decay_t<T>>) {
-                    if (value == nullptr) {
-                        result.append("nullptr");
-                    } else {
-                        result.append("0x");
-                        uintptr_t addr = reinterpret_cast<uintptr_t>(value);
-                        std::array<char, 32> buffer;
-                        auto [pointer, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), addr, 16);
-                        if (error == std::errc{}) {
-                            result.append(buffer.data(), static_cast<size_t>(pointer - buffer.data()));
-                        }
-                    }
-
-                } else if constexpr (std::is_arithmetic_v<T>) {
-                    if constexpr (std::is_same_v<std::decay_t<T>, bool>) {
-                        result.append(value ? "true" : "false");
-                    } else {
-                        std::array<char, 64> buffer;
-                        auto [pointer, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
-                        if (error == std::errc{}) {
-                            result.append(buffer.data(), static_cast<size_t>(pointer - buffer.data()));
-                        }
-                    }
-                } else if constexpr (is_member_to_string_v<T>) {
-                    result.append(value.to_string());
-                } else if constexpr (is_global_to_string_v<T>) {
-                    result.append(to_string(value));
-                } else {
-                    result.append("[unsupported type]");
-                }
-            }
-
-            void finish() noexcept {
-                append_literal_braces();
-                if (cursor < format.size()) {
-                    result.append(format.data() + cursor, format.size() - cursor);
-                }
-            }
-        };
-
     private:
         string_utils_t() = delete;
 
@@ -186,11 +40,10 @@ namespace error_system::utils {
 
     public:
         /**
-         * @brief 计算字符串的哈希值
-         * @details 计算字符串的哈希值
+         * @brief 计算字符串的 FNV-1a 哈希值
+         * @details 使用 FNV-1a 算法计算字符串哈希，支持 constexpr
          * @param string 输入字符串
-         * @param max_hash_length 最大哈希长度
-         * @return size_t 字符串的哈希值
+         * @return uint64_t 字符串的哈希值
          */
         static constexpr uint64_t hash(std::string_view string) noexcept {
             constexpr uint64_t FNV_PRIME = 1099511628211ULL;
@@ -207,10 +60,10 @@ namespace error_system::utils {
 
         /**
          * @brief 计算字符串的哈希值，限制哈希长度
-         * @details 计算字符串的哈希值，限制哈希长度
+         * @details 对超过 max_length 的字符串仅计算前 max_length 个字符的哈希
          * @param string 输入字符串
          * @param max_length 最大哈希长度
-         * @return size_t 字符串的哈希值
+         * @return uint64_t 字符串的哈希值
          */
         static constexpr uint64_t hash_limit(std::string_view string, size_t max_length = 128) noexcept {
             if (string.size() > max_length) {
@@ -231,7 +84,6 @@ namespace error_system::utils {
 
         /**
          * @brief 检查字符串是否以指定后缀结尾
-         * @details 检查字符串是否以指定后缀结尾
          * @param string 输入字符串
          * @param suffix 后缀
          * @return bool 是否以指定后缀结尾
@@ -243,9 +95,10 @@ namespace error_system::utils {
 
         /**
          * @brief 将字符串解析为数字
-         * @details 将字符串解析为指定类型的数字
+         * @details 使用 std::from_chars 进行高效解析
+         * @tparam T 目标数字类型
          * @param string 输入字符串
-         * @return std::optional<T> 解析后的数字
+         * @return std::optional<T> 解析后的数字，失败返回 nullopt
          */
         template <typename T>
         static inline std::optional<T> parse_number(std::string_view string) noexcept {
@@ -258,49 +111,7 @@ namespace error_system::utils {
         }
 
         /**
-         * @brief 格式化字符串
-         * @details 格式化字符串，将字符串中的占位符替换为实际值
-         * @tparam ...Args 待格式化的参数类型
-         * @param format 格式化字符串
-         * @param args 待格式化的参数
-         * @return std::string 格式化后的字符串
-         */
-        template <typename... Args>
-        static inline std::string format(std::string_view format, Args&&... args) noexcept {
-            std::string result{};
-
-            size_t estimated_size = format.size();
-            auto add_size = [&estimated_size](const auto& arg) {
-                using arg_t = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_integral_v<arg_t>) {
-                    estimated_size += 24;
-                } else if constexpr (std::is_floating_point_v<arg_t>) {
-                    estimated_size += 32;
-                } else if constexpr (std::is_pointer_v<arg_t> || std::is_same_v<arg_t, std::nullptr_t>) {
-                    estimated_size += 24;
-                } else {
-                    estimated_size += std::string_view{arg}.size();
-                }
-            };
-            (add_size(args), ...);
-            try {
-                result.reserve(estimated_size);
-            } catch (...) {
-                std::fprintf(stderr, "[string_utils] format: reserve failed\n");
-            }
-
-            format_appender_t appender{result, format, 0};
-
-            (appender.append_value(std::forward<Args>(args)), ...);
-
-            appender.finish();
-
-            return result;
-        }
-
-        /**
          * @brief 替换字符串中所有的指定子串
-         * @details 注意：因为要生成新字符串，所以返回 std::string
          * @param string 输入字符串
          * @param from 要替换的子串
          * @param to 替换后的子串
@@ -310,25 +121,22 @@ namespace error_system::utils {
 
         /**
          * @brief 分割字符串视图
-         * @details 将字符串视图根据指定分隔符分割为多个字符串视图
          * @param string 输入字符串视图
-         * @param delimiter 分隔符视图
+         * @param delimiter 分隔符
          * @return std::vector<std::string_view> 分割后的字符串视图向量
          */
         static std::vector<std::string_view> split(std::string_view string, std::string_view delimiter) noexcept;
 
         /**
          * @brief 合并字符串视图向量
-         * @details 将字符串视图向量中的字符串用指定分隔符视图连接起来
          * @param tokens 输入字符串视图向量
-         * @param delimiter 分隔符视图
+         * @param delimiter 分隔符
          * @return std::string 合并后的字符串
          */
         static std::string join(const std::vector<std::string_view>& tokens, std::string_view delimiter) noexcept;
 
         /**
          * @brief 移除字符串视图首尾的空白符
-         * @details 移除字符串视图首尾的空白符，包括空格、制表符、换行符、回页符和换页符
          * @param string 输入字符串视图
          * @return std::string_view 移除空白符后的字符串视图
          */
@@ -336,7 +144,6 @@ namespace error_system::utils {
 
         /**
          * @brief 将字符串视图转换为小写
-         * @details 将字符串视图中的所有字符转换为小写
          * @param string 输入字符串视图
          * @return std::string 转换后的字符串
          */
@@ -344,19 +151,10 @@ namespace error_system::utils {
 
         /**
          * @brief 将字符串视图转换为大写
-         * @details 将字符串视图中的所有字符转换为大写
          * @param string 输入字符串视图
          * @return std::string 转换后的字符串
          */
         static std::string to_upper(std::string_view string) noexcept;
-
-        /**
-         * @brief 安全转义 JSON 字符串
-         * @details 将包含控制字符的字符串视图转义为合法的 JSON 字符串格式
-         * @param string 输入字符串视图
-         * @return std::string 转义后的字符串
-         */
-        static std::string escape_json(std::string_view string) noexcept;
     };
 
 }  // namespace error_system::utils

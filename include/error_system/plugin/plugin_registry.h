@@ -1,12 +1,14 @@
 #pragma once
 #include <atomic>
+#include <cstdio>
 #include <memory>
+#include <new>
 #include <shared_mutex>
 #include <string_view>
 #include <vector>
 
+#include "error_system/plugin/async_notification_channel.h"
 #include "error_system/plugin/i_error_plugin.h"
-#include "error_system/utils/async_queue.h"
 
 /**
  * @file plugin_registry.h
@@ -15,7 +17,7 @@
  *          在错误事件发生时依次通知所有插件。
  *          支持同步（默认）和异步队列两种通知模式。
  *          使用 RCU（Read-Copy-Update）快照机制，notify_error 热路径零拷贝无锁读取。
- *          异步队列由 async_queue_t 模版类实现，自动管理后台线程生命周期。
+ *          异步通知通道由 async_notification_channel_t 封装，自动管理后台线程生命周期。
  * @author yiice
  * @version 2.3.0
  * @date 2026-05-01
@@ -27,32 +29,24 @@ namespace error_system::plugin {
      * @brief 插件注册表
      * @details 单例，通过 register_plugin(unique_ptr) 接管插件所有权，
      *          register_plugin_ref() 提供非持有引用注册（用于单例等场景）。
-     *          异步模式下自动启动后台工作线程处理通知队列。
+     *          异步模式下自动启动后台工作线程处理通知队列，
+     *          队列处理回调转发至本类的 notify_error。
      */
     class plugin_registry_t {
     public:
         using plugin_pointer_t = i_error_plugin_t*;
         using unique_plugin_ptr_t = std::unique_ptr<i_error_plugin_t>;
         using shared_plugin_ptr_t = std::shared_ptr<i_error_plugin_t>;
-        using plugin_list_t = std::vector<plugin_pointer_t>;
+        using plugin_list_t = std::vector<shared_plugin_ptr_t>;
 
     private:
-        /**
-         * @brief 异步队列处理器
-         * @details 将 async_queue_t 出队的 shared_ptr<error_context_t> 转发给 notify_error
-         *          通过 instance() 获取单例，无需存储 this 指针
-         */
-        struct context_processor_t {
-            void operator()(std::shared_ptr<core::error_context_t>& context) const noexcept {
-                plugin_registry_t::instance().notify_error(*context);
-            }
-        };
-
         /**
          * @brief RCU 插件快照
          * @details shared_ptr 保证旧快照在所有读者完成后安全释放。
          *          register/unregister 时拷贝-修改-原子交换，
          *          notify_error 直接 atomic_load 读取，无锁零拷贝。
+         *          快照内存储 shared_ptr<i_error_plugin_t>，使读者持有插件共享所有权，
+         *          避免 unregister 销毁插件后调用 on_error 触发 use-after-free。
          */
         std::shared_ptr<const plugin_list_t> plugins_snapshot_{
             std::make_shared<const plugin_list_t>()};
@@ -60,19 +54,25 @@ namespace error_system::plugin {
 
         /**
          * @brief 持有所有权的插件列表
-         * @details 存储通过 register_plugin(unique_ptr) 注册的插件，
+         * @details 存储通过 register_plugin(unique_ptr) 注册的插件（转为 shared_ptr），
          *          注册表析构时自动释放。非持有引用（register_plugin_ref）不在此列表。
+         *          与快照在同一写锁保护下修改，避免数据竞争。
          */
-        std::vector<unique_plugin_ptr_t> owned_plugins_{};
+        std::vector<shared_plugin_ptr_t> owned_plugins_{};
 
         /**
-         * @brief 异步通知队列（仅在 async_queue 模式下使用）
-         * @details 基于 async_queue_t 模版类，自动管理后台线程生命周期。
-         *          元素类型为 shared_ptr<error_context_t>，避免拷贝。
+         * @brief 异步通知通道（仅在 async_queue 模式下使用）
+         * @details 封装 async_queue_t，自动管理后台线程生命周期。
+         *          出队上下文通过注入的回调转发至 notify_error。
          */
-        utils::async_queue_t<std::shared_ptr<core::error_context_t>, context_processor_t> async_queue_{{context_processor_t{}}};
+        async_notification_channel_t notification_channel_;
 
-        plugin_registry_t() = default;
+        /**
+         * @brief 单例初始化一次性标志（规范 22）
+         */
+        static std::once_flag once_flag_;
+
+        plugin_registry_t() noexcept;
 
         ~plugin_registry_t() noexcept = default;
 
@@ -88,16 +88,24 @@ namespace error_system::plugin {
          * @brief 原子更新插件快照
          * @details 在写锁保护下，基于当前快照创建新副本、修改后原子替换。
          *          旧快照由 shared_ptr 自动管理生命周期。
-         * @param modifier 修改新副本的回调函数
+         *          modifier 同时操作快照副本与 owned_plugins_，保证二者在
+         *          同一写锁保护下保持一致。make_shared 与 modifier 中的
+         *          push_back 可能抛出 std::bad_alloc，捕获后记录日志并返回，
+         *          保持旧快照不变。
+         * @param modifier 修改新副本与 owned_plugins_ 的回调函数
          */
         template <typename Modifier>
         void update_snapshot_(Modifier&& modifier) noexcept {
-            std::unique_lock<std::shared_mutex> lock(plugins_mutex_);
-            auto old_snapshot = std::atomic_load(&plugins_snapshot_);
-            auto new_snapshot_ptr = std::make_shared<plugin_list_t>(*old_snapshot);
-            modifier(*new_snapshot_ptr);
-            std::atomic_store(&plugins_snapshot_,
-                              std::static_pointer_cast<const plugin_list_t>(new_snapshot_ptr));
+            try {
+                std::unique_lock<std::shared_mutex> lock(plugins_mutex_);
+                auto old_snapshot = std::atomic_load(&plugins_snapshot_);
+                auto new_snapshot_ptr = std::make_shared<plugin_list_t>(*old_snapshot);
+                modifier(*new_snapshot_ptr, owned_plugins_);
+                std::atomic_store(&plugins_snapshot_,
+                                  std::static_pointer_cast<const plugin_list_t>(new_snapshot_ptr));
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[plugin_registry] update_snapshot_: std::bad_alloc\n");
+            }
         }
 
     public:
@@ -128,6 +136,7 @@ namespace error_system::plugin {
          * @brief 同步通知所有插件发生了错误事件
          * @details 通过 RCU 快照无锁读取插件列表，依次调用每个插件的 on_error()，
          *          异常不会向外传播。在 sync 模式下由 error_context_t 构造时直接调用。
+         *          同时作为异步通道出队上下文的处理回调。
          * @param context 错误上下文
          */
         void notify_error(const core::error_context_t& context) noexcept;

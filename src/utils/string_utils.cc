@@ -1,8 +1,7 @@
 #include "error_system/utils/string_utils.h"
 
 #include <algorithm>
-#include <array>
-#include <charconv>
+#include <cctype>
 
 namespace error_system::utils {
 
@@ -160,62 +159,4 @@ namespace error_system::utils {
         return result;
     }
 
-    /**
-     * @brief 安全转义 JSON 字符串视图
-     * @details 该函数不修改原始字符串视图，仅返回转义后的字符串视图
-     * @param string 输入字符串视图
-     * @return std::string 转义后的字符串
-     */
-    std::string string_utils_t::escape_json(std::string_view string) noexcept {
-        std::string result{};
-        try {
-            result.reserve(string.size() + 16);  // 预分配稍大一点的合理空间
-        } catch (...) {
-            std::fprintf(stderr, "[string_utils] escape_json: reserve failed\n");
-        }
-
-        for (char c : string) {
-            switch (c) {
-                case '"':
-                    result.append("\\\"");
-                    break;
-                case '\\':
-                    result.append("\\\\");
-                    break;
-                case '\b':
-                    result.append("\\b");
-                    break;
-                case '\f':
-                    result.append("\\f");
-                    break;
-                case '\n':
-                    result.append("\\n");
-                    break;
-                case '\r':
-                    result.append("\\r");
-                    break;
-                case '\t':
-                    result.append("\\t");
-                    break;
-                default:
-                    if (static_cast<unsigned char>(c) < 0x20) {
-                        result.append("\\u00");
-                        std::array<char, 2> buffer;
-                        auto [ptr, ec] =
-                            std::to_chars(buffer.data(), buffer.data() + buffer.size(), static_cast<uint8_t>(c), 16);
-                        if (ec == std::errc{}) {
-                            if (ptr - buffer.data() == 1) {
-                                result.push_back('0');
-                                result.push_back(buffer[0]);
-                            } else {
-                                result.append(buffer.data(), 2);
-                            }
-                        }
-                    } else {
-                        result.push_back(c);
-                    }
-            }
-        }
-        return result;
-    }
 }  // namespace error_system::utils

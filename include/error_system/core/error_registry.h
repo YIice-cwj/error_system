@@ -1,7 +1,7 @@
 #pragma once
-#include <functional>
 #include <iosfwd>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
 #include <string_view>
 #include <unordered_map>
@@ -11,28 +11,22 @@
 #include "error_system/core/error_code.h"
 #include "error_system/core/error_level.h"
 // IWYU pragma: begin_exports
+#include "error_system/core/duplicate_policy.h"
 #include "error_system/core/error_builder.h"
+#include "error_system/domain/subsystem_module_registry.h"
 // IWYU pragma: end_exports
 
 /**
  * @file error_registry.h
  * @brief 错误码注册器
- * @details 定义错误码注册器，用于注册和查找错误码
+ * @details 定义错误码注册器，用于注册和查找错误码。重复处理策略委托给 duplicate_policy_handler_t，
+ *          子系统/模块名称映射委托给 subsystem_module_registry_t，遵循单一职责原则。
  * @author yiice
  * @version 2.3.0
  * @date 2026-04-27
  * @copyright Copyright (c) 2026
  */
 namespace error_system::core {
-
-    /**
-     * @brief 子系统/模块名称映射
-     * @details 通过 (subsys_id << 16 | module_id) 作为 key 存储名称，避免每个错误码重复存储
-     */
-    struct subsystem_module_info_t {
-        std::string subsystem_name{"未知子系统"};
-        std::string module_name{"未知模块"};
-    };
 
     /**
      * @brief 错误码元数据信息 (数据负载)
@@ -43,16 +37,6 @@ namespace error_system::core {
         uint16_t module_id{0};
         uint16_t error_number{0};
         error_level_t level{error_level_t::info};
-    };
-
-    /**
-     * @brief 重复处理策略
-     * @details 定义当错误码已存在时的处理行为
-     */
-    enum class duplicate_policy_t : uint8_t {
-        skip,       // 静默跳过（默认）
-        overwrite,  // 覆盖已有定义
-        warn,       // 跳过但记录警告
     };
 
     /**
@@ -77,12 +61,6 @@ namespace error_system::core {
         std::unordered_map<module_group_id_t, std::vector<code_t>> module_index_;
 
         /**
-         * @brief 子系统/模块名称映射表
-         * @details key = (subsys_id << 16) | module_id，避免每个错误码重复存储名称
-         */
-        std::unordered_map<uint32_t, subsystem_module_info_t> subsystem_module_index_;
-
-        /**
          * @brief 子系统索引，根据子系统 ID 快速查找其下所有模块组
          * @details key = subsys_id，value = 该子系统下的所有 module_group_id（去重）
          */
@@ -94,48 +72,23 @@ namespace error_system::core {
         mutable std::shared_mutex index_mutex_;
 
         /**
-         * @brief 重复处理策略
+         * @brief 重复处理策略处理器（自包含，自带互斥锁）
          */
-        duplicate_policy_t duplicate_policy_{duplicate_policy_t::skip};
+        duplicate_policy_handler_t duplicate_handler_;
 
         /**
-         * @brief 重复注册警告回调函数
-         * @details 当策略为 warn 时调用，参数为 (错误码原始值, 已存在的元数据)。
-         *          默认输出到 std::cerr，可通过 set_duplicate_warn_callback 覆盖。
+         * @brief 子系统/模块名称注册器（自包含，自带互斥锁）
          */
-        std::function<void(code_t, const error_metadata_t&)> duplicate_warn_callback_{nullptr};
+        subsystem_module_registry_t subsystem_module_registry_;
+
+        /**
+         * @brief 单例初始化一次性标志（规范 22）
+         */
+        static std::once_flag once_flag_;
 
         error_registry_t() = default;
 
         ~error_registry_t() noexcept = default;
-
-        /**
-         * @brief 处理 skip 策略
-         * @param raw_code 错误码原始值
-         * @return bool 是否继续注册流程（skip 返回 false）
-         */
-        bool handle_duplicate_skip_(code_t raw_code) noexcept;
-
-        /**
-         * @brief 处理 overwrite 策略
-         * @param raw_code 错误码原始值
-         * @return bool 是否继续注册流程（overwrite 返回 true）
-         */
-        bool handle_duplicate_overwrite_(code_t raw_code) noexcept;
-
-        /**
-         * @brief 处理 warn 策略
-         * @param raw_code 错误码原始值
-         * @return bool 是否继续注册流程（warn 返回 false）
-         */
-        bool handle_duplicate_warn_(code_t raw_code) noexcept;
-
-        /**
-         * @brief 根据当前策略处理重复错误码
-         * @param raw_code 错误码原始值
-         * @return bool 是否继续注册流程
-         */
-        bool apply_duplicate_policy_(code_t raw_code) noexcept;
 
         /**
          * @brief 为批量注册提前预留索引容量
@@ -224,26 +177,29 @@ namespace error_system::core {
         bool is_registered(const error_code_t code) const noexcept;
 
         /**
-         * @brief 通过 64位错误码 获取详情
+         * @brief 通过 64位错误码 获取详情（值副本，线程安全）
+         * @details 返回值副本而非指针，避免锁释放后被另一线程注销导致 use-after-free
          * @param code 错误码
-         * @return const error_metadata_t* 错误码元数据指针，若未注册则返回 nullptr
+         * @return std::optional<error_metadata_t> 错误码元数据副本，若未注册则返回 nullopt
          */
-        const error_metadata_t* get_info(const error_code_t code) const noexcept;
+        std::optional<error_metadata_t> get_info(const error_code_t code) const noexcept;
 
         /**
-         * @brief 通过模块 ID 获取所有错误码
+         * @brief 通过模块 ID 获取所有错误码（值副本，线程安全）
+         * @details 返回值副本而非引用，避免锁释放后被另一线程注销导致悬垂引用
          * @param module_group_id 模块组 ID
-         * @return std::vector<std::reference_wrapper<const error_metadata_t>> 模块下所有错误码的元数据
+         * @return std::vector<error_metadata_t> 模块下所有错误码的元数据副本
          */
-        std::vector<std::reference_wrapper<const error_metadata_t>>
+        std::vector<error_metadata_t>
         get_errors_by_module(const module_group_id_t module_group_id) const noexcept;
 
         /**
-         * @brief 通过子系统 ID 获取该子系统下所有错误码
+         * @brief 通过子系统 ID 获取该子系统下所有错误码（值副本，线程安全）
+         * @details 返回值副本而非引用，避免锁释放后被另一线程注销导致悬垂引用
          * @param subsys_id 子系统 ID
-         * @return std::vector<std::reference_wrapper<const error_metadata_t>> 子系统下所有错误码的元数据
+         * @return std::vector<error_metadata_t> 子系统下所有错误码的元数据副本
          */
-        std::vector<std::reference_wrapper<const error_metadata_t>>
+        std::vector<error_metadata_t>
         get_errors_by_subsystem(uint16_t subsys_id) const noexcept;
 
         /**
@@ -259,65 +215,67 @@ namespace error_system::core {
          * @param module_id 模块 ID
          * @param subsystem_name 子系统名称
          * @param module_name 模块名称
+         * @note 转发至 subsystem_module_registry_，保留接口以最小化调用方改动
          */
         void register_subsystem_module(uint16_t subsys_id,
                                        uint16_t module_id,
                                        const std::string_view subsystem_name,
-                                       const std::string_view module_name) noexcept;
+                                       const std::string_view module_name) noexcept {
+            subsystem_module_registry_.register_subsystem_module(subsys_id, module_id, subsystem_name, module_name);
+        }
 
         /**
-         * @brief 查询子系统/模块名称
+         * @brief 查询子系统/模块名称（值副本，线程安全）
          * @param subsys_id 子系统 ID
          * @param module_id 模块 ID
-         * @return const subsystem_module_info_t& 子系统/模块名称信息
+         * @return subsystem_module_info_t 子系统/模块名称信息副本
+         * @note 转发至 subsystem_module_registry_，保留接口以最小化调用方改动
          */
-        const subsystem_module_info_t& get_subsystem_module_info(uint16_t subsys_id, uint16_t module_id) const noexcept;
+        subsystem_module_info_t get_subsystem_module_info(uint16_t subsys_id, uint16_t module_id) const noexcept {
+            return subsystem_module_registry_.get_subsystem_module_info(subsys_id, module_id);
+        }
 
         /**
          * @brief 设置重复处理策略
          * @param policy 重复处理策略
+         * @note 转发至 duplicate_handler_，保留接口以最小化调用方改动
          */
         void set_duplicate_policy(duplicate_policy_t policy) noexcept {
-            std::unique_lock<std::shared_mutex> lock(index_mutex_);
-            duplicate_policy_ = policy;
+            duplicate_handler_.set_policy(policy);
         }
 
         /**
          * @brief 获取当前重复处理策略
          * @return duplicate_policy_t 当前重复处理策略
+         * @note 转发至 duplicate_handler_，保留接口以最小化调用方改动
          */
         duplicate_policy_t get_duplicate_policy() const noexcept {
-            std::shared_lock<std::shared_mutex> lock(index_mutex_);
-            return duplicate_policy_;
+            return duplicate_handler_.get_policy();
         }
 
         /**
          * @brief 设置重复注册警告回调
          * @param callback 回调函数，签名为 void(code_t, const error_metadata_t&)
-         * @note 传入 nullptr 可清除回调
+         * @note 传入 nullptr 可清除回调；转发至 duplicate_handler_
          */
-        void set_duplicate_warn_callback(std::function<void(code_t, const error_metadata_t&)> callback) noexcept {
-            std::unique_lock<std::shared_mutex> lock(index_mutex_);
-            duplicate_warn_callback_ = std::move(callback);
+        void set_duplicate_warn_callback(duplicate_warn_callback_t callback) noexcept {
+            duplicate_handler_.set_warn_callback(std::move(callback));
         }
 
         /**
          * @brief 获取当前重复注册警告回调
-         * @return const std::function<void(code_t, const error_metadata_t&)>& 当前回调
+         * @return const duplicate_warn_callback_t& 当前回调
+         * @note 转发至 duplicate_handler_，保留接口以最小化调用方改动
          */
-        const std::function<void(code_t, const error_metadata_t&)>& get_duplicate_warn_callback() const noexcept {
-            std::shared_lock<std::shared_mutex> lock(index_mutex_);
-            return duplicate_warn_callback_;
+        const duplicate_warn_callback_t& get_duplicate_warn_callback() const noexcept {
+            return duplicate_handler_.get_warn_callback();
         }
 
         /**
          * @brief 获取错误码注册器实例
          * @return error_registry_t& 错误码注册器实例
          */
-        static error_registry_t& instance() noexcept {
-            static error_registry_t instance_;
-            return instance_;
-        }
+        static error_registry_t& instance() noexcept;
     };
 
     /**
