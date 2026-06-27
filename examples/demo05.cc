@@ -36,30 +36,30 @@ int main() {
 
     // 2. 查看元数据
     std::cout << "\n--- 2. 查看元数据 ---" << std::endl;
-    if (const error_metadata_t* info = registry.get_info(code1)) {
+    if (auto info = registry.get_info(code1); info.has_value()) {
         std::cout << "错误码: " << info->name << std::endl;
         std::cout << "描述: " << info->description << std::endl;
     }
-    const auto& sm_info = registry.get_subsystem_module_info(code1.get_subsys(), code1.get_module());
+    const auto sm_info = registry.get_subsystem_module_info(code1.get_subsys(), code1.get_module());
     std::cout << "子系统: " << sm_info.subsystem_name << std::endl;
     std::cout << "模块: " << sm_info.module_name << std::endl;
 
     // 3. 文本输出模式（默认开启）
     std::cout << "\n--- 3. 文本输出模式（默认开启） ---" << std::endl;
     error_context_t ctx1{code1, "订单ID: 1234567890"};
-    std::cout << ctx1.to_string() << std::endl;
+    std::cout << error_context_serializer_t::to_string(ctx1) << std::endl;
 
     // 4. 关闭文本输出模式（显示原始 ID）
     std::cout << "\n--- 4. 关闭文本输出模式（显示原始 ID） ---" << std::endl;
-    error_config_t::set_enable_text_output(false);
+    feature_flags_t::set_enable_text_output(false);
     error_context_t ctx2{code1, "订单ID: 1234567890"};
-    std::cout << ctx2.to_string() << std::endl;
+    std::cout << error_context_serializer_t::to_string(ctx2) << std::endl;
 
     // 5. 恢复文本输出，查看默认名称的错误码
     std::cout << "\n--- 5. 默认名称（未指定子系统/模块名称） ---" << std::endl;
-    error_config_t::set_enable_text_output(true);
+    feature_flags_t::set_enable_text_output(true);
     error_context_t ctx3{code3, "未知模块测试"};
-    std::cout << ctx3.to_string() << std::endl;
+    std::cout << error_context_serializer_t::to_string(ctx3) << std::endl;
 
     // 6. get_errors_by_subsystem() 按子系统查询错误码
     std::cout << "\n--- 6. 按子系统查询错误码 ---" << std::endl;
@@ -70,9 +70,8 @@ int main() {
 
     auto subsystem_errors = registry.get_errors_by_subsystem(101);
     std::cout << "子系统 101 (交易服务) 下共有 " << subsystem_errors.size() << " 个错误码:" << std::endl;
-    for (const auto& ref : subsystem_errors) {
-        const auto& meta = ref.get();
-        const auto& sm = registry.get_subsystem_module_info(101, meta.module_id);
+    for (const auto& meta : subsystem_errors) {
+        const auto sm = registry.get_subsystem_module_info(101, meta.module_id);
         std::cout << "  [" << sm.module_name << "] " << meta.name
                   << " (编号: " << meta.error_number << ")" << std::endl;
     }
@@ -95,7 +94,7 @@ int main() {
     std::cout << "\n--- 8. identity_code 解析示例 ---" << std::endl;
     error_context_t ctx8{code1, "测试 identity_code"};
     std::cout << "identity_code: " << code1.get_identity_code() << std::endl;
-    std::cout << "JSON 输出: " << ctx8.to_json() << std::endl;
+    std::cout << "JSON 输出: " << error_context_serializer_t::to_json(ctx8) << std::endl;
 
     return 0;
 }

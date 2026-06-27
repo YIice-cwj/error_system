@@ -74,7 +74,7 @@ int main() {
         std::cout << "  消息: " << e.context().message << std::endl;
         std::cout << "  等级: " << static_cast<int>(e.context().get_code().get_level()) << std::endl;
         std::cout << "  系统: " << static_cast<int>(e.context().get_code().get_system()) << std::endl;
-        std::cout << "  JSON: " << e.context().to_json() << std::endl;
+        std::cout << "  JSON: " << error_context_serializer_t::to_json(e.context()) << std::endl;
     }
 
     // 4. 嵌套异常（因果链）
@@ -89,7 +89,7 @@ int main() {
             outer.with("inner_code", std::to_string(inner.code().get_code()));
 
             std::cout << "内部异常: " << inner.what() << std::endl;
-            std::cout << "外部异常: " << outer.to_string() << std::endl;
+            std::cout << "外部异常: " << error_context_serializer_t::to_string(outer) << std::endl;
             throw;
         }
     } catch (const error_exception_t& e) {

@@ -50,11 +50,11 @@ int main() {
 
     // 5. JSON 序列化（v2.1: code 字段使用 identity_code）
     std::cout << "\n--- 5. JSON 序列化（identity_code） ---" << std::endl;
-    std::cout << ctx1.to_json() << std::endl;
+    std::cout << error_context_serializer_t::to_json(ctx1) << std::endl;
 
     // 6. 二进制序列化（v2.1: 含因果链标志位）
     std::cout << "\n--- 6. 二进制序列化 ---" << std::endl;
-    std::string binary = ctx1.to_binary();
+    std::string binary = error_context_serializer_t::to_binary(ctx1);
     std::cout << "  无 cause 二进制大小: " << binary.size() << " bytes" << std::endl;
 
     // 7. 因果链 + 二进制序列化对比
@@ -64,7 +64,7 @@ int main() {
     auto chained = wrapper.wrap(root);
     std::cout << chained << std::endl;
 
-    std::string binary_with_cause = chained.to_binary();
+    std::string binary_with_cause = error_context_serializer_t::to_binary(chained);
     std::cout << "  有 cause 二进制大小: " << binary_with_cause.size() << " bytes" << std::endl;
     std::cout << "  (无 cause: " << binary.size() << " bytes, 差距 = cause 链大小)" << std::endl;
 

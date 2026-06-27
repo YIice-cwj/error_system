@@ -22,7 +22,7 @@ public:
 
     void on_error(const error_context_t& context) noexcept override {
         std::cerr << "[LOG] [" << to_string(context.get_code().get_level()) << "] "
-                  << context.to_string() << std::endl;
+                  << error_context_serializer_t::to_string(context) << std::endl;
     }
 
     // 记录所有级别，不限制
@@ -122,7 +122,7 @@ int main() {
     std::cout << "\n--- 4. 异步通知模式 + 背压控制 ---" << std::endl;
 
     // 启用异步通知模式
-    error_config_t::set_notify_mode(error_config_t::notify_mode_t::async_queue);
+    feature_flags_t::set_notify_mode(feature_flags_t::notify_mode_t::async_queue);
     std::cout << "通知模式已切换为: async_queue" << std::endl;
 
     // 设置背压上限
@@ -136,7 +136,7 @@ int main() {
     error_context_t ctx_async2(biz::trade_errors::ERR_CART_IS_EMPTY, "异步通知测试 #2");
 
     // 恢复同步模式
-    error_config_t::set_notify_mode(error_config_t::notify_mode_t::sync);
+    feature_flags_t::set_notify_mode(feature_flags_t::notify_mode_t::sync);
     std::cout << "\n通知模式已恢复为: sync" << std::endl;
 
     // 5. 使用错误路由插件
@@ -152,7 +152,7 @@ int main() {
     error_router_plugin_t::instance().register_handler_by_domain(
         system_domain_t::middleware,
         [](const error_context_t& context) {
-            std::cout << "[路由] 中间件域错误: " << context.to_string() << std::endl;
+            std::cout << "[路由] 中间件域错误: " << error_context_serializer_t::to_string(context) << std::endl;
         }
     );
 

@@ -49,7 +49,7 @@ int main() {
     std::cout << "\n--- 2. 错误的结果 ---" << std::endl;
     auto result2 = query_order(404);
     if (result2.is_error()) {
-        std::cout << "查询失败: " << result2.error().to_string() << std::endl;
+        std::cout << "查询失败: " << error_context_serializer_t::to_string(result2.error()) << std::endl;
     }
 
     // 3. and_then 链式操作
@@ -66,7 +66,7 @@ int main() {
     if (result3.is_success()) {
         std::cout << result3.value() << std::endl;
     } else {
-        std::cout << "处理失败: " << result3.error().to_string() << std::endl;
+        std::cout << "处理失败: " << error_context_serializer_t::to_string(result3.error()) << std::endl;
     }
 
     // 4. or_else 错误恢复
@@ -142,7 +142,7 @@ int main() {
                 .with("original_code", std::to_string(context.get_code().get_code()));
             return wrapped;
         });
-    std::cout << "map_error 包装后: " << result10.error().to_string() << std::endl;
+    std::cout << "map_error 包装后: " << error_context_serializer_t::to_string(result10.error()) << std::endl;
 
     // 11. 复杂链式操作: 下单 -> 支付
     std::cout << "\n--- 11. 复杂链式操作: 下单 -> 支付 ---" << std::endl;
@@ -156,7 +156,7 @@ int main() {
                 return process_payment(user_id, amount);
             })
             .or_else([](const error_context_t& err) -> result_t<std::string> {
-                std::cout << "流程失败: " << err.to_string() << std::endl;
+                std::cout << "流程失败: " << error_context_serializer_t::to_string(err) << std::endl;
                 return result_t<std::string>::make_error(
                     error_code_t(error_level_t::error, system_domain_t::application, 0, 0, 2),
                     "交易流程失败");
