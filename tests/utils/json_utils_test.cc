@@ -173,4 +173,86 @@ namespace error_system::utils {
         EXPECT_EQ(target.get_value("key"), "value");
     }
 
+    class json_serializer_test_t : public ::testing::Test {};
+
+    TEST_F(json_serializer_test_t, escape_json_plain_string) {
+        auto result = json_serializer_t::escape_json("hello world");
+        EXPECT_EQ(result, "hello world");
+    }
+
+    TEST_F(json_serializer_test_t, escape_json_quotes) {
+        auto result = json_serializer_t::escape_json("\"quoted\"");
+        EXPECT_EQ(result, "\\\"quoted\\\"");
+    }
+
+    TEST_F(json_serializer_test_t, escape_json_backslash) {
+        auto result = json_serializer_t::escape_json("path\\to\\file");
+        EXPECT_EQ(result, "path\\\\to\\\\file");
+    }
+
+    TEST_F(json_serializer_test_t, escape_json_control_chars) {
+        auto result = json_serializer_t::escape_json("line1\nline2\ttab");
+        EXPECT_EQ(result, "line1\\nline2\\ttab");
+    }
+
+    TEST_F(json_serializer_test_t, escape_json_empty_string) {
+        auto result = json_serializer_t::escape_json("");
+        EXPECT_TRUE(result.empty());
+    }
+
+    // ========== UTF-16 代理对 / \uXXXX 转义测试 ==========
+    //
+    // 以下测试覆盖 json_lexer 对 \uXXXX 转义的处理，重点验证：
+    //   1. BMP 范围内的 \uXXXX 正确编码为 UTF-8
+    //   2. UTF-16 代理对（\uD83D\uDE00）正确组合为补充平面码点并编码为 4 字节 UTF-8
+    //   3. 孤立的高 / 低代理被静默丢弃，不影响其余字符解析
+
+    TEST_F(json_dict_test_t, parse_unicode_escape_basic_bmp) {
+        // \u0041 = 'A'，\u4e2d = '中'（BMP 内的 CJK 字符）
+        auto result = json_dict_t::parse(R"({"key": "\u0041\u4e2d"})");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(result->get_value("key"), "A中");
+    }
+
+    TEST_F(json_dict_test_t, parse_unicode_escape_supplementary_plane_surrogate_pair) {
+        // U+1F600 (😀) 的 UTF-16 编码为代理对 0xD83D 0xDE00
+        // 期望解析后得到 4 字节 UTF-8: F0 9F 98 80
+        auto result = json_dict_t::parse(R"({"emoji": "\uD83D\uDE00"})");
+        ASSERT_TRUE(result.has_value());
+        const auto value = result->get_value("emoji");
+        ASSERT_TRUE(value.has_value());
+        EXPECT_EQ(value->size(), 4u);
+        EXPECT_EQ(static_cast<unsigned char>((*value)[0]), 0xF0);
+        EXPECT_EQ(static_cast<unsigned char>((*value)[1]), 0x9F);
+        EXPECT_EQ(static_cast<unsigned char>((*value)[2]), 0x98);
+        EXPECT_EQ(static_cast<unsigned char>((*value)[3]), 0x80);
+    }
+
+    TEST_F(json_dict_test_t, parse_unicode_escape_isolated_high_surrogate_dropped) {
+        // 孤立的高代理（无后续低代理）应被丢弃，前后字符正常保留
+        auto result = json_dict_t::parse(R"({"text": "a\uD83Db"})");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(result->get_value("text"), "ab");
+    }
+
+    TEST_F(json_dict_test_t, parse_unicode_escape_isolated_low_surrogate_dropped) {
+        // 孤立的低代理（无前导高代理）应被丢弃
+        auto result = json_dict_t::parse(R"({"text": "a\uDC00b"})");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(result->get_value("text"), "ab");
+    }
+
+    TEST_F(json_dict_test_t, parse_unicode_escape_high_surrogate_without_low_followed_by_plain) {
+        // 高代理后跟普通字符（非 \u 转义）应丢弃高代理，普通字符保留
+        auto result = json_dict_t::parse(R"({"text": "\uD83DX"})");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(result->get_value("text"), "X");
+    }
+
+    TEST_F(json_dict_test_t, parse_unicode_escape_invalid_hex_returns_nullopt) {
+        // 非法十六进制应使整个解析失败
+        auto result = json_dict_t::parse(R"({"text": "\uGGGG"})");
+        EXPECT_FALSE(result.has_value());
+    }
+
 }  // namespace error_system::utils

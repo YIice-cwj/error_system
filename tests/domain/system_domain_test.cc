@@ -72,7 +72,7 @@ namespace error_system::domain {
     }
 
     TEST_F(system_domain_test_t, count_is_last_value) {
-        constexpr int count = static_cast<int>(system_domain_t::_count);
+        constexpr int count = static_cast<int>(system_domain_t::count);
         EXPECT_EQ(count, 6);
     }
 

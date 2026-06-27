@@ -23,9 +23,9 @@ namespace error_system::core {
         EXPECT_EQ(code.get_code(), raw);
     }
 
-    TEST_F(error_code_test_t, implicit_conversion_to_code_t) {
+    TEST_F(error_code_test_t, explicit_conversion_to_code_t) {
         error_code_t code(0x1234);
-        code_t raw = code;
+        code_t raw = static_cast<code_t>(code);
         EXPECT_EQ(raw, 0x1234ULL);
     }
 

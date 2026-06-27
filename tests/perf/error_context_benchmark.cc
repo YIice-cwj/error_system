@@ -9,7 +9,7 @@
 #include "error_system/plugin/plugin_registry.h"
 
 namespace {
-using error_system::config::error_config_t;
+using error_system::config::feature_flags_t;
 using error_system::core::error_builder_t;
 using error_system::core::error_code_t;
 using error_system::core::error_context_t;
@@ -70,18 +70,18 @@ int main() {
 
     std::cout << "benchmark=error_context_create\n";
     std::cout << "iterations=" << MEASURE_ITERATIONS << "\n";
-    print_flag("stacktrace", error_config_t::is_stacktrace_enabled());
-    print_flag("validation", error_config_t::is_validation_enabled());
-    print_flag("location", error_config_t::is_source_location_enabled());
+    print_flag("stacktrace", feature_flags_t::is_stacktrace_enabled());
+    print_flag("validation", feature_flags_t::is_validation_enabled());
+    print_flag("location", feature_flags_t::is_source_location_enabled());
 
     const double default_ns_per_op = measure_ns_per_op();
 
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
-    error_config_t::set_enable_stacktrace(false);
+    feature_flags_t::set_enable_stacktrace(false);
 #endif
     const double fast_path_ns_per_op = measure_ns_per_op();
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
-    error_config_t::set_enable_stacktrace(true);
+    feature_flags_t::set_enable_stacktrace(true);
 #endif
 
     const double fast_path_ratio_to_baseline = fast_path_ns_per_op / TASK2_BASELINE_NS_PER_OP;

@@ -3,6 +3,7 @@
 #include <sys/stat.h>
 
 #include <filesystem>
+#include <fstream>
 #include <random>
 
 #include <gtest/gtest.h>
@@ -193,6 +194,59 @@ namespace error_system::utils {
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(result.value().size(), 10000);
         EXPECT_EQ(result.value(), large_content);
+    }
+
+    // ========== 文件大小限制测试 ==========
+    //
+    // 验证 read_file 在文件大小超过 MAX_READ_FILE_SIZE 时拒绝读取，
+    // 避免恶意大文件导致内存耗尽攻击。
+
+    TEST_F(file_utils_test_t, read_file_rejects_file_exceeding_max_size) {
+        auto file_path = temp_dir_ / "oversize.txt";
+        // 写入一个超过阈值 1 字节的文件。使用 truncate(2) 创建稀疏文件，
+        // 避免真正分配 MAX_READ_FILE_SIZE+1 字节的磁盘空间。
+        const auto target_size = file_utils_t::MAX_READ_FILE_SIZE + 1;
+        {
+            std::ofstream f(file_path, std::ios::binary | std::ios::trunc);
+            ASSERT_TRUE(f.is_open());
+            // seek 到目标位置后写一个字节，文件实际大小为 target_size
+            f.seekp(static_cast<std::streamoff>(target_size - 1));
+            f.put('\n');
+            ASSERT_TRUE(f.good());
+        }
+
+        auto result = file_utils_t::read_file(file_path);
+        EXPECT_FALSE(result.has_value());
+    }
+
+    TEST_F(file_utils_test_t, read_file_accepts_file_at_max_size_boundary) {
+        // 边界测试：文件大小恰好等于 MAX_READ_FILE_SIZE 时应允许读取。
+        // 注意：此用例仅当磁盘空间充足时才会真正分配内存。
+        // 为避免测试环境内存压力过大，仅在 MAX_READ_FILE_SIZE 较小（<= 64MB）时执行。
+        if (file_utils_t::MAX_READ_FILE_SIZE > 64u * 1024u * 1024u) {
+            GTEST_SKIP() << "MAX_READ_FILE_SIZE 过大，跳过边界测试以避免内存压力";
+        }
+        auto file_path = temp_dir_ / "boundary.txt";
+        {
+            std::ofstream f(file_path, std::ios::binary | std::ios::trunc);
+            ASSERT_TRUE(f.is_open());
+            // 分块写入以避免一次性大 string 分配失败
+            constexpr size_t CHUNK = 4 * 1024 * 1024;
+            std::string chunk(CHUNK, 'x');
+            size_t written = 0;
+            while (written + CHUNK <= file_utils_t::MAX_READ_FILE_SIZE) {
+                f.write(chunk.data(), static_cast<std::streamsize>(CHUNK));
+                written += CHUNK;
+            }
+            if (written < file_utils_t::MAX_READ_FILE_SIZE) {
+                const size_t remain = file_utils_t::MAX_READ_FILE_SIZE - written;
+                f.write(chunk.data(), static_cast<std::streamsize>(remain));
+            }
+            ASSERT_TRUE(f.good());
+        }
+        auto result = file_utils_t::read_file(file_path);
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(result->size(), file_utils_t::MAX_READ_FILE_SIZE);
     }
 
 }  // namespace error_system::utils

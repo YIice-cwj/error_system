@@ -1,5 +1,9 @@
 #include "error_system/core/result.h"
 
+#include <stdexcept>
+#include <string>
+#include <type_traits>
+
 #include <gtest/gtest.h>
 
 #include "error_system/core/error_registry.h"
@@ -372,5 +376,58 @@ namespace error_system::core {
         );
         EXPECT_EQ(output, "error");
     }
+
+    // 验证 match() 不再标记 noexcept —— 用户回调抛出的异常应正常传播给调用方
+    TEST_F(result_test_t, match_propagates_exception_from_success_fn) {
+        auto result = result_t<int>::make_success(42);
+        EXPECT_THROW(
+            {
+                result.match(
+                    [](int) -> std::string { throw std::runtime_error("boom"); },
+                    [](const error_context_t&) noexcept { return std::string("error"); }
+                );
+            },
+            std::runtime_error
+        );
+    }
+
+    TEST_F(result_test_t, match_propagates_exception_from_error_fn) {
+        auto result = result_t<int>::make_error(
+            error_code_t{error_level_t::error, domain::system_domain_t::none, 0x0001, 0x0001, 1}, "fail");
+        EXPECT_THROW(
+            {
+                result.match(
+                    [](int) noexcept { return std::string("success"); },
+                    [](const error_context_t&) -> std::string { throw std::runtime_error("boom"); }
+                );
+            },
+            std::runtime_error
+        );
+    }
+
+    // 验证 result_t 的移动 noexcept 性与底层类型一致：
+    //   - T 为 noexcept 可移动类型时，result_t<T> 也应 noexcept 可移动
+    //   - T 为可能抛出的移动类型时，result_t<T> 也不应标记 noexcept
+    static_assert(std::is_nothrow_move_constructible_v<result_t<int>>,
+                  "result_t<int> should be nothrow-move-constructible");
+    static_assert(std::is_nothrow_move_constructible_v<result_t<std::string>>,
+                  "result_t<std::string> should be nothrow-move-constructible");
+
+    // 自定义一个移动时可能抛出的类型，用于验证 noexcept 特性正确传播
+    struct throwing_move_t {
+        int value{0};
+        throwing_move_t() = default;
+        explicit throwing_move_t(int v) noexcept : value(v) {}
+        throwing_move_t(const throwing_move_t&) noexcept = default;
+        // 移动构造函数显式标记 noexcept(false)，用于验证 result_t<T> 的 noexcept 特性传播
+        throwing_move_t(throwing_move_t&& other) noexcept(false) : value(other.value) {}
+        throwing_move_t& operator=(const throwing_move_t&) noexcept = default;
+        throwing_move_t& operator=(throwing_move_t&&) noexcept = delete;
+    };
+    static_assert(!std::is_nothrow_move_constructible_v<throwing_move_t>,
+                  "throwing_move_t must NOT be nothrow-move-constructible");
+    static_assert(!std::is_nothrow_move_constructible_v<result_t<throwing_move_t>>,
+                  "result_t<throwing_move_t> must NOT be nothrow-move-constructible "
+                  "(noexcept should propagate from T)");
 
 }  // namespace error_system::core

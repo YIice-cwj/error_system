@@ -1,6 +1,8 @@
 #include "error_system/core/error_context.h"
+#include "error_system/core/error_context_serializer.h"
 
 #include <string_view>
+#include <unordered_map>
 
 #include <gtest/gtest.h>
 
@@ -24,17 +26,17 @@ namespace error_system::core {
             registry.set_duplicate_warn_callback(nullptr);
 
             plugin::plugin_registry_t::instance().clear();
-            config::error_config_t::set_custom_formatter(nullptr);
-            config::error_config_t::set_enable_text_output(true);
+            config::formatter_config_t::set_custom_formatter(nullptr);
+            config::feature_flags_t::set_enable_text_output(true);
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
-            config::error_config_t::set_enable_stacktrace(false);
+            config::feature_flags_t::set_enable_stacktrace(false);
 #endif
 #ifdef ERROR_SYSTEM_ENABLE_VALIDATION
-            config::error_config_t::set_enable_validation(true);
+            config::feature_flags_t::set_enable_validation(true);
 #endif
 #ifdef ERROR_SYSTEM_ENABLE_LOCATION
-            config::error_config_t::set_enable_source_location(true);
-            config::error_config_t::set_enable_short_filename(false);
+            config::feature_flags_t::set_enable_source_location(true);
+            config::feature_flags_t::set_enable_short_filename(false);
 #endif
 
             registered_code_ = make_code(1);
@@ -45,17 +47,17 @@ namespace error_system::core {
         void TearDown() override {
             plugin::plugin_registry_t::instance().clear();
             error_registry_t::instance().unregister_all();
-            config::error_config_t::set_custom_formatter(nullptr);
-            config::error_config_t::set_enable_text_output(true);
+            config::formatter_config_t::set_custom_formatter(nullptr);
+            config::feature_flags_t::set_enable_text_output(true);
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE
-            config::error_config_t::set_enable_stacktrace(true);
+            config::feature_flags_t::set_enable_stacktrace(true);
 #endif
 #ifdef ERROR_SYSTEM_ENABLE_VALIDATION
-            config::error_config_t::set_enable_validation(true);
+            config::feature_flags_t::set_enable_validation(true);
 #endif
 #ifdef ERROR_SYSTEM_ENABLE_LOCATION
-            config::error_config_t::set_enable_source_location(true);
-            config::error_config_t::set_enable_short_filename(true);
+            config::feature_flags_t::set_enable_source_location(true);
+            config::feature_flags_t::set_enable_short_filename(true);
 #endif
         }
 
@@ -126,8 +128,8 @@ namespace error_system::core {
         error_context_t context(registered_code_, "serialize me");
         context.with("user", "alice");
 
-        const std::string text = context.to_string();
-        const std::string json = context.to_json();
+        const std::string text = error_context_serializer_t::to_string(context);
+        const std::string json = error_context_serializer_t::to_json(context);
 
         EXPECT_NE(text.find("ERR_CTX_REGISTERED"), std::string::npos);
         EXPECT_NE(text.find("Registered error context"), std::string::npos);
@@ -142,11 +144,11 @@ namespace error_system::core {
         error_context_t context(registered_code_, "wrapper error");
         auto wrapped = context.wrap(cause_context);
 
-        std::string binary_with_cause = wrapped.to_binary();
+        std::string binary_with_cause = error_context_serializer_t::to_binary(wrapped);
 
         // 不带 cause 的二进制应小于带 cause 的
         error_context_t ctx_no_cause(registered_code_, "wrapper error");
-        std::string binary_no_cause = ctx_no_cause.to_binary();
+        std::string binary_no_cause = error_context_serializer_t::to_binary(ctx_no_cause);
 
         EXPECT_GT(binary_with_cause.size(), binary_no_cause.size());
     }
@@ -154,7 +156,7 @@ namespace error_system::core {
     TEST_F(error_context_test_t, to_binary_without_cause_has_zero_flag) {
         error_context_t context(registered_code_, "no cause");
 
-        std::string binary = context.to_binary();
+        std::string binary = error_context_serializer_t::to_binary(context);
         EXPECT_GT(binary.size(), 0);
 
         // 无 cause 时最后 1 字节为 has_cause 标志，值为 0
@@ -311,6 +313,100 @@ namespace error_system::core {
         auto ctx = error_context_t::from_exception(registered_code_, ex);
         EXPECT_EQ(ctx.message, "something went wrong");
         EXPECT_EQ(ctx.get_code().get_code(), registered_code_.get_code());
+    }
+
+    // ========== payload_size() / is_payload_empty() 测试 ==========
+
+    TEST_F(error_context_test_t, payload_size_and_is_payload_empty_reflect_state) {
+        error_context_t ctx{registered_code_, "size test"};
+        // 初始状态：payload 为空
+        EXPECT_TRUE(ctx.is_payload_empty());
+        EXPECT_EQ(ctx.payload_size(), 0u);
+
+        // 添加 1 项
+        ctx.with("k1", "v1");
+        EXPECT_FALSE(ctx.is_payload_empty());
+        EXPECT_EQ(ctx.payload_size(), 1u);
+
+        // 添加至 SSO 上限（4 项）
+        ctx.with("k2", "v2").with("k3", "v3").with("k4", "v4");
+        EXPECT_EQ(ctx.payload_size(), 4u);
+        EXPECT_FALSE(ctx.is_payload_empty());
+
+        // 第 5 项触发溢出到 unordered_map
+        ctx.with("k5", "v5");
+        EXPECT_EQ(ctx.payload_size(), 5u);
+        EXPECT_FALSE(ctx.is_payload_empty());
+    }
+
+    // ========== for_each_payload() 测试 ==========
+
+    TEST_F(error_context_test_t, for_each_payload_visits_sso_and_overflow_items) {
+        error_context_t ctx{registered_code_, "for_each test"};
+        ctx.with("a", "1")
+           .with("b", "2")
+           .with("c", "3")
+           .with("d", "4")
+           .with("e", "5");  // 触发溢出
+
+        std::unordered_map<std::string, std::string> collected;
+        ctx.for_each_payload([&](const std::string& k, const std::string& v) {
+            collected[k] = v;
+        });
+
+        EXPECT_EQ(collected.size(), 5u);
+        EXPECT_EQ(collected["a"], "1");
+        EXPECT_EQ(collected["c"], "3");
+        EXPECT_EQ(collected["e"], "5");
+    }
+
+    TEST_F(error_context_test_t, for_each_payload_on_empty_context_does_nothing) {
+        error_context_t ctx{registered_code_, "empty"};
+        size_t count = 0;
+        ctx.for_each_payload([&](const std::string&, const std::string&) { ++count; });
+        EXPECT_EQ(count, 0u);
+    }
+
+    // ========== wrap() 移动语义测试 ==========
+
+    TEST_F(error_context_test_t, wrap_move_takes_ownership_of_cause) {
+        error_context_t cause{registered_code_, "original cause"};
+        error_context_t wrapper{registered_code_, "wrapper"};
+
+        // 移动包装：cause 应被转移，源对象 cause 状态不再可靠
+        error_context_t wrapped = wrapper.wrap(std::move(cause));
+
+        EXPECT_EQ(wrapped.message, "wrapper");
+        ASSERT_NE(wrapped.cause, nullptr);
+        EXPECT_EQ(wrapped.cause->message, "original cause");
+        EXPECT_EQ(wrapped.cause->cause, nullptr);
+    }
+
+    // ========== to_json / to_string 因果链序列化测试 ==========
+
+    TEST_F(error_context_test_t, to_json_includes_cause_chain_field) {
+        error_context_t cause{registered_code_, "root failure"};
+        cause.with("reason", "timeout");
+
+        error_context_t wrapper{registered_code_, "wrapper error"};
+        auto wrapped = wrapper.wrap(cause);
+
+        const std::string json = error_context_serializer_t::to_json(wrapped);
+        // JSON 中应包含 cause 字段，且 cause.message 为根因消息
+        EXPECT_NE(json.find("\"cause\""), std::string::npos);
+        EXPECT_NE(json.find("root failure"), std::string::npos);
+    }
+
+    TEST_F(error_context_test_t, to_string_includes_caused_by_marker) {
+        error_context_t cause{registered_code_, "lower layer failed"};
+        error_context_t wrapper{registered_code_, "upper layer failed"};
+        auto wrapped = wrapper.wrap(cause);
+
+        const std::string text = error_context_serializer_t::to_string(wrapped);
+        // 文本输出应包含因果链标记 "Caused by"
+        EXPECT_NE(text.find("Caused by"), std::string::npos);
+        EXPECT_NE(text.find("lower layer failed"), std::string::npos);
+        EXPECT_NE(text.find("upper layer failed"), std::string::npos);
     }
 
 }  // namespace error_system::core

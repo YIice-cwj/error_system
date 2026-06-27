@@ -30,8 +30,8 @@ namespace error_system::core {
 
         EXPECT_TRUE(error_registry_t::instance().is_registered(code));
 
-        const error_metadata_t* info = error_registry_t::instance().get_info(code);
-        ASSERT_NE(info, nullptr);
+        auto info = error_registry_t::instance().get_info(code);
+        ASSERT_TRUE(info.has_value());
         EXPECT_EQ(info->name, "ERR_DB_CONN");
         EXPECT_EQ(info->description, "Database connection failed");
     }
@@ -115,7 +115,7 @@ namespace error_system::core {
         error_registry_t::instance().unregister_error(code1);
         auto errors = error_registry_t::instance().get_errors_by_subsystem(1);
         EXPECT_EQ(errors.size(), 1);
-        EXPECT_EQ(errors[0].get().name, "ERR_2");
+        EXPECT_EQ(errors[0].name, "ERR_2");
 
         // 注销最后一个错误码，子系统索引应清空
         error_registry_t::instance().unregister_error(code2);
@@ -127,8 +127,8 @@ namespace error_system::core {
         auto code =
             error_code_t(error_level_t::error, domain::system_domain_t::database, 99, 99, 99);
 
-        const error_metadata_t* info = error_registry_t::instance().get_info(code);
-        EXPECT_EQ(info, nullptr);
+        auto info = error_registry_t::instance().get_info(code);
+        EXPECT_FALSE(info.has_value());
     }
 
     TEST_F(error_registry_test_t, get_errors_by_module) {
@@ -145,8 +145,8 @@ namespace error_system::core {
         auto errors = error_registry_t::instance().get_errors_by_module(module_id);
 
         EXPECT_EQ(errors.size(), 2);
-        EXPECT_EQ(errors[0].get().name, "ERR_1");
-        EXPECT_EQ(errors[1].get().name, "ERR_2");
+        EXPECT_EQ(errors[0].name, "ERR_1");
+        EXPECT_EQ(errors[1].name, "ERR_2");
     }
 
     TEST_F(error_registry_test_t, get_errors_by_subsystem) {
@@ -165,7 +165,7 @@ namespace error_system::core {
 
         std::set<std::string> error_names;
         for (const auto& ref : errors) {
-            error_names.insert(ref.get().name);
+            error_names.insert(ref.name);
         }
         EXPECT_TRUE(error_names.count("ERR_1"));
         EXPECT_TRUE(error_names.count("ERR_2"));
@@ -173,7 +173,7 @@ namespace error_system::core {
         // 查询子系统 2 的所有错误码
         auto errors2 = error_registry_t::instance().get_errors_by_subsystem(2);
         EXPECT_EQ(errors2.size(), 1);
-        EXPECT_EQ(errors2[0].get().name, "ERR_3");
+        EXPECT_EQ(errors2[0].name, "ERR_3");
 
         // 查询不存在的子系统
         auto errors3 = error_registry_t::instance().get_errors_by_subsystem(99);
@@ -205,8 +205,8 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "OLD_NAME", "Old description");
         error_registry_t::instance().register_error(code, "NEW_NAME", "New description");
 
-        const error_metadata_t* info = error_registry_t::instance().get_info(code);
-        ASSERT_NE(info, nullptr);
+        auto info = error_registry_t::instance().get_info(code);
+        ASSERT_TRUE(info.has_value());
         // Duplicate registration should keep the first registered metadata
         EXPECT_EQ(info->name, "OLD_NAME");
         EXPECT_EQ(info->description, "Old description");
@@ -220,8 +220,8 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "SECOND", "Second description");
 
         // First registration should be kept
-        const error_metadata_t* info = error_registry_t::instance().get_info(code);
-        ASSERT_NE(info, nullptr);
+        auto info = error_registry_t::instance().get_info(code);
+        ASSERT_TRUE(info.has_value());
         EXPECT_EQ(info->name, "FIRST");
     }
 
@@ -232,8 +232,8 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "FIRST", "First description");
         error_registry_t::instance().register_error(code, "SECOND", "Second description");
 
-        const error_metadata_t* info = error_registry_t::instance().get_info(code);
-        ASSERT_NE(info, nullptr);
+        auto info = error_registry_t::instance().get_info(code);
+        ASSERT_TRUE(info.has_value());
         EXPECT_EQ(info->name, "SECOND");
         EXPECT_EQ(info->description, "Second description");
     }
@@ -300,8 +300,8 @@ namespace error_system::core {
         size_t count = error_registry_t::instance().register_errors(codes, names, descs);
 
         EXPECT_EQ(count, 1);
-        const error_metadata_t* info = error_registry_t::instance().get_info(code);
-        ASSERT_NE(info, nullptr);
+        auto info = error_registry_t::instance().get_info(code);
+        ASSERT_TRUE(info.has_value());
         EXPECT_EQ(info->name, "UPDATED");
         EXPECT_EQ(info->description, "Updated desc");
     }
@@ -370,8 +370,8 @@ namespace error_system::core {
         error_registry_t::instance().register_error(code, "ORIGINAL", "Original description");
         error_registry_t::instance().register_error(code, "NEW", "New description");
 
-        const error_metadata_t* info = error_registry_t::instance().get_info(code);
-        ASSERT_NE(info, nullptr);
+        auto info = error_registry_t::instance().get_info(code);
+        ASSERT_TRUE(info.has_value());
         EXPECT_EQ(info->name, "ORIGINAL");
         EXPECT_EQ(info->description, "Original description");
     }
@@ -387,8 +387,8 @@ namespace error_system::core {
             threads.emplace_back([&success_count, &code]() {
                 for (int j = 0; j < 100; ++j) {
                     if (error_registry_t::instance().is_registered(code)) {
-                        const error_metadata_t* info = error_registry_t::instance().get_info(code);
-                        if (info != nullptr && info->name == "CONCURRENT") {
+                        auto info = error_registry_t::instance().get_info(code);
+                        if (info.has_value() && info->name == "CONCURRENT") {
                             success_count.fetch_add(1);
                         }
                     }
