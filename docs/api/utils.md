@@ -1,10 +1,10 @@
-# 🛠️ Utils 层 API
+# Utils 层 API
 
 > `error_system::utils`
 
 ---
 
-## ⏳ async_queue_t\<T, Processor\>
+## async_queue_t\<T, Processor\>
 
 异步工作队列 — 单生产者-单消费者模式。
 
@@ -24,7 +24,7 @@ public:
 };
 ```
 
-| ✨ 特性 | 📝 说明 |
+| 特性 | 说明 |
 |------|------|
 | 自动生命周期 | 首次 `enqueue()` 启动，析构 `join()` |
 | 死锁安全 | 先设 `running_=false`，再 `notify_all`，再 `join` |
@@ -41,7 +41,7 @@ queue.set_max_size(1000);
 
 ---
 
-## 📝 string_utils_t
+## string_utils_t
 
 字符串处理工具。
 
@@ -66,30 +66,35 @@ public:
 
     static std::string to_lower(std::string_view) noexcept;
     static std::string to_upper(std::string_view) noexcept;
-    static std::string escape_json(std::string_view) noexcept;
+    static std::string escape_json(std::string_view value) noexcept;
 
     template <typename T>
     static inline std::optional<T> parse_number(std::string_view) noexcept;
 };
 ```
 
-**⚡ 速查**
+> `format()` 与 `escape_json()` 均为 `noexcept`，`std::bad_alloc` 内部 `try-catch` 捕获。
+
+**速查**
 
 ```cpp
-string_utils_t::hash("hello");                        // constexpr FNV-1a
-string_utils_t::format("code: {}, msg: {}", 404, "NF"); // "code: 404, msg: NF"
-string_utils_t::split("a,b,c", ",");                  // {"a", "b", "c"}
-string_utils_t::trim("  hi  ");                       // "hi"
+string_utils_t::hash("hello");                            // constexpr FNV-1a
+string_utils_t::format("code: {}, msg: {}", 404, "NF");   // "code: 404, msg: NF"
+string_utils_t::split("a,b,c", ",");                      // {"a", "b", "c"}
+string_utils_t::trim("  hi  ");                           // "hi"
 string_utils_t::replace_all("hello world", "world", "universe");
-string_utils_t::starts_with("hello", "he");           // true
-string_utils_t::parse_number<int>("42");              // std::optional{42}
+string_utils_t::starts_with("hello", "he");               // true
+string_utils_t::parse_number<int>("42");                  // std::optional{42}
+string_utils_t::escape_json(R"(a"b\c)");                  // "a\"b\\c"
 ```
 
 ---
 
-## 📋 json_dict_t
+## json_dict_t
 
 JSON 解析与点路径访问。
+
+> 简化的 JSON 解析器，仅支持扁平 / 嵌套的字符串键值对。不支持数字、布尔、数组等非字符串值。生产环境如需完整 JSON 解析请使用 nlohmann/json 等第三方库。
 
 ### API
 
@@ -114,11 +119,23 @@ auto dict = json_dict_t::parse(R"({"user":{"name":"Alice"}})");
 auto name = dict->get_value("user.name");           // "Alice"
 auto code = dict->get_value_or("code", "0");        // "0" (默认)
 dict->contains("user.name");                        // true
+
+// 嵌套路径访问（支持多层）
+auto deep = json_dict_t::parse(R"({"a":{"b":{"c":"value"}}})");
+deep->get_value("a.b.c");                           // "value"
 ```
 
 ---
 
-## 📁 file_utils_t
+## json_lexer_t
+
+JSON 词法分析器（内部使用，`json_dict_t` 的实现基础）。
+
+> 支持 RFC 8259 规范的 UTF-16 代理对解析（`\uD83D\uDE00` → 4 字节 UTF-8 编码），孤立代理区码点会被静默丢弃。
+
+---
+
+## file_utils_t
 
 跨平台文件操作。
 
@@ -137,6 +154,8 @@ public:
 };
 ```
 
+> `read_file()` 内置文件大小上限保护（`MAX_READ_FILE_SIZE`），防止 OOM 攻击。
+
 ```cpp
 auto content = file_utils_t::read_file("config.json");
 file_utils_t::write_file("output.txt", "Hello!");
@@ -145,7 +164,7 @@ file_utils_t::dir_exists("config/");    // true/false
 
 ---
 
-## 🔍 stack_trace_utils_t
+## stack_trace_utils_t
 
 跨平台堆栈跟踪。
 
@@ -161,9 +180,9 @@ public:
 
 | 平台 | 实现 |
 |------|------|
-| 🐧 Linux | `backtrace()` / `backtrace_symbols()` |
-| 🍎 macOS | `backtrace()` / `backtrace_symbols()` |
-| 🪟 Windows | `CaptureStackBackTrace()` |
+| Linux | `backtrace()` / `backtrace_symbols()` |
+| macOS | `backtrace()` / `backtrace_symbols()` |
+| Windows | `CaptureStackBackTrace()` + `SymFromAddr` |
 
 ```cpp
 auto frames = stack_trace_utils_t::generate(2, 8);
@@ -172,9 +191,9 @@ for (const auto& f : frames) std::cout << f << "\n";
 
 ---
 
-## 📍 source_location_t
+## source_location_t
 
-源位置封装，`error_context_t` 构造时自动捕获。
+源位置封装，`error_context_t` 构造时通过 `located_code_t` 隐式转换自动捕获调用者位置。
 
 ```cpp
 class source_location_t {
@@ -182,7 +201,7 @@ public:
     static source_location_t current(
         const char* file = __builtin_FILE(),
         const char* func = __builtin_FUNCTION(),
-        uint32_t line = __builtin_LINE());
+        uint32_t line = __builtin_LINE()) noexcept;
 
     const char* file_name() const noexcept;
     const char* function_name() const noexcept;
@@ -190,21 +209,45 @@ public:
 };
 ```
 
+> 通过默认参数在调用点展开 `__builtin_FILE()`，捕获的是调用者位置而非库内部位置。
+
 ---
 
-## 🖨️ error_formatter
+## string_format_t
+
+`{}` 占位符格式化工具（`error_context_t` 消息格式化使用）。
+
+```cpp
+class string_format_t {
+public:
+    template <typename... Args>
+    static std::string format(std::string fmt, Args&&... args) noexcept;
+};
+```
+
+```cpp
+auto msg = string_format_t::format("用户 {} 登录失败，重试 {} 次", "alice", 3);
+// "用户 alice 登录失败，重试 3 次"
+```
+
+---
+
+## error_formatter
+
+`operator<<` 输出流支持。
 
 ```cpp
 std::ostream& operator<<(std::ostream& os, const error_context_t& ctx);
 ```
 
-**📤 示例输出**
+**示例输出**
 
 ```
-[ERROR][database][1][1][1] 数据库连接超时
-at main (main.cc:42)
-Stack:
-  0: main (main.cc:42)
-  1: process_request (handler.cc:128)
-Cause: [WARN][network][2][1][1] 连接超时
+[Location: main.cc:42 @ main]
+[Sign: Error Level: error, System: database, 数据库服务 / 连接管理]
+Code: 1 (ERR_DB_TIMEOUT) - 数据库连接超时
+  [Stacktrace]:
+    0: main (main.cc:42)
+    1: process_request (handler.cc:128)
+↳ Caused by: [Location: ...] ... 连接超时
 ```
