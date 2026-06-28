@@ -428,4 +428,189 @@ namespace error_system::core {
         EXPECT_EQ(success_count.load(), 100);
     }
 
+
+    TEST_F(error_registry_test_t, get_info_cached_returns_registered_metadata) {
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        error_registry_t::instance().register_error(code, "ERR_CACHED", "Cached metadata");
+
+        error_registry_t::instance().invalidate_metadata_cache();
+        const auto info = error_registry_t::instance().get_info_cached(code);
+        ASSERT_TRUE(info.has_value());
+        EXPECT_EQ(info->name, "ERR_CACHED");
+        EXPECT_EQ(info->description, "Cached metadata");
+    }
+
+    TEST_F(error_registry_test_t, get_info_cached_returns_nullopt_for_unregistered) {
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 9, 9, 9);
+        error_registry_t::instance().invalidate_metadata_cache();
+
+        const auto info = error_registry_t::instance().get_info_cached(code);
+        EXPECT_FALSE(info.has_value());
+    }
+
+    TEST_F(error_registry_test_t, get_info_cached_caches_unregistered_result) {
+        // 缓存"未注册"结果，避免对未注册码重复加锁查询
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 9, 9, 9);
+        error_registry_t::instance().invalidate_metadata_cache();
+
+        EXPECT_FALSE(error_registry_t::instance().get_info_cached(code).has_value());
+        // 第二次查询应命中"未注册"缓存（零锁开销）
+        EXPECT_FALSE(error_registry_t::instance().get_info_cached(code).has_value());
+
+        // 注册后纪元 bump，缓存失效，应能查到
+        error_registry_t::instance().register_error(code, "ERR_LATE", "Late registered");
+        const auto info = error_registry_t::instance().get_info_cached(code);
+        ASSERT_TRUE(info.has_value());
+        EXPECT_EQ(info->name, "ERR_LATE");
+    }
+
+    TEST_F(error_registry_test_t, cache_invalidated_on_unregister) {
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        error_registry_t::instance().register_error(code, "ERR_TO_REMOVE", "To be removed");
+
+        // 填充缓存
+        ASSERT_TRUE(error_registry_t::instance().get_info_cached(code).has_value());
+
+        // 注销后缓存应失效
+        error_registry_t::instance().unregister_error(code);
+        EXPECT_FALSE(error_registry_t::instance().get_info_cached(code).has_value());
+    }
+
+    TEST_F(error_registry_test_t, cache_invalidated_on_unregister_all) {
+        const auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        const auto code2 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 2);
+        error_registry_t::instance().register_error(code1, "ERR_1", "One");
+        error_registry_t::instance().register_error(code2, "ERR_2", "Two");
+
+        // 填充缓存
+        ASSERT_TRUE(error_registry_t::instance().get_info_cached(code1).has_value());
+        ASSERT_TRUE(error_registry_t::instance().get_info_cached(code2).has_value());
+
+        error_registry_t::instance().unregister_all();
+        EXPECT_FALSE(error_registry_t::instance().get_info_cached(code1).has_value());
+        EXPECT_FALSE(error_registry_t::instance().get_info_cached(code2).has_value());
+    }
+
+    TEST_F(error_registry_test_t, epoch_monotonically_increases_on_mutations) {
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        const uint64_t epoch0 = error_registry_t::instance().get_epoch();
+
+        error_registry_t::instance().register_error(code, "ERR_EPOCH", "Epoch test");
+        const uint64_t epoch1 = error_registry_t::instance().get_epoch();
+        EXPECT_GT(epoch1, epoch0);
+
+        error_registry_t::instance().unregister_error(code);
+        const uint64_t epoch2 = error_registry_t::instance().get_epoch();
+        EXPECT_GT(epoch2, epoch1);
+
+        error_registry_t::instance().unregister_all();
+        const uint64_t epoch3 = error_registry_t::instance().get_epoch();
+        EXPECT_GT(epoch3, epoch2);
+    }
+
+    TEST_F(error_registry_test_t, cache_is_thread_local) {
+        // 每个线程有独立缓存，互不干扰
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        error_registry_t::instance().register_error(code, "ERR_TLS", "Thread-local cache");
+
+        // 主线程填充缓存
+        ASSERT_TRUE(error_registry_t::instance().get_info_cached(code).has_value());
+
+        // 在另一线程注销（bump 纪元），主线程缓存因纪元变化失效
+        std::thread t([&code] {
+            error_registry_t::instance().unregister_error(code);
+        });
+        t.join();
+
+        // 主线程下次查询应看到失效并重建
+        EXPECT_FALSE(error_registry_t::instance().get_info_cached(code).has_value());
+    }
+
+    /**
+     * @brief 批量注册空数组应返回 0 且不修改注册表
+     */
+    TEST_F(error_registry_test_t, register_errors_empty_arrays_returns_zero) {
+        std::vector<error_code_t> codes;
+        std::vector<std::string_view> names;
+        std::vector<std::string_view> descs;
+
+        size_t count = error_registry_t::instance().register_errors(codes, names, descs);
+        EXPECT_EQ(count, 0UL);
+        EXPECT_TRUE(error_registry_t::instance().get_errors_by_subsystem(1).empty());
+    }
+
+    /**
+     * @brief 批量注册混合重复和新错误码：重复项按策略处理，新项正常注册
+     */
+    TEST_F(error_registry_test_t, register_errors_mixed_duplicate_and_new) {
+        auto code_keep = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        error_registry_t::instance().register_error(code_keep, "KEEP_OLD", "Old desc");
+
+        auto code_new = error_code_t(error_level_t::warn, domain::system_domain_t::database, 1, 1, 2);
+
+        std::vector<error_code_t> codes = {code_keep, code_new};
+        std::vector<std::string_view> names = {"KEEP_NEW", "NEW_ONE"};
+        std::vector<std::string_view> descs = {"New keep desc", "Fresh entry"};
+
+        size_t count = error_registry_t::instance().register_errors(codes, names, descs);
+        EXPECT_EQ(count, 1UL);
+
+        auto info_keep = error_registry_t::instance().get_info(code_keep);
+        ASSERT_TRUE(info_keep.has_value());
+        EXPECT_EQ(info_keep->name, "KEEP_OLD");
+
+        auto info_new = error_registry_t::instance().get_info(code_new);
+        ASSERT_TRUE(info_new.has_value());
+        EXPECT_EQ(info_new->name, "NEW_ONE");
+        EXPECT_EQ(info_new->description, "Fresh entry");
+    }
+
+    /**
+     * @brief 同一批次内出现重复 code：skip 策略下首项注册成功，重复项跳过
+     */
+    TEST_F(error_registry_test_t, register_errors_same_code_twice_in_batch) {
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 7);
+
+        std::vector<error_code_t> codes = {code, code};
+        std::vector<std::string_view> names = {"FIRST_IN_BATCH", "SECOND_IN_BATCH"};
+        std::vector<std::string_view> descs = {"First", "Second"};
+
+        size_t count = error_registry_t::instance().register_errors(codes, names, descs);
+        EXPECT_EQ(count, 1UL);
+
+        auto info = error_registry_t::instance().get_info(code);
+        ASSERT_TRUE(info.has_value());
+        EXPECT_EQ(info->name, "FIRST_IN_BATCH");
+        EXPECT_EQ(info->description, "First");
+    }
+
+    /**
+     * @brief 同一子系统下多个模块组：get_errors_by_subsystem 返回全部，
+     *        与注册顺序无关
+     */
+    TEST_F(error_registry_test_t, get_errors_by_subsystem_multiple_module_groups_order_independent) {
+        auto code_a1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 5, 10, 1);
+        auto code_b1 = error_code_t(error_level_t::warn, domain::system_domain_t::database, 5, 20, 1);
+        auto code_b2 = error_code_t(error_level_t::info, domain::system_domain_t::database, 5, 20, 2);
+
+        error_registry_t::instance().register_error(code_b1, "B1", "B1 desc");
+        error_registry_t::instance().register_error(code_a1, "A1", "A1 desc");
+        error_registry_t::instance().register_error(code_b2, "B2", "B2 desc");
+
+        auto errors = error_registry_t::instance().get_errors_by_subsystem(5);
+        EXPECT_EQ(errors.size(), 3UL);
+
+        std::set<std::string> names;
+        for (const auto& meta : errors) {
+            names.insert(meta.name);
+        }
+        EXPECT_EQ(names.size(), 3UL);
+        EXPECT_TRUE(names.count("A1"));
+        EXPECT_TRUE(names.count("B1"));
+        EXPECT_TRUE(names.count("B2"));
+
+        auto errors_other = error_registry_t::instance().get_errors_by_subsystem(99);
+        EXPECT_TRUE(errors_other.empty());
+    }
+
 }  // namespace error_system::core

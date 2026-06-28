@@ -123,7 +123,7 @@ namespace error_system::utils {
 
     TEST_F(json_dict_test_t, from_file_reads_valid_json_file) {
         auto file_path = temp_dir_ / "test.json";
-        file_utils_t::write_file(file_path, R"({"file_key": "file_value"})");
+        ASSERT_TRUE(file_utils_t::write_file(file_path, R"({"file_key": "file_value"})"));
 
         auto result = json_dict_t::from_file(file_path);
         ASSERT_TRUE(result.has_value());
@@ -200,7 +200,6 @@ namespace error_system::utils {
         EXPECT_TRUE(result.empty());
     }
 
-    // ========== UTF-16 代理对 / \uXXXX 转义测试 ==========
     //
     // 以下测试覆盖 json_lexer 对 \uXXXX 转义的处理，重点验证：
     //   1. BMP 范围内的 \uXXXX 正确编码为 UTF-8
@@ -253,6 +252,65 @@ namespace error_system::utils {
         // 非法十六进制应使整个解析失败
         auto result = json_dict_t::parse(R"({"text": "\uGGGG"})");
         EXPECT_FALSE(result.has_value());
+    }
+
+    TEST_F(json_serializer_test_t, escape_json_nul_char) {
+        auto result = json_serializer_t::escape_json(std::string("\0", 1));
+        EXPECT_EQ(result, "\\u0000");
+    }
+
+    TEST_F(json_serializer_test_t, escape_json_control_char_0x01) {
+        auto result = json_serializer_t::escape_json("\x01");
+        EXPECT_EQ(result, "\\u0001");
+    }
+
+    TEST_F(json_serializer_test_t, escape_json_control_char_0x0b) {
+        auto result = json_serializer_t::escape_json("\x0b");
+        EXPECT_EQ(result, "\\u000b");
+    }
+
+    TEST_F(json_serializer_test_t, escape_json_control_char_0x1f) {
+        auto result = json_serializer_t::escape_json("\x1f");
+        EXPECT_EQ(result, "\\u001f");
+    }
+
+    TEST_F(json_serializer_test_t, escape_json_backspace_formfeed_carriage_return) {
+        EXPECT_EQ(json_serializer_t::escape_json("\b"), "\\b");
+        EXPECT_EQ(json_serializer_t::escape_json("\f"), "\\f");
+        EXPECT_EQ(json_serializer_t::escape_json("\r"), "\\r");
+    }
+
+    TEST_F(json_serializer_test_t, escape_json_mixed_content) {
+        std::string input{'a', '"', 'b', '\\', '\0', 'c', '\x01', 'd'};
+        auto result = json_serializer_t::escape_json(input);
+        EXPECT_EQ(result, "a\\\"b\\\\\\u0000c\\u0001d");
+    }
+
+    TEST_F(json_serializer_test_t, escape_json_high_utf8_passthrough) {
+        auto result = json_serializer_t::escape_json("中文😀");
+        EXPECT_EQ(result, "中文😀");
+    }
+
+    TEST_F(json_dict_test_t, parse_escape_quote_and_backslash) {
+        auto result = json_dict_t::parse(R"({"k":"a\"b\\c"})");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(result->get_value("k"), "a\"b\\c");
+    }
+
+    TEST_F(json_dict_test_t, parse_unterminated_string_returns_nullopt) {
+        auto result = json_dict_t::parse(R"({"k":"unterminated})");
+        EXPECT_FALSE(result.has_value());
+    }
+
+    TEST_F(json_dict_test_t, parse_unicode_truncated_returns_nullopt) {
+        auto result = json_dict_t::parse(R"({"k":"\u12"})");
+        EXPECT_FALSE(result.has_value());
+    }
+
+    TEST_F(json_dict_test_t, parse_surrogate_pair_high_followed_by_bmp) {
+        auto result = json_dict_t::parse(R"({"k":"\uD83D\u0041"})");
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(result->get_value("k"), "A");
     }
 
 }  // namespace error_system::utils

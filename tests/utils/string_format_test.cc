@@ -6,64 +6,62 @@
 
 namespace error_system::utils {
 
-    class string_format_test_t : public ::testing::Test {};
-
-    TEST_F(string_format_test_t, format_replaces_single_placeholder) {
+    TEST(string_format_test, format_replaces_single_placeholder) {
         auto result = string_format_t::format("hello {}", "world");
         EXPECT_EQ(result, "hello world");
     }
 
-    TEST_F(string_format_test_t, format_replaces_multiple_placeholders) {
+    TEST(string_format_test, format_replaces_multiple_placeholders) {
         auto result = string_format_t::format("{} + {} = {}", 1, 2, 3);
         EXPECT_EQ(result, "1 + 2 = 3");
     }
 
-    TEST_F(string_format_test_t, format_handles_integers) {
+    TEST(string_format_test, format_handles_integers) {
         auto result = string_format_t::format("number: {}", 42);
         EXPECT_EQ(result, "number: 42");
     }
 
-    TEST_F(string_format_test_t, format_handles_floats) {
+    TEST(string_format_test, format_handles_floats) {
         auto result = string_format_t::format("pi: {}", 3.14);
         EXPECT_EQ(result, "pi: 3.14");
     }
 
-    TEST_F(string_format_test_t, format_handles_no_placeholders) {
+    TEST(string_format_test, format_handles_no_placeholders) {
         auto result = string_format_t::format("no placeholders");
         EXPECT_EQ(result, "no placeholders");
     }
 
-    TEST_F(string_format_test_t, format_handles_empty_string) {
+    TEST(string_format_test, format_handles_empty_string) {
         auto result = string_format_t::format("");
         EXPECT_TRUE(result.empty());
     }
 
-    TEST_F(string_format_test_t, format_handles_more_placeholders_than_args) {
+    TEST(string_format_test, format_handles_more_placeholders_than_args) {
         auto result = string_format_t::format("{} {}", "only_one");
         EXPECT_EQ(result, "only_one {}");
     }
 
-    TEST_F(string_format_test_t, format_handles_empty_arg) {
+    TEST(string_format_test, format_handles_empty_arg) {
         auto result = string_format_t::format("start{}end", "");
         EXPECT_EQ(result, "startend");
     }
 
-    TEST_F(string_format_test_t, format_escapes_double_braces) {
+    TEST(string_format_test, format_escapes_double_braces) {
         auto result = string_format_t::format("{{hello}}", "world");
         EXPECT_EQ(result, "{hello}");
     }
 
-    TEST_F(string_format_test_t, format_mixed_placeholders_and_escaped_braces) {
+    TEST(string_format_test, format_mixed_placeholders_and_escaped_braces) {
         auto result = string_format_t::format("{{}} {}", 42);
         EXPECT_EQ(result, "{} 42");
     }
 
-    TEST_F(string_format_test_t, format_escapes_only_left_brace) {
+    TEST(string_format_test, format_escapes_only_left_brace) {
         auto result = string_format_t::format("{{", "x");
         EXPECT_EQ(result, "{");
     }
 
-    TEST_F(string_format_test_t, format_escapes_only_right_brace) {
+    TEST(string_format_test, format_escapes_only_right_brace) {
         auto result = string_format_t::format("}}", "x");
         EXPECT_EQ(result, "}");
     }

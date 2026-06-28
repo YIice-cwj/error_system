@@ -17,8 +17,8 @@ namespace error_system::utils {
 #elif defined(__GNUC__) || defined(__clang__)
     __attribute__((noinline))
 #endif
-    static void helper_for_stacktrace(std::vector<std::string>& out) {
-        out = stack_trace_utils_t::generate(0);
+    static void helper_for_stacktrace(std::vector<std::string>& output) {
+        output = stack_trace_utils_t::generate(0);
     }
 
     TEST_F(stack_trace_utils_test_t, generate_returns_non_empty) {

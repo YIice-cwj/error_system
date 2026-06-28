@@ -52,7 +52,7 @@ namespace error_system::core {
 
     TEST_F(result_test_t, and_then_chains_success) {
         result_t<int> result(5);
-        auto new_result = std::move(result).and_then([](int val) -> result_t<int> { return result_t<int>(val * 2); });
+        auto new_result = std::move(result).and_then([](int value) -> result_t<int> { return result_t<int>(value * 2); });
         EXPECT_TRUE(new_result.is_success());
         EXPECT_EQ(new_result.value(), 10);
     }
@@ -64,9 +64,9 @@ namespace error_system::core {
         error_context_t context(code, "error");
         result_t<int> result(context);
         bool called = false;
-        auto new_result = std::move(result).and_then([&called](int val) -> result_t<int> {
+        auto new_result = std::move(result).and_then([&called](int value) -> result_t<int> {
             called = true;
-            return result_t<int>(val * 2);
+            return result_t<int>(value * 2);
         });
         EXPECT_TRUE(new_result.is_error());
         EXPECT_FALSE(called);
@@ -136,7 +136,7 @@ namespace error_system::core {
 
     TEST_F(result_test_t, lvalue_and_then_works) {
         result_t<int> result(5);
-        auto new_result = result.and_then([](int val) -> result_t<int> { return result_t<int>(val * 3); });
+        auto new_result = result.and_then([](int value) -> result_t<int> { return result_t<int>(value * 3); });
         EXPECT_TRUE(new_result.is_success());
         EXPECT_EQ(new_result.value(), 15);
     }
@@ -183,7 +183,6 @@ namespace error_system::core {
         EXPECT_EQ(result.error().message, "from context");
     }
 
-    // ========== expect() 测试 ==========
 
     TEST_F(result_test_t, expect_on_success_returns_value) {
         result_t<int> result(42);
@@ -202,7 +201,6 @@ namespace error_system::core {
         EXPECT_EQ(result.expect(), "hello");
     }
 
-    // ========== value_pointer() 测试 ==========
 
     TEST_F(result_test_t, value_pointer_on_success_returns_non_null) {
         auto result = result_t<int>(99);
@@ -219,7 +217,6 @@ namespace error_system::core {
         EXPECT_EQ(ptr, nullptr);
     }
 
-    // ========== value_or() 测试 ==========
 
     TEST_F(result_test_t, value_or_on_success_returns_value) {
         auto result = result_t<int>(42);
@@ -233,11 +230,10 @@ namespace error_system::core {
         EXPECT_EQ(result.value_or(100), 100);
     }
 
-    // ========== map() 测试 ==========
 
     TEST_F(result_test_t, map_on_success_transforms_value) {
         auto result = result_t<int>(21);
-        auto mapped = result.map([](int v) noexcept { return v * 2; });
+        auto mapped = result.map([](int value) noexcept { return value * 2; });
         EXPECT_TRUE(mapped.is_success());
         EXPECT_EQ(mapped.value_or(0), 42);
     }
@@ -246,12 +242,11 @@ namespace error_system::core {
         auto code = error_code_t{error_level_t::error, domain::system_domain_t::none, 0x0001, 0x0001, 1};
         error_registry_t::instance().register_error(code, "ERR_MAP", "map error");
         auto result = result_t<int>::make_error(code, "fail");
-        auto mapped = result.map([](int v) noexcept { return v * 2; });
+        auto mapped = result.map([](int value) noexcept { return value * 2; });
         EXPECT_TRUE(mapped.is_error());
         EXPECT_EQ(mapped.value_or(0), 0);
     }
 
-    // ========== map_error() 测试 ==========
 
     TEST_F(result_test_t, map_error_on_success_preserves_value) {
         auto result = result_t<int>(42);
@@ -278,7 +273,6 @@ namespace error_system::core {
         EXPECT_EQ(mapped.error().get_code().get_number(), 99u);
     }
 
-    // ========== result_t<void> 测试 ==========
 
     TEST_F(result_test_t, void_result_success) {
         auto result = result_t<void>();
@@ -294,7 +288,6 @@ namespace error_system::core {
         EXPECT_FALSE(result.is_success());
     }
 
-    // ========== 拷贝构造测试 ==========
 
     TEST_F(result_test_t, copy_constructor_preserves_success) {
         auto original = result_t<int>(42);
@@ -312,7 +305,6 @@ namespace error_system::core {
         EXPECT_EQ(copy.value_or(0), 0);
     }
 
-    // ========== 移动构造测试 ==========
 
     TEST_F(result_test_t, move_constructor_preserves_success) {
         auto original = result_t<int>(42);
@@ -329,7 +321,6 @@ namespace error_system::core {
         EXPECT_TRUE(moved.is_error());
     }
 
-    // ========== make_success() 测试 ==========
 
     TEST_F(result_test_t, make_success_creates_success_result) {
         auto result = result_t<int>::make_success(42);
@@ -343,7 +334,6 @@ namespace error_system::core {
         EXPECT_EQ(result.value_or(""), "hello");
     }
 
-    // ========== unwrap() 测试 ==========
 
     TEST_F(result_test_t, unwrap_on_success_returns_value) {
         auto result = result_t<int>::make_success(42);
@@ -356,12 +346,11 @@ namespace error_system::core {
         EXPECT_EQ(result.unwrap(), 0);
     }
 
-    // ========== match() 测试 ==========
 
     TEST_F(result_test_t, match_on_success_calls_success_fn) {
         auto result = result_t<int>::make_success(42);
         auto output = result.match(
-            [](int v) noexcept { return std::string("success: ") + std::to_string(v); },
+            [](int value) noexcept { return std::string("success: ") + std::to_string(value); },
             [](const error_context_t&) noexcept { return std::string("error"); }
         );
         EXPECT_EQ(output, "success: 42");
@@ -382,7 +371,7 @@ namespace error_system::core {
         auto result = result_t<int>::make_success(42);
         EXPECT_THROW(
             {
-                result.match(
+                (void)result.match(
                     [](int) -> std::string { throw std::runtime_error("boom"); },
                     [](const error_context_t&) noexcept { return std::string("error"); }
                 );
@@ -396,7 +385,7 @@ namespace error_system::core {
             error_code_t{error_level_t::error, domain::system_domain_t::none, 0x0001, 0x0001, 1}, "fail");
         EXPECT_THROW(
             {
-                result.match(
+                (void)result.match(
                     [](int) noexcept { return std::string("success"); },
                     [](const error_context_t&) -> std::string { throw std::runtime_error("boom"); }
                 );
@@ -417,7 +406,7 @@ namespace error_system::core {
     struct throwing_move_t {
         int value{0};
         throwing_move_t() = default;
-        explicit throwing_move_t(int v) noexcept : value(v) {}
+        explicit throwing_move_t(int initial_value) noexcept : value(initial_value) {}
         throwing_move_t(const throwing_move_t&) noexcept = default;
         // 移动构造函数显式标记 noexcept(false)，用于验证 result_t<T> 的 noexcept 特性传播
         throwing_move_t(throwing_move_t&& other) noexcept(false) : value(other.value) {}

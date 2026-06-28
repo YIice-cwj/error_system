@@ -8,7 +8,7 @@ namespace error_system::core {
 
     TEST_F(error_code_test_t, default_constructor_creates_success_code) {
         error_code_t code;
-        EXPECT_EQ(code.get_code(), 0x8000000000000000ULL);
+        EXPECT_EQ(code.get_code(), 0x8000000000000000ULL);  // sign=1（成功）的默认成功码原始值
         EXPECT_EQ(code.get_sign(), 1);  // sign=1 = true = 成功
         EXPECT_EQ(code.get_level(), error_level_t::debug);
         EXPECT_EQ(code.get_system(), domain::system_domain_t::none);
@@ -57,7 +57,7 @@ namespace error_system::core {
         constexpr error_code_t code(
             error_level_t::error,
             domain::system_domain_t::database,
-            0x0102,  // subsys
+            0x0102,  // subsystem
             0x0304,  // module
             0x0506   // number
         );
@@ -72,16 +72,16 @@ namespace error_system::core {
 
     TEST_F(error_code_test_t, constexpr_five_parameter_constructor) {
         constexpr error_level_t level = error_level_t::warn;
-        constexpr domain::system_domain_t sys = domain::system_domain_t::application;
-        constexpr uint16_t subsys = 101;
+        constexpr domain::system_domain_t system = domain::system_domain_t::application;
+        constexpr uint16_t subsystem = 101;
         constexpr uint16_t module = 1;
         constexpr uint16_t number = 1;
 
-        constexpr error_code_t code(level, sys, subsys, module, number);
+        constexpr error_code_t code(level, system, subsystem, module, number);
 
         static_assert(code.get_level() == level, "");
-        static_assert(code.get_system() == sys, "");
-        static_assert(code.get_subsys() == subsys, "");
+        static_assert(code.get_system() == system, "");
+        static_assert(code.get_subsys() == subsystem, "");
         static_assert(code.get_module() == module, "");
         static_assert(code.get_number() == number, "");
         EXPECT_TRUE(true);

@@ -64,7 +64,7 @@ namespace error_system::utils {
 
     TEST_F(file_utils_test_t, read_file_handles_empty_file) {
         auto file_path = temp_dir_ / "empty.txt";
-        file_utils_t::write_file(file_path, "");
+        ASSERT_TRUE(file_utils_t::write_file(file_path, ""));
 
         auto result = file_utils_t::read_file(file_path);
         ASSERT_TRUE(result.has_value());
@@ -75,7 +75,7 @@ namespace error_system::utils {
         auto file_path = temp_dir_ / "binary.bin";
         std::string content = std::string{"\x00\x01\x02\x03\xff\xfe", 6};
 
-        file_utils_t::write_file(file_path, content);
+        ASSERT_TRUE(file_utils_t::write_file(file_path, content));
         auto result = file_utils_t::read_file(file_path);
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(result.value(), content);
@@ -90,7 +90,7 @@ namespace error_system::utils {
 
     TEST_F(file_utils_test_t, create_file_returns_true_for_existing_file) {
         auto file_path = temp_dir_ / "existing.txt";
-        file_utils_t::write_file(file_path, "content");
+        ASSERT_TRUE(file_utils_t::write_file(file_path, "content"));
 
         EXPECT_TRUE(file_utils_t::create_file(file_path));
         EXPECT_TRUE(file_utils_t::file_exists(file_path));
@@ -105,7 +105,7 @@ namespace error_system::utils {
 
     TEST_F(file_utils_test_t, delete_file_removes_existing_file) {
         auto file_path = temp_dir_ / "to_delete.txt";
-        file_utils_t::write_file(file_path, "delete me");
+        ASSERT_TRUE(file_utils_t::write_file(file_path, "delete me"));
 
         EXPECT_TRUE(file_utils_t::delete_file(file_path));
         EXPECT_FALSE(file_utils_t::file_exists(file_path));
@@ -119,7 +119,7 @@ namespace error_system::utils {
 
     TEST_F(file_utils_test_t, force_delete_file_removes_file) {
         auto file_path = temp_dir_ / "force_delete.txt";
-        file_utils_t::write_file(file_path, "content");
+        ASSERT_TRUE(file_utils_t::write_file(file_path, "content"));
 
         EXPECT_TRUE(file_utils_t::force_delete_file(file_path));
         EXPECT_FALSE(file_utils_t::file_exists(file_path));
@@ -128,7 +128,7 @@ namespace error_system::utils {
     TEST_F(file_utils_test_t, force_delete_file_removes_directory_recursively) {
         auto dir_path = temp_dir_ / "dir_to_remove";
         std::filesystem::create_directories(dir_path / "subdir");
-        file_utils_t::write_file(dir_path / "file.txt", "content");
+        ASSERT_TRUE(file_utils_t::write_file(dir_path / "file.txt", "content"));
 
         EXPECT_TRUE(file_utils_t::force_delete_file(dir_path));
         EXPECT_FALSE(std::filesystem::exists(dir_path));
@@ -136,7 +136,7 @@ namespace error_system::utils {
 
     TEST_F(file_utils_test_t, file_exists_returns_true_for_file) {
         auto file_path = temp_dir_ / "exists.txt";
-        file_utils_t::write_file(file_path, "content");
+        ASSERT_TRUE(file_utils_t::write_file(file_path, "content"));
 
         EXPECT_TRUE(file_utils_t::file_exists(file_path));
     }
@@ -163,7 +163,7 @@ namespace error_system::utils {
 
     TEST_F(file_utils_test_t, dir_exists_returns_false_for_file) {
         auto file_path = temp_dir_ / "test_file.txt";
-        file_utils_t::write_file(file_path, "content");
+        ASSERT_TRUE(file_utils_t::write_file(file_path, "content"));
 
         EXPECT_FALSE(file_utils_t::dir_exists(file_path));
     }
@@ -176,7 +176,7 @@ namespace error_system::utils {
 
     TEST_F(file_utils_test_t, write_file_overwrites_existing_content) {
         auto file_path = temp_dir_ / "overwrite.txt";
-        file_utils_t::write_file(file_path, "old content");
+        ASSERT_TRUE(file_utils_t::write_file(file_path, "old content"));
 
         EXPECT_TRUE(file_utils_t::write_file(file_path, "new content"));
 
@@ -186,17 +186,17 @@ namespace error_system::utils {
     }
 
     TEST_F(file_utils_test_t, read_file_handles_large_content) {
+        constexpr size_t LARGE_CONTENT_SIZE = 10000;
         auto file_path = temp_dir_ / "large.txt";
-        std::string large_content(10000, 'x');
+        std::string large_content(LARGE_CONTENT_SIZE, 'x');
 
-        file_utils_t::write_file(file_path, large_content);
+        ASSERT_TRUE(file_utils_t::write_file(file_path, large_content));
         auto result = file_utils_t::read_file(file_path);
         ASSERT_TRUE(result.has_value());
-        EXPECT_EQ(result.value().size(), 10000);
+        EXPECT_EQ(result.value().size(), LARGE_CONTENT_SIZE);
         EXPECT_EQ(result.value(), large_content);
     }
 
-    // ========== 文件大小限制测试 ==========
     //
     // 验证 read_file 在文件大小超过 MAX_READ_FILE_SIZE 时拒绝读取，
     // 避免恶意大文件导致内存耗尽攻击。

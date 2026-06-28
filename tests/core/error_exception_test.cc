@@ -30,9 +30,8 @@ namespace error_system::core {
         error_context_t context(code, "error");
         error_exception_t ex(context);
 
-        const std::exception* base = &ex;
-        EXPECT_NE(base, nullptr);
-        EXPECT_STREQ(base->what(), ex.what());
+        const std::exception& base = ex;
+        EXPECT_STREQ(base.what(), ex.what());
     }
 
     TEST_F(error_exception_test_t, context_returns_original_context) {
