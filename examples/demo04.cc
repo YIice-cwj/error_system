@@ -51,30 +51,30 @@ int main() {
     std::cout << "\n--- 1. 基本异常捕获 ---" << std::endl;
     try {
         process_order(-1);
-    } catch (const error_exception_t& e) {
+    } catch (const error_exception_t& exception) {
         std::cout << "捕获到异常:" << std::endl;
-        std::cout << "  what(): " << e.what() << std::endl;
-        std::cout << "  code(): 0x" << std::hex << e.code().get_code() << std::dec << std::endl;
+        std::cout << "  what(): " << exception.what() << std::endl;
+        std::cout << "  code(): 0x" << std::hex << exception.code().get_code() << std::dec << std::endl;
     }
 
     // 2. 捕获标准异常
     std::cout << "\n--- 2. 作为 std::exception 捕获 ---" << std::endl;
     try {
         process_order(404);
-    } catch (const std::exception& e) {
-        std::cout << "作为 std::exception 捕获: " << e.what() << std::endl;
+    } catch (const std::exception& exception) {
+        std::cout << "作为 std::exception 捕获: " << exception.what() << std::endl;
     }
 
     // 3. 获取完整上下文
     std::cout << "\n--- 3. 获取完整错误上下文 ---" << std::endl;
     try {
         process_payment(999, 100);
-    } catch (const error_exception_t& e) {
+    } catch (const error_exception_t& exception) {
         std::cout << "异常信息:" << std::endl;
-        std::cout << "  消息: " << e.context().message << std::endl;
-        std::cout << "  等级: " << static_cast<int>(e.context().get_code().get_level()) << std::endl;
-        std::cout << "  系统: " << static_cast<int>(e.context().get_code().get_system()) << std::endl;
-        std::cout << "  JSON: " << error_context_serializer_t::to_json(e.context()) << std::endl;
+        std::cout << "  消息: " << exception.context().message << std::endl;
+        std::cout << "  等级: " << static_cast<int>(exception.context().get_code().get_level()) << std::endl;
+        std::cout << "  系统: " << static_cast<int>(exception.context().get_code().get_system()) << std::endl;
+        std::cout << "  JSON: " << error_context_serializer_t::to_json(exception.context()) << std::endl;
     }
 
     // 4. 嵌套异常（因果链）
@@ -92,8 +92,8 @@ int main() {
             std::cout << "外部异常: " << error_context_serializer_t::to_string(outer) << std::endl;
             throw;
         }
-    } catch (const error_exception_t& e) {
-        std::cout << "最终捕获: " << e.what() << std::endl;
+    } catch (const error_exception_t& exception) {
+        std::cout << "最终捕获: " << exception.what() << std::endl;
     }
 
     // 5. 正常流程
@@ -102,8 +102,8 @@ int main() {
         process_order(123);
         process_payment(100, 500);
         std::cout << "所有操作成功完成!" << std::endl;
-    } catch (const error_exception_t& e) {
-        std::cout << "操作失败: " << e.what() << std::endl;
+    } catch (const error_exception_t& exception) {
+        std::cout << "操作失败: " << exception.what() << std::endl;
     }
 
     // 6. 异常与 result_t 结合使用
@@ -112,8 +112,8 @@ int main() {
         try {
             process_order(order_id);
             return result_t<int>(order_id * 100);
-        } catch (const error_exception_t& e) {
-            return result_t<int>(e.context());
+        } catch (const error_exception_t& exception) {
+            return result_t<int>(exception.context());
         }
     };
 

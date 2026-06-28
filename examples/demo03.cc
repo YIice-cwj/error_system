@@ -139,6 +139,30 @@ int main() {
     feature_flags_t::set_notify_mode(feature_flags_t::notify_mode_t::sync);
     std::cout << "\n通知模式已恢复为: sync" << std::endl;
 
+    // 4b. sync_deferred 延迟通知模式
+    std::cout << "\n--- 4b. sync_deferred 延迟通知模式 ---" << std::endl;
+    feature_flags_t::set_notify_mode(feature_flags_t::notify_mode_t::sync_deferred);
+    std::cout << "通知模式已切换为: sync_deferred（错误先入线程本地缓冲，flush 时统一通知）" << std::endl;
+
+    registry.set_deferred_buffer_size(1024);
+    std::cout << "延迟缓冲容量: " << registry.get_deferred_buffer_size() << std::endl;
+
+    // 构造错误上下文：通知进入缓冲，插件此时不会被调用
+    std::cout << "\n>> 构造 3 个错误上下文（缓冲中，插件尚未触发）:" << std::endl;
+    error_context_t ctx_deferred1(biz::trade_errors::ERR_ORDER_NOT_FOUND, "延迟通知 #1");
+    error_context_t ctx_deferred2(biz::trade_errors::ERR_ORDER_NOT_FOUND, "延迟通知 #2");
+    error_context_t ctx_deferred3(biz::trade_errors::ERR_ORDER_NOT_FOUND, "延迟通知 #3");
+    std::cout << "  待 flush 通知数: " << registry.pending_deferred_notifications() << std::endl;
+
+    // flush 触发批量通知
+    std::cout << "\n>> flush_deferred_notifications() 触发批量通知:" << std::endl;
+    registry.flush_deferred_notifications();
+    std::cout << "  flush 后待通知数: " << registry.pending_deferred_notifications() << std::endl;
+    std::cout << "  预期: logger 打印 3 条日志，stats 统计 +3" << std::endl;
+
+    feature_flags_t::set_notify_mode(feature_flags_t::notify_mode_t::sync);
+    std::cout << "\n通知模式已恢复为: sync" << std::endl;
+
     // 5. 使用错误路由插件
     std::cout << "\n--- 5. 错误路由插件 ---" << std::endl;
 

@@ -71,8 +71,8 @@ int main() {
 
     // 4. or_else 错误恢复
     std::cout << "\n--- 4. or_else 错误恢复 ---" << std::endl;
-    auto result4 = query_order(404).or_else([](const error_context_t& err) -> result_t<int> {
-        std::cout << "捕获错误: " << err.message << std::endl;
+    auto result4 = query_order(404).or_else([](const error_context_t& error_context) -> result_t<int> {
+        std::cout << "捕获错误: " << error_context.message << std::endl;
         std::cout << "返回默认值 0" << std::endl;
         return result_t<int>{0};
     });
@@ -117,6 +117,20 @@ int main() {
     auto result8b = query_order(404);
     std::cout << "失败: value_or(-1) = " << result8b.value_or(default_val) << " (使用默认值)" << std::endl;
 
+    // 8b. unwrap() / unwrap_or() 安全取值（失败时返回默认值，不抛异常）
+    std::cout << "\n--- 8b. unwrap() / unwrap_or() 安全取值 ---" << std::endl;
+    auto result8c = query_order(100);
+    std::cout << "成功: unwrap() = " << result8c.unwrap() << std::endl;
+    std::cout << "成功: unwrap_or(-1) = " << result8c.unwrap_or(-1) << std::endl;
+
+    auto result8d = query_order(404);
+    std::cout << "失败: unwrap() = " << result8d.unwrap() << " (失败时返回 int 默认值 0)" << std::endl;
+    std::cout << "失败: unwrap_or(-1) = " << result8d.unwrap_or(-1) << " (使用传入默认值)" << std::endl;
+
+    // make_success() 工厂方法构造成功结果
+    auto success_result = result_t<int>::make_success(2024);
+    std::cout << "make_success(2024): unwrap() = " << success_result.unwrap() << std::endl;
+
     // 9. map() 值映射转换
     std::cout << "\n--- 9. map() 值映射转换 ---" << std::endl;
     auto result9 = query_order(100)
@@ -155,8 +169,8 @@ int main() {
                 std::cout << "订单查询成功，金额: " << amount << std::endl;
                 return process_payment(user_id, amount);
             })
-            .or_else([](const error_context_t& err) -> result_t<std::string> {
-                std::cout << "流程失败: " << error_context_serializer_t::to_string(err) << std::endl;
+            .or_else([](const error_context_t& error_context) -> result_t<std::string> {
+                std::cout << "流程失败: " << error_context_serializer_t::to_string(error_context) << std::endl;
                 return result_t<std::string>::make_error(
                     error_code_t(error_level_t::error, system_domain_t::application, 0, 0, 2),
                     "交易流程失败");

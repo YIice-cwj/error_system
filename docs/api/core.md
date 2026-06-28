@@ -1,24 +1,26 @@
-# Core 层 API
+# 🧩 Core 层 API
 
 > `error_system::core`
 
 ---
 
-## error_code_t
+## 🔢 error_code_t
 
-64 位错误码 — 位移 + 掩码实现字段解析。
+64 位错误码 — 位移 + 掩码实现字段解析，100% 避免严格别名与位域 UB。
 
 ### 位域
 
 | 位域 | 位数 | 说明 |
 |------|:---:|------|
 | Sign | 1 | `0` = 错误 &nbsp; `1` = 成功 |
-| Reserved | 3 | 保留 |
+| Reserved | 3 | bit0 `retryable` · bit1 `transient` · bit2 预留 |
 | Level | 4 | debug · info · warn · error · fatal |
 | System Domain | 8 | 6 大系统域 |
 | Subsystem | 16 | 子系统 ID |
 | Module | 16 | 模块 ID |
 | Number | 16 | 错误编号 |
+
+> 💡 默认构造为成功码（sign=1，其余字段为 0），可作为函数成功返回值的零成本默认。
 
 ### API
 
@@ -27,105 +29,115 @@ class error_code_t {
 public:
     using code_t = uint64_t;
 
-    constexpr error_code_t() noexcept = default;
+    constexpr error_code_t() noexcept;                        // sign=1 的成功码
     constexpr explicit error_code_t(code_t code) noexcept;
-
-    // 五参便捷构造（推荐）
     constexpr error_code_t(error_level_t level, domain::system_domain_t system,
-                           uint16_t subsys, uint16_t module, uint16_t number) noexcept;
+                           uint16_t subsystem, uint16_t module, uint16_t number) noexcept;
+    // 构造/析构/拷贝/移动：Rule of 5，全部 noexcept = default（详见头文件）
 
-    // 成功码工厂
     static constexpr error_code_t make_success() noexcept;
 
-    constexpr code_t get_code() const noexcept;
-    constexpr uint8_t get_sign() const noexcept;
-    constexpr uint8_t get_reserved() const noexcept;
-    constexpr void set_sign(uint8_t sign) noexcept;
-    constexpr void set_reserved(uint8_t reserved) noexcept;
-    constexpr bool is_error_code() const noexcept;
-    constexpr bool is_success_code() const noexcept;
+    // retryable / transient 语义（Reserved.bit0 / bit1）；提供 is_xxx() 与 set_xxx() 成对访问
+    constexpr bool is_retryable() const noexcept;
+    constexpr bool is_transient() const noexcept;
+
+    // 字段解析（另提供 is_error_code()/is_success_code() 谓词，详见头文件）
     constexpr error_level_t get_level() const noexcept;
     constexpr domain::system_domain_t get_system() const noexcept;
     constexpr uint16_t get_subsys() const noexcept;
     constexpr uint16_t get_module() const noexcept;
     constexpr uint16_t get_number() const noexcept;
-    constexpr module_group_id_t get_module_group_id() const noexcept;
 
-    // 恒等码（去除 sign/reserved 后的业务标识）
-    constexpr code_t get_identity_code() const noexcept;
-
-    constexpr bool operator==(const error_code_t&) const noexcept;
-    constexpr bool operator!=(const error_code_t&) const noexcept;
-    constexpr bool operator<(const error_code_t&) const noexcept;
+    constexpr code_t get_identity_code() const noexcept;       // 去除 sign/reserved 的业务标识
+    explicit constexpr operator code_t() const noexcept;       // 显式转 64 位原始码
+    constexpr bool operator==(const error_code_t&) const noexcept;  // 另有 != / <（详见头文件）
 };
 ```
 
 **构造方式**
 
 ```cpp
-// 1. 五参构造（推荐，constexpr）
-error_code_t code(error_level_t::error, system_domain_t::database, 1, 2, 0x0010);
-
-// 2. 原始值
-error_code_t code3(0x8000000001010001ULL);
-
-// 3. DEFINE_ERROR_CODE 宏（自动注册，见下方）
-DEFINE_ERROR_CODE(ERR_DB_FAIL,
-    error_level_t::error, system_domain_t::database,
+error_code_t code(error_level_t::error, system_domain_t::database, 1, 2, 0x0010); // 五参
+error_code_t code3(0x8000000001010001ULL);                                       // 原始值
+DEFINE_ERROR_CODE(ERR_DB_FAIL, error_level_t::error, system_domain_t::database,  // 宏
     1, 1, 0x0010, "数据库操作失败", "数据库服务", "连接管理");
-
-// 4. 成功码工厂
-auto ok = error_code_t::make_success();
+auto ok = error_code_t::make_success();                                          // 成功码工厂
+auto restored = error_builder_t::from_raw(raw_code);                             // 反序列化
 ```
 
 ---
 
-## error_level_t
+## 🏷️ error_level_t
+
+错误等级强类型枚举及配套 constexpr 转换函数。
 
 ```cpp
 enum class error_level_t : uint8_t {
     debug = 0, info = 1, warn = 2, error = 3, fatal = 4
 };
 
-constexpr const char* to_string(error_level_t) noexcept;
-constexpr error_level_t from_string(const char*) noexcept;
+[[nodiscard]] constexpr uint8_t to_int(error_level_t level) noexcept;
+[[nodiscard]] constexpr bool is_valid(uint8_t level) noexcept;
+[[nodiscard]] constexpr error_level_t from_int(uint8_t level) noexcept;          // 非法值回退 fatal
+[[nodiscard]] constexpr const char* to_string(error_level_t level) noexcept;     // 非法值返回 "unknown"
+[[nodiscard]] constexpr error_level_t from_string(const char* str) noexcept;     // 未知返回 info
+[[nodiscard]] constexpr error_level_t next_level(error_level_t level) noexcept;  // 越界回退 fatal
+[[nodiscard]] constexpr error_level_t prev_level(error_level_t level) noexcept;
+[[nodiscard]] constexpr bool should_log(error_level_t current, error_level_t min_level) noexcept;
 ```
+
+> 📝 全部函数 `constexpr noexcept`，可用于编译期常量与日志过滤模板参数。
 
 ---
 
-## error_builder_t
+## 🏗️ error_builder_t
 
-编译期构建工厂（v2.2 兼容层）。
+纯静态工具类 — 保留两个有独特价值的工厂方法，其他场景使用 `error_code_t` 便捷构造。
 
-> 推荐直接使用 `error_code_t` 五参构造。
+> ⚠️ 纯静态工具类，不可实例化（构造/析构/拷贝/移动全部 `= delete`）。
 
 ```cpp
 class error_builder_t {
 public:
-    static constexpr error_code_t make_error_code(
-        error_level_t, domain::system_domain_t,
-        uint16_t subsystem, uint16_t module, uint16_t number) noexcept;
+    // 模板枚举版本：编译期类型安全，防止 subsystem/module ID 传反
+    template <typename SubSystemEnum, typename ModuleEnum>
+    [[nodiscard]] static constexpr error_code_t make_error_code(
+        error_level_t level, domain::system_domain_t system,
+        SubSystemEnum subsystem, ModuleEnum module, uint16_t number) noexcept;
+
+    // 从 64 位原始码恢复（语义明确表达"反序列化"意图）
+    [[nodiscard]] static constexpr error_code_t from_raw(code_t code) noexcept;
 };
+```
+
+```cpp
+enum class subsys_t : uint16_t { db_conn = 1 };
+enum class module_t : uint16_t { timeout = 2 };
+auto code = error_builder_t::make_error_code(
+    error_level_t::error, system_domain_t::database,
+    subsys_t::db_conn, module_t::timeout, 0x0001);  // 编译期类型安全
+error_code_t restored = error_builder_t::from_raw(recv_from_network());  // 反序列化
 ```
 
 ---
 
-## error_context_t
+## 📦 error_context_t
 
 错误上下文数据类 — 错误码 + 消息 + 负载 + 因果链 + 堆栈 + 源位置。
 
-> 序列化职责委托给 `error_context_serializer_t`，运行时特性初始化委托给 `error_context_initializer_t`，遵循单一职责原则。
+> 💡 序列化职责委托给 `error_context_serializer_t`，运行时特性初始化委托给 `error_context_initializer_t`，遵循单一职责原则。
 
 ### 公共数据成员
 
 ```cpp
 struct error_context_t {
+    static constexpr size_t PAYLOAD_SSO_CAPACITY = 4;  // SSO 上限
+
     std::string message{};
     utils::source_location_t source_location{};  // 由 LOCATION_ENABLED 控制
     const char* file_name{nullptr};               // 由 LOCATION_ENABLED 控制
     std::shared_ptr<error_context_t> cause{nullptr};
     std::vector<std::string> stack_frames{};      // 由 STACKTRACE_ENABLED 控制
-    // ...
 };
 ```
 
@@ -133,33 +145,19 @@ struct error_context_t {
 
 ```cpp
 struct error_context_t {
-    // 构造（位于_code_t 隐式捕获源位置）
+    // 构造（located_code_t 隐式捕获源位置）
     template <typename... Args>
     error_context_t(located_code_t lc, std::string message_format, Args&&... args) noexcept;
-
     constexpr error_context_t() noexcept = default;
-    error_context_t(const error_context_t&) noexcept;             // 深拷贝，bad_alloc 内部捕获
-    error_context_t(error_context_t&&) noexcept;                  // 显式清零源对象
-    error_context_t& operator=(const error_context_t&) = delete;
-    error_context_t& operator=(error_context_t&&) = delete;
-    ~error_context_t() noexcept = default;
-
-    // 工厂
-    static error_context_t from_exception(error_code_t code,
-                                          const std::exception& ex) noexcept;
-
-    // 只读访问错误码
-    const error_code_t& get_code() const noexcept;
+    // 拷贝构造深拷贝（bad_alloc 内部捕获）；移动构造显式清零源对象
+    // 拷贝赋值 = delete；移动赋值 noexcept，允许复用变量，自赋值安全（详见头文件）
+    // 另有 from_exception() 工厂、get_code()/is_success()/is_error()/what() 等访问器（详见头文件）
 
     // 负载（链式 API，SSO 优化：≤4 项零堆分配）
+    // 支持 string/string_view/const char*/string&& 及模板版本（int/bool/double 等）
     error_context_t& with(const std::string& key, const std::string& value) noexcept;
-    error_context_t& with(const char* key, const char* value) noexcept;
-    error_context_t& with(std::string_view key, std::string_view value) noexcept;
-    error_context_t& with(std::string&& key, std::string&& value) noexcept;
     template <typename T>
-    error_context_t& with(const std::string& key, T value) noexcept;  // int/bool/double 等
-    error_context_t& with(std::string_view key, T value) noexcept;
-    error_context_t& with(const char* key, T value) noexcept;
+    error_context_t& with(const std::string& key, T value) noexcept;
     error_context_t& with_batch(
         std::initializer_list<std::pair<const std::string, std::string>> items) noexcept;
 
@@ -168,6 +166,7 @@ struct error_context_t {
     std::optional<std::string> get_payload_value(const std::string& key) const noexcept;
     size_t payload_size() const noexcept;
     bool is_payload_empty() const noexcept;
+    bool has_payload_error() const noexcept;  // payload 写入是否发生过 bad_alloc
     template <typename Visitor>
     void for_each_payload(Visitor&& visitor) const noexcept;
 
@@ -175,56 +174,50 @@ struct error_context_t {
     error_context_t wrap(const error_context_t& underlying) const noexcept;
     error_context_t wrap(error_context_t&& underlying) const noexcept;
 
-    // 状态
-    bool is_success() const noexcept;
-    bool is_error() const noexcept;
-
-    // 比较（O(n) 复杂度，使用 get_payload_value 查找）
-    bool operator==(const error_context_t&) const noexcept;
-    bool operator!=(const error_context_t&) const noexcept;
+    bool equals_by_code(const error_context_t&) const noexcept;  // O(1)，仅按错误码
+    bool equals_strict(const error_context_t&) const noexcept;   // 含 cause 链 + stack_frames
+    // 另有 operator==/!=（按 code/message/payload 比较，详见头文件）
 };
 ```
 
-> 所有方法均为 `noexcept`。`std::bad_alloc` 等异常在内部 `try-catch` 捕获并记录到 `stderr`，对象保持可安全析构状态。
-
-**使用示例**
+> 📝 所有方法均为 `noexcept`。`std::bad_alloc` 等异常在内部 `try-catch` 捕获并记录到 `stderr`，对象保持可安全析构状态。
 
 ```cpp
 error_context_t ctx(ERR_DB_TIMEOUT, "连接超时: {}ms", 3000);
-
-ctx.with("host", "192.168.1.1")
-   .with("port", 3306)
-   .with("latency_ms", 150.5);
-
+ctx.with("host", "192.168.1.1").with("port", 3306).with("latency_ms", 150.5);
 auto chained = biz_error.wrap(db_error);     // 因果链
 auto uid = ctx.get_payload_value("host");    // std::optional
-size_t n = ctx.payload_size();               // 3
-ctx.for_each_payload([](const auto& k, const auto& v) {
-    std::cout << k << "=" << v << "\n";
-});
+ctx.for_each_payload([](const auto& k, const auto& v) { std::cout << k << "=" << v; });
+if (ctx.has_payload_error()) { /* 降级处理 */ }
+if (a.equals_by_code(b))     { /* 错误归类 */ }
 ```
 
 ---
 
-## error_context_serializer_t
+## 🔄 error_context_serializer_t
 
-错误上下文序列化器（静态工具类，禁止实例化）。
+错误上下文序列化器 — 纯静态工具类，提供文本 / JSON / 二进制双向转换。
+
+> ⚠️ 纯静态工具类，不可实例化（构造/析构/拷贝/移动全部 `= delete`）。
 
 ```cpp
 class error_context_serializer_t {
 public:
-    error_context_serializer_t() = delete;
+    static constexpr uint32_t BINARY_MAGIC = 0x52455345u;  // "ESER" 小端
+    static constexpr uint8_t  BINARY_VERSION = 1;
 
-    // 人类可读文本（含因果链 ↳ Caused by:）
-    static std::string to_string(const error_context_t& ctx) noexcept;
+    // 编码
+    static std::string to_string(const error_context_t& ctx) noexcept;  // 人类可读文本（含 ↳ Caused by:）
+    static std::string to_json(const error_context_t& ctx) noexcept;    // JSON（含 cause 递归字段）
+    static std::string to_binary(const error_context_t& ctx) noexcept;  // 紧凑二进制（小端序）
 
-    // JSON 字符串（含 cause 递归字段）
-    static std::string to_json(const error_context_t& ctx) noexcept;
-
-    // 紧凑二进制（小端序，含因果链，适合 RPC / 持久化）
-    static std::string to_binary(const error_context_t& ctx) noexcept;
+    // 解码（任何格式错误或分配失败均返回 std::nullopt，不抛异常）
+    [[nodiscard]] static std::optional<error_context_t> from_binary(std::string_view data) noexcept;
+    [[nodiscard]] static std::optional<error_context_t> from_json(std::string_view json) noexcept;
 };
 ```
+
+> 💡 反序列化的文件名与函数名由 `error_context_t` 内部字符串存储持有，保证 `file_name` 与 `source_location` 中 `const char*` 的生命周期安全。
 
 **输出示例（`to_string`）**
 
@@ -232,9 +225,7 @@ public:
 [Location: demo.cc:42 @ my_function]
 [Sign: Error Level: error, System: application, 交易服务 / 订单模块]
 Code: 1 (ERR_ORDER_NOT_FOUND) - 订单创建失败: 订单不存在或已删除
-  [Stacktrace]:
-    #0  my_app  0x0000...  my_function(int) + 200
-    #1  my_app  0x0000...  main + 100
+  [Stacktrace]: #0 my_app 0x0000... my_function(int) + 200  |  #1 my_app 0x0000... main + 100
 ↳ Caused by: [Location: ...] ... 支付服务调用失败 ...
 ```
 
@@ -243,8 +234,7 @@ Code: 1 (ERR_ORDER_NOT_FOUND) - 订单创建失败: 订单不存在或已删除
 ```json
 {
     "location": {"file": "demo.cc", "function": "my_function", "line": 42},
-    "code": 217299115812388865,
-    "message": "订单查询失败",
+    "code": 217299115812388865, "message": "订单查询失败",
     "payload": {"user_id": "8848", "order_id": "ORD-001"},
     "cause": { ... }
 }
@@ -252,9 +242,9 @@ Code: 1 (ERR_ORDER_NOT_FOUND) - 订单创建失败: 订单不存在或已删除
 
 ---
 
-## error_registry_t
+## 📋 error_registry_t
 
-错误码注册表单例。
+错误码注册表单例 — 重复处理委托 `duplicate_policy_handler_t`，子系统/模块名称委托 `subsystem_module_catalog_t`。
 
 ### API
 
@@ -263,9 +253,14 @@ class error_registry_t {
 public:
     static error_registry_t& instance() noexcept;
 
-    // 注册
+    // 单个/批量注册（批量返回成功数量；数组长度不一致返回 0 且不执行注册）
     void register_error(error_code_t code, std::string_view name,
                         std::string_view description) noexcept;
+    size_t register_errors(const std::vector<error_code_t>& codes,
+                           const std::vector<std::string_view>& names,
+                           const std::vector<std::string_view>& descriptions) noexcept;
+
+    // 子系统/模块名称注册（默认 zh_CN；另有重载首参为 i18n::locale_t 指定 locale）
     void register_subsystem_module(uint16_t subsys, uint16_t module,
                                    std::string_view subsys_name,
                                    std::string_view module_name) noexcept;
@@ -277,28 +272,48 @@ public:
     std::vector<error_metadata_t> get_errors_by_module(module_group_id_t) const noexcept;
     std::optional<error_code_t> find_by_name(std::string_view name) const noexcept;
 
-    // 注销
-    void unregister_error(error_code_t code) noexcept;
-    void unregister_error(std::string_view name) noexcept;
-    void unregister_module(module_group_id_t) noexcept;
-    void unregister_all() noexcept;
+    // 子系统/模块名称查询（3 个重载，差异在 locale 与回退策略）
+    //   1) (subsys_id, module_id)                              默认 zh_CN
+    //   2) (locale, subsys_id, module_id)                      回退 zh_CN
+    //   3) (locale, fallback_locale, subsys_id, module_id)     指定回退 locale
+    subsystem_module_info_t get_subsystem_module_info(uint16_t subsys_id,
+                                                      uint16_t module_id) const noexcept;
+
+    // 热路径缓存查询（thread_local 环形缓存，纪元失效）
+    std::optional<error_metadata_t> get_info_cached(error_code_t code) const noexcept;
+    [[nodiscard]] uint64_t get_epoch() const noexcept;
+    void invalidate_metadata_cache() const noexcept;
+
+    // 注销：unregister_error(code/name)、unregister_module()、unregister_all()（详见头文件）
 
     // 重复策略
     void set_duplicate_policy(duplicate_policy_t) noexcept;
-    void set_duplicate_warn_callback(
-        std::function<void(code_t, const error_metadata_t&)>) noexcept;
+    [[nodiscard]] duplicate_policy_t get_duplicate_policy() const noexcept;
+    void set_duplicate_warn_callback(duplicate_warn_callback_t callback) noexcept;  // nullptr 清除
+    [[nodiscard]] const duplicate_warn_callback_t& get_duplicate_warn_callback() const noexcept;
 };
 ```
 
-> 查询接口返回 `std::optional` 或值副本（`std::vector`），避免 unregister 后调用方持有悬垂指针。
+> 💡 查询接口返回 `std::optional` 或值副本（`std::vector`），避免 unregister 后调用方持有悬垂指针。
+
+### `get_info()` vs `get_info_cached()`
+
+| 路径 | 锁开销 | 一致性 | 适用 |
+|------|:---:|:---:|------|
+| `get_info()` | `shared_lock` | 强一致 | 管理工具、偶尔查询 |
+| `get_info_cached()` | 命中时零锁 | 纪元失效后最终一致 | `error_context_t` 构造、`fill_validation_fields_` 等热路径 |
+
+`get_info_cached()` 使用 thread_local 环形缓存（容量 16），命中时零锁开销；任何 `register_*` / `unregister_*` 调用会 `bump_epoch_()`（release 序），缓存检测到纪元变化（acquire 序）后整体失效重建，同时记录"已注册"与"未注册"结果避免重复加锁查询。
+
+> 查询路径选择决策树详见 [决策树 · 2](../decision_tree.md#2-错误码元数据查询路径选择)。
 
 ---
 
-## result_t\<T\>
+## 🎯 result_t\<T\>
 
 类 Rust Result，零异常错误传递。
 
-> 内部使用 `std::variant<T, error_context_t>` + `std::get_if` + 哨兵值，永不抛异常。
+> 💡 内部使用 `std::variant<T, error_context_t>` + `std::get_if` + 哨兵值，永不抛异常。
 
 ### API
 
@@ -312,21 +327,13 @@ public:
     explicit result_t(const T& value) noexcept;
     explicit result_t(T&& value) noexcept;
     explicit result_t(const error_context_t& ctx) noexcept;
-
-    // 拷贝/移动构造的 noexcept 性跟随 T
-    result_t(const result_t&) noexcept(std::is_nothrow_copy_constructible_v<T>
-                                       && std::is_nothrow_copy_constructible_v<error_context_t>);
-    result_t(result_t&&) noexcept(std::is_nothrow_move_constructible_v<T>);
-    result_t& operator=(const result_t&) = delete;
-    result_t& operator=(result_t&&) = delete;
+    // 拷贝/移动构造的 noexcept 性跟随 T；拷贝赋值 = delete；移动赋值 = default（详见头文件）
 
     // 工厂（推荐）
     static result_t make_success(T value) noexcept;
-    static result_t make_error(error_code_t code,
-                               const std::string& message = "",
+    static result_t make_error(error_code_t code, const std::string& message = "",
                                utils::source_location_t = current()) noexcept;
-    static result_t make_error(error_code_t code,
-                               std::string&& message,
+    static result_t make_error(error_code_t code, std::string&& message,
                                utils::source_location_t = current()) noexcept;
     static result_t make_error(const error_context_t& ctx) noexcept;
 
@@ -336,111 +343,96 @@ public:
     explicit operator bool() const noexcept;
 
     // 值访问（零异常，失败返回哨兵）
-    const T& value() const noexcept;            // 失败返回 thread_local T{} 哨兵
-    T& value() noexcept;
-    const T* value_pointer() const noexcept;    // 失败返回 nullptr
-    T* value_pointer() noexcept;
+    // value()/expect() 含 static_assert 要求 T 可默认构造，否则使用 value_pointer()
+    const T& value() const noexcept;            // 失败返回 thread_local T{} 哨兵（另有无 const 重载）
+    const T* value_pointer() const noexcept;    // 失败返回 nullptr（另有无 const 重载）
     const T& value_or(const T& default_value) const noexcept;
     const T& expect() const noexcept;           // Debug 断言，Release 哨兵
     T unwrap() const noexcept;                  // 失败返回 T{}
     T unwrap_or(T default_value) const noexcept;
 
-    // 错误访问
+    // 错误访问（含 mutable 重载 error() noexcept）
     const error_context_t& error() const noexcept;
-    error_context_t& error() noexcept;
 
     // 链式操作（全部 noexcept，用户函数异常被 try-catch 保护并转为 fatal 错误）
-    template <typename Function>
-    auto and_then(Function&& fn) & noexcept;
-    template <typename Function>
-    auto and_then(Function&& fn) const& noexcept;
-    template <typename Function>
-    auto and_then(Function&& fn) && noexcept;
-    template <typename Function>
-    result_t or_else(Function&& fn) & noexcept;
-    template <typename Function>
-    result_t or_else(Function&& fn) && noexcept;
-    template <typename Function>
-    auto map(Function&& fn) const& noexcept;
-    template <typename Function>
-    auto map(Function&& fn) && noexcept;
-    template <typename Function>
-    result_t map_error(Function&& fn) const& noexcept;
-    template <typename Function>
-    result_t map_error(Function&& fn) && noexcept;
+    // 每个方法均有 & / const& / && 三个重载（map_error 仅 const& / &&）
+    template <typename Function> auto and_then(Function&& fn) const& noexcept;
+    template <typename Function> result_t or_else(Function&& fn) & noexcept;
+    template <typename Function> auto map(Function&& fn) const& noexcept;
+    template <typename Function> result_t map_error(Function&& fn) const& noexcept;
 
     // 模式匹配（不标记 noexcept：用户回调异常会传播给调用方）
     template <typename SuccessFn, typename ErrorFn>
     auto match(SuccessFn&&, ErrorFn&&) const;
 };
-
-// void 特化
-template <>
-class result_t<void> {
-public:
-    result_t() noexcept;  // 成功
-    explicit result_t(const error_context_t&) noexcept;
-
-    static result_t make_success() noexcept;
-    static result_t make_error(error_code_t, const std::string& message = "",
-                               utils::source_location_t = current()) noexcept;
-    static result_t make_error(const error_context_t&) noexcept;
-
-    bool is_success() const noexcept;
-    bool is_error() const noexcept;
-    explicit operator bool() const noexcept;
-    void expect() const noexcept;  // Debug 断言
-
-    const error_context_t& error() const noexcept;
-
-    // 链式操作（同上，特化版本）
-    template <typename Function> auto and_then(Function&&) & noexcept;
-    template <typename Function> auto and_then(Function&&) && noexcept;
-    template <typename Function> result_t map_error(Function&&) const& noexcept;
-    template <typename Function> result_t map_error(Function&&) && noexcept;
-    template <typename Function> result_t or_else(Function&&) & noexcept;
-    template <typename Function> result_t or_else(Function&&) && noexcept;
-};
 ```
-
-**使用示例**
 
 ```cpp
 auto r = fetch()
     .map([](auto& d) { return d.name; })
     .map_error([](const auto& e) { return recover(e); });
-
 if (r) { auto v = r.value(); }
 if (auto* p = r.value_pointer()) { /* 安全使用 */ }
 int v = r.unwrap_or(0);
-
-// match：强制同时处理两条路径
-auto msg = r.match(
+auto msg = r.match(  // 强制同时处理两条路径
     [](const std::string& s) { return "ok: " + s; },
     [](const error_context_t& e) { return "fail: " + std::string(e.message); });
+```
 
-// void 特化
+> ⚠️ `value()` / `expect()` 含 `static_assert` 要求 T 可默认构造，否则编译失败 — 此时改用 `value_pointer()`。
+
+### `result_t<void>` 特化
+
+仅列与主模板的差异（构造/析构/拷贝/移动 Rule of 5、`is_success`/`is_error`/`operator bool`/`make_error` 系列/`error() const`/`map_error`/`or_else` 均同主模板）：
+
+```cpp
+template <>
+class result_t<void> {
+public:
+    using value_type_t = void;
+
+    result_t() noexcept;                      // 成功（无 value 构造，对应主模板的 result_t(T)）
+    explicit result_t(const error_context_t&) noexcept;
+
+    static result_t make_success() noexcept;  // 无参（主模板接受 T value）
+
+    void expect() const noexcept;             // 返回 void（主模板返回 const T&）
+    // 无 value/value_or/value_pointer/unwrap/unwrap_or、无 mutable error() 重载、无 map()、无 match()
+
+    // and_then 仅 & / && 两个重载（无 const&，因 void 无值可读）
+    template <typename Function> auto and_then(Function&&) & noexcept;
+    template <typename Function> auto and_then(Function&&) && noexcept;
+};
+```
+
+```cpp
 result_t<void> ok;
 result_t<void> fail = result_t<void>::make_error(ERR_FAIL, "失败");
 ```
 
 ---
 
-## error_exception_t
+## 💥 error_exception_t
+
+将 `error_context_t` 封装为可抛出异常，继承 `std::exception`。
+
+> 💡 构造时通过 `error_context_serializer_t::to_string` 缓存错误详情字符串，`what()` 在异常传播期间返回稳定指针。
 
 ```cpp
 class error_exception_t : public std::exception {
 public:
-    explicit error_exception_t(error_context_t ctx) noexcept;
-    const char* what() const noexcept override;
-    const error_context_t& context() const noexcept;
-    error_code_t code() const noexcept;
+    explicit error_exception_t(error_context_t context) noexcept;
+    // 构造/析构/拷贝/移动：Rule of 5，拷贝/移动构造 = default，赋值运算符 = delete（详见头文件）
+
+    const char* what() const noexcept override;              // 返回缓存的完整错误详情
+    [[nodiscard]] const error_context_t& context() const noexcept;
+    [[nodiscard]] error_code_t code() const noexcept;
 };
 ```
 
 ---
 
-## DEFINE_ERROR_CODE
+## 🏷️ DEFINE_ERROR_CODE
 
 定义 `constexpr` 错误码常量并自动注册到 `error_registry_t`。
 
@@ -458,11 +450,11 @@ DEFINE_ERROR_CODE(
 );
 ```
 
-> 利用 C++ 静态初始化在 `main()` 之前完成注册，无需手动调用。
+> 💡 利用 C++ 静态初始化在 `main()` 之前完成注册，无需手动调用。`constexpr error_code_t` 常量为编译期决议，无 SIOF 风险；但请勿在其它 TU 的静态初始化代码中查询注册表（跨 TU 动态初始化顺序未指定）。
 
 ---
 
-## 编译期配置
+## ⚙️ 编译期配置
 
 | CMake 选项 | 默认 | 影响 |
 |------------|:---:|------|
@@ -470,4 +462,4 @@ DEFINE_ERROR_CODE(
 | `ERROR_SYSTEM_ENABLE_VALIDATION` | ON | 错误码注册校验 |
 | `ERROR_SYSTEM_ENABLE_LOCATION` | ON | 源位置追踪 |
 
-> 编译期宏通过 `feature_flags_t::STACKTRACE_ENABLED` 等 `public constexpr bool` 暴露，`error_context_t` 内部使用 `if constexpr` 替代 `#ifdef`，编译器死代码消除未启用分支。
+> 📝 编译期宏通过 `feature_flags_t::STACKTRACE_ENABLED` 等 `public constexpr bool` 暴露，`error_context_t` 内部使用 `if constexpr` 替代 `#ifdef`，编译器死代码消除未启用分支。

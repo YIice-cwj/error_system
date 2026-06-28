@@ -3,6 +3,7 @@
 #include "error_system.h"
 #include "error_system/config/error_config.h"
 #include "error_system/core/error_registry.h"
+#include "error_system/i18n/locale.h"
 // IWYU pragma: begin_exports
 #include "payment_service_errors.h"
 #include "trade_service_errors.h"
@@ -95,6 +96,55 @@ int main() {
     error_context_t ctx8{code1, "测试 identity_code"};
     std::cout << "identity_code: " << code1.get_identity_code() << std::endl;
     std::cout << "JSON 输出: " << error_context_serializer_t::to_json(ctx8) << std::endl;
+
+    // 9. i18n 多语言子系统/模块名称（通过 i18n_config_t 配置输出语言）
+    std::cout << "\n--- 9. i18n 多语言子系统/模块名称 ---" << std::endl;
+
+    // 为同一个子系统/模块注册多种语言的名称
+    namespace i18n = error_system::i18n;
+    registry.register_subsystem_module(i18n::locale_t::zh_CN, 101, 1, "交易服务", "订单模块");
+    registry.register_subsystem_module(i18n::locale_t::en_US, 101, 1, "Trade Service", "Order Module");
+    registry.register_subsystem_module(i18n::locale_t::ja_JP, 101, 1, "取引サービス", "注文モジュール");
+
+    // locale_t 枚举与字符串互转（LOCALE_TABLE 单一数据源）
+    std::cout << "locale_t::en_US -> " << i18n::to_string(i18n::locale_t::en_US) << std::endl;
+    const auto parsed_locale = i18n::from_string("ja_JP");
+    std::cout << "from_string(\"ja_JP\") -> "
+              << i18n::to_string(parsed_locale) << std::endl;
+
+    // 通过 i18n_config_t 配置输出 locale（config 层统一入口）
+    namespace cfg = error_system::config;
+    cfg::i18n_config_t::set_enable_i18n(true);
+    cfg::i18n_config_t::set_default_locale(i18n::locale_t::zh_CN);
+
+    // 注册一个使用 (101,1) 子系统/模块的错误码，演示文本输出
+    using error_system::domain::system_domain_t;
+    const auto code_i18n = error_code_t(error_level_t::error, system_domain_t::database, 101, 1, 9);
+    registry.register_error(code_i18n, "ERR_I18N_DEMO", "i18n 演示");
+
+    // 默认 locale（zh_CN）输出
+    cfg::i18n_config_t::clear_output_locale();
+    error_context_t ctx_zh{code_i18n, "中文输出"};
+    std::cout << "\n[default=zh_CN] " << error_context_serializer_t::to_string(ctx_zh) << std::endl;
+
+    // 切换输出 locale 为 en_US
+    cfg::i18n_config_t::set_output_locale(i18n::locale_t::en_US);
+    error_context_t ctx_en{code_i18n, "English output"};
+    std::cout << "[output=en_US] " << error_context_serializer_t::to_string(ctx_en) << std::endl;
+
+    // 切换输出 locale 为 ja_JP
+    cfg::i18n_config_t::set_output_locale(i18n::locale_t::ja_JP);
+    error_context_t ctx_ja{code_i18n, "日本語出力"};
+    std::cout << "[output=ja_JP] " << error_context_serializer_t::to_string(ctx_ja) << std::endl;
+
+    // 禁用 i18n：回退为原始 ID 数字输出
+    cfg::i18n_config_t::set_enable_i18n(false);
+    error_context_t ctx_raw{code_i18n, "i18n disabled"};
+    std::cout << "[i18n=false]  " << error_context_serializer_t::to_string(ctx_raw) << std::endl;
+
+    // 恢复配置
+    cfg::i18n_config_t::set_enable_i18n(true);
+    cfg::i18n_config_t::clear_output_locale();
 
     return 0;
 }

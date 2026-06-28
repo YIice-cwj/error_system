@@ -23,7 +23,6 @@
 #include "error_system/config/error_config.h"
 #include "error_system/core/error_registry.h"
 #include "error_system/plugin/plugin_registry.h"
-#include "error_system/utils/json_utils.h"
 // IWYU pragma: begin_exports
 #include "payment_service_errors.h"
 #include "redis_component_errors.h"
@@ -36,7 +35,6 @@ using namespace error_system::config;
 using namespace error_system::domain;
 using error_system::plugin::i_error_plugin_t;
 using error_system::plugin::plugin_registry_t;
-using error_system::utils::json_dict_t;
 
 // ========== 辅助函数：打印分隔标题 ==========
 namespace {
@@ -102,8 +100,8 @@ static void demo_match() {
         [](const std::string& token) {
             return "登录成功，token=" + token;
         },
-        [](const error_context_t& err) {
-            return "登录失败：" + std::string(err.message);
+        [](const error_context_t& error_context) {
+            return "登录失败：" + std::string(error_context.message);
         });
     std::cout << "  " << message << std::endl;
 
@@ -114,11 +112,11 @@ static void demo_match() {
         [](const std::string& token) {
             return "登录成功，token=" + token;
         },
-        [](const error_context_t& err) {
+        [](const error_context_t& error_context) {
             // 在错误分支中可以访问完整的 error_context_t
             return "登录失败 [code=0x" +
-                   std::to_string(err.get_code().get_identity_code()) +
-                   "]: " + std::string(err.message);
+                   std::to_string(error_context.get_code().get_identity_code()) +
+                   "]: " + std::string(error_context.message);
         });
     std::cout << "  " << message << std::endl;
 }
@@ -126,8 +124,8 @@ static void demo_match() {
 // ========== 2. JSON 序列化与反序列化往返 ==========
 //
 // error_context_serializer_t::to_json() 将错误上下文序列化为 JSON 字符串，
-// json_dict_t::parse() 可解析该字符串并通过键路径访问字段。
-// 这是跨进程 / 跨语言传递错误的常见方式。
+// from_json() 可将 JSON 还原为 error_context_t，实现跨进程 / 跨语言传递错误。
+// to_binary() / from_binary() 提供紧凑的二进制往返，适合日志收集与网络传输。
 
 static void demo_json_roundtrip() {
     std::cout << "\n===== Demo 6.2: JSON 序列化与反序列化往返 =====" << std::endl;
@@ -137,55 +135,50 @@ static void demo_json_roundtrip() {
     feature_flags_t::set_enable_stacktrace(false);
 
     // 构造一个带 payload 的错误上下文
-    error_context_t ctx{
+    error_context_t context{
         biz::trade_errors::ERR_ORDER_NOT_FOUND,
         "订单查询失败"};
-    ctx.with("user_id", "8848")
+    context.with("user_id", "8848")
         .with("order_id", "ORD-20260627-0001")
         .with("retry_count", 3);
 
     // 序列化为 JSON
     print_section("2.1 序列化为 JSON（error_context_serializer_t::to_json）");
-    const std::string json_str = error_context_serializer_t::to_json(ctx);
+    const std::string json_str = error_context_serializer_t::to_json(context);
     std::cout << "  " << json_str << std::endl;
 
-    // 反序列化演示
-    // 注意：json_dict_t 是简化的 JSON 解析器，仅支持扁平 / 嵌套的字符串键值对，
-    //       不支持数字、布尔、数组等非字符串值。error_context_serializer_t::to_json()
-    //       输出的 code 字段是数字，因此无法被 json_dict_t 直接解析。
-    //       生产环境如需完整 JSON 解析请使用 nlohmann/json 等第三方库。
-    //       这里用一个纯字符串 JSON 演示 json_dict_t 的键路径访问能力。
-    print_section("2.2 反序列化并访问字段（json_dict_t）");
-    const std::string simple_json = R"({
-        "service": "trade_service",
-        "error": {
-            "name": "ERR_ORDER_NOT_FOUND",
-            "message": "订单查询失败",
-            "payload": {
-                "user_id": "8848",
-                "order_id": "ORD-20260627-0001",
-                "retry_count": "3"
-            }
-        }
-    })";
-    auto parsed = json_dict_t::parse(simple_json);
-    if (parsed.has_value()) {
-        // 顶层字段
-        std::cout << "  service: " << parsed->get_value("service").value_or("N/A") << std::endl;
-        // 嵌套对象通过 "parent.child" 路径访问
-        std::cout << "  error.name: "
-                  << parsed->get_value("error.name").value_or("N/A") << std::endl;
-        std::cout << "  error.message: "
-                  << parsed->get_value("error.message").value_or("N/A") << std::endl;
-        // 三层嵌套：error.payload.user_id
-        std::cout << "  error.payload.user_id: "
-                  << parsed->get_value("error.payload.user_id").value_or("N/A") << std::endl;
-        std::cout << "  error.payload.order_id: "
-                  << parsed->get_value("error.payload.order_id").value_or("N/A") << std::endl;
-        std::cout << "  error.payload.retry_count: "
-                  << parsed->get_value("error.payload.retry_count").value_or("N/A") << std::endl;
+    // 真正的 JSON 反序列化往返：from_json 接受 to_json 的输出（code 字段为字符串形式）
+    print_section("2.2 反序列化往返（error_context_serializer_t::from_json）");
+    auto from_json = error_context_serializer_t::from_json(json_str);
+    if (from_json.has_value()) {
+        std::cout << "  反序列化成功" << std::endl;
+        std::cout << "  code 还原: " << from_json->get_code().get_code() << std::endl;
+        std::cout << "  message 还原: " << from_json->message << std::endl;
+        std::cout << "  payload 项数: " << from_json->payload_size() << std::endl;
+        from_json->for_each_payload([](const std::string& key, const std::string& value) {
+            std::cout << "    " << key << " = " << value << std::endl;
+            return true;
+        });
+        const bool same = from_json->get_code().get_code() == context.get_code().get_code()
+                          && from_json->message == context.message;
+        std::cout << "  往返一致性: " << (same ? "通过" : "失败") << std::endl;
     } else {
-        std::cout << "  JSON 解析失败" << std::endl;
+        std::cout << "  JSON 反序列化失败" << std::endl;
+    }
+
+    // 二进制反序列化往返
+    print_section("2.3 二进制反序列化往返（from_binary）");
+    const std::string binary_blob = error_context_serializer_t::to_binary(context);
+    auto from_binary = error_context_serializer_t::from_binary(binary_blob);
+    if (from_binary.has_value()) {
+        std::cout << "  二进制大小: " << binary_blob.size() << " bytes" << std::endl;
+        std::cout << "  code 还原: " << from_binary->get_code().get_code() << std::endl;
+        std::cout << "  message 还原: " << from_binary->message << std::endl;
+        const bool same = from_binary->get_code().get_code() == context.get_code().get_code()
+                          && from_binary->message == context.message;
+        std::cout << "  往返一致性: " << (same ? "通过" : "失败") << std::endl;
+    } else {
+        std::cout << "  二进制反序列化失败" << std::endl;
     }
 
     // 恢复 stacktrace 设置
@@ -242,39 +235,39 @@ static void demo_binary_with_cause_chain() {
 static void demo_custom_formatter() {
     std::cout << "\n===== Demo 6.4: 自定义格式化器 =====" << std::endl;
 
-    error_context_t ctx{
+    error_context_t context{
         biz::trade_errors::ERR_ORDER_NOT_FOUND,
         "自定义格式化器演示"};
-    ctx.with("order_id", "ORD-001");
+    context.with("order_id", "ORD-001");
 
     // 默认输出
     print_section("4.1 默认格式化器");
-    std::cout << "  " << error_context_serializer_t::to_string(ctx) << std::endl;
+    std::cout << "  " << error_context_serializer_t::to_string(context) << std::endl;
 
     // 注册自定义格式化器：输出 logfmt 风格
     print_section("4.2 自定义 logfmt 格式化器");
-    formatter_config_t::set_custom_formatter([](const error_context_t& e) -> std::string {
-        std::string out = "level=";
-        out += to_string(e.get_code().get_level());
-        out += " msg=\"";
-        out += e.message;
-        out += "\" code=";
-        out += std::to_string(e.get_code().get_identity_code());
-        e.for_each_payload([&](const std::string& k, const std::string& v) {
-            out += " ";
-            out += k;
-            out += "=";
-            out += v;
+    formatter_config_t::set_custom_formatter([](const error_context_t& error_context) -> std::string {
+        std::string output = "level=";
+        output += to_string(error_context.get_code().get_level());
+        output += " msg=\"";
+        output += error_context.message;
+        output += "\" code=";
+        output += std::to_string(error_context.get_code().get_identity_code());
+        error_context.for_each_payload([&](const std::string& key, const std::string& value) {
+            output += " ";
+            output += key;
+            output += "=";
+            output += value;
         });
-        return out;
+        return output;
     });
 
-    std::cout << "  " << error_context_serializer_t::to_string(ctx) << std::endl;
+    std::cout << "  " << error_context_serializer_t::to_string(context) << std::endl;
 
     // 清除自定义格式化器，恢复默认
     formatter_config_t::set_custom_formatter(nullptr);
     print_section("4.3 恢复默认格式化器");
-    std::cout << "  " << error_context_serializer_t::to_string(ctx) << std::endl;
+    std::cout << "  " << error_context_serializer_t::to_string(context) << std::endl;
 }
 
 // ========== 5. 重复错误码注册策略 ==========
@@ -369,8 +362,8 @@ static void demo_end_to_end() {
     };
 
     // 步骤 2：扣减库存
-    auto deduct_stock = [](int /*product_id*/, int qty) -> result_t<void> {
-        if (qty <= 0) {
+    auto deduct_stock = [](int /*product_id*/, int quantity) -> result_t<void> {
+        if (quantity <= 0) {
             return result_t<void>::make_error(
                 biz::trade_errors::ERR_ORDER_NOT_FOUND, "库存扣减失败：数量必须大于0");
         }
@@ -393,9 +386,9 @@ static void demo_end_to_end() {
     };
 
     // 端到端编排：用 and_then 串联，任一步失败则短路
-    auto create_order = [&](int user_id, int product_id, int qty, int amount) -> result_t<void> {
+    auto create_order = [&](int user_id, int product_id, int quantity, int amount) -> result_t<void> {
         return validate_user(user_id)
-            .and_then([&](void) { return deduct_stock(product_id, qty); })
+            .and_then([&](void) { return deduct_stock(product_id, quantity); })
             .and_then([&](void) { return process_payment(amount); });
     };
 
