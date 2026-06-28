@@ -25,45 +25,46 @@ namespace error_system::core {
         /**
          * @brief 通知所有已注册插件（同步路径）
          * @details 从原 error_context.cc 的 notify_plugins 迁移，供 initialize 内部调用
-         * @param ctx 错误上下文
+         * @param context 错误上下文
          */
-        void notify_plugins(const error_context_t& ctx) noexcept {
-            plugin::plugin_registry_t::instance().notify_error(ctx);
+        void notify_plugins(const error_context_t& context) noexcept {
+            plugin::plugin_registry_t::instance().notify_error(context);
         }
     }  // namespace
 
-    void error_context_initializer_t::fill_validation_fields_(error_context_t& ctx) noexcept {
-        if (error_registry_t::instance().is_registered(ctx.code_)) {
+    void error_context_initializer_t::fill_validation_fields_(error_context_t& context) noexcept {
+        auto info = error_registry_t::instance().get_info_cached(context.code_);
+        if (info) {
             return;
         }
 
         try {
-            ctx.with("illegal_raw_code", std::to_string(ctx.code_.get_code()));
-            ctx.message = "[UNREGISTERED CODE] " + std::move(ctx.message);
+            context.with("illegal_raw_code", std::to_string(context.code_.get_code()));
+            context.message = "[UNREGISTERED CODE] " + std::move(context.message);
         } catch (...) {
             std::fprintf(stderr, "[error_context_initializer] fill_validation_fields_: std::bad_alloc\n");
         }
-        ctx.code_ = error_code_t(error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFF);
-        auto info = error_registry_t::instance().get_info(ctx.code_);
-        if (info) {
-            ctx.metadata_ = std::move(*info);
+        context.code_ = error_code_t(error_level_t::fatal, domain::system_domain_t::none, 0, 0, 0xFFFF);
+        auto fallback = error_registry_t::instance().get_info_cached(context.code_);
+        if (fallback) {
+            context.metadata_ = std::move(*fallback);
         }
     }
 
-    void error_context_initializer_t::fill_stacktrace_(error_context_t& ctx) noexcept {
+    void error_context_initializer_t::fill_stacktrace_(error_context_t& context) noexcept {
         if constexpr (feature_flags_t::STACKTRACE_ENABLED) {
-            ctx.stack_frames = utils::stack_trace_utils_t::generate(1);
+            context.stack_frames = utils::stack_trace_utils_t::generate(1);
         }
     }
 
-    void error_context_initializer_t::fill_source_location_(error_context_t& ctx, bool short_filename_enabled) noexcept {
+    void error_context_initializer_t::fill_source_location_(error_context_t& context, bool short_filename_enabled) noexcept {
         if constexpr (feature_flags_t::LOCATION_ENABLED) {
-            ctx.file_name = short_filename_enabled ? utils::extract_short_filename(ctx.source_location.file_name())
-                                                   : ctx.source_location.file_name();
+            context.file_name = short_filename_enabled ? utils::extract_short_filename(context.source_location.file_name())
+                                                       : context.source_location.file_name();
         }
     }
 
-    void error_context_initializer_t::initialize(error_context_t& ctx) noexcept {
+    void error_context_initializer_t::initialize(error_context_t& context) noexcept {
         const bool validation_enabled = feature_flags_t::is_validation_enabled();
         const bool stacktrace_enabled = feature_flags_t::is_stacktrace_enabled();
         const bool location_enabled = feature_flags_t::is_source_location_enabled();
@@ -72,7 +73,7 @@ namespace error_system::core {
         if constexpr (feature_flags_t::STACKTRACE_ENABLED) {
             stacktrace_level = stacktrace_enabled ? stacktrace_config_t::get_stacktrace_level() : core::error_level_t::warn;
             if (stacktrace_enabled) {
-                const auto per_code_level = stacktrace_config_t::get_per_code_stacktrace_level(ctx.code_.get_identity_code());
+                const auto per_code_level = stacktrace_config_t::get_per_code_stacktrace_level(context.code_.get_identity_code());
                 if (per_code_level.has_value()) {
                     stacktrace_level = per_code_level.value();
                 }
@@ -88,25 +89,27 @@ namespace error_system::core {
         }();
 
         if (validation_enabled) {
-            fill_validation_fields_(ctx);
+            fill_validation_fields_(context);
         }
 
         if constexpr (feature_flags_t::STACKTRACE_ENABLED) {
-            if (stacktrace_enabled && ctx.code_.get_level() >= stacktrace_level) {
-                fill_stacktrace_(ctx);
+            if (stacktrace_enabled && context.code_.get_level() >= stacktrace_level) {
+                fill_stacktrace_(context);
             }
         }
 
         if constexpr (feature_flags_t::LOCATION_ENABLED) {
             if (location_enabled) {
-                fill_source_location_(ctx, short_filename_enabled);
+                fill_source_location_(context, short_filename_enabled);
             }
         }
 
         if (feature_flags_t::get_notify_mode() == feature_flags_t::notify_mode_t::async_queue) {
-            plugin::plugin_registry_t::instance().enqueue_notification(ctx);
+            plugin::plugin_registry_t::instance().enqueue_notification(context);
+        } else if (feature_flags_t::get_notify_mode() == feature_flags_t::notify_mode_t::sync_deferred) {
+            plugin::plugin_registry_t::instance().enqueue_deferred_notification(context);
         } else {
-            notify_plugins(ctx);
+            notify_plugins(context);
         }
     }
 

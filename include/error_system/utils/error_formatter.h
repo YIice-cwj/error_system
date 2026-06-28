@@ -18,16 +18,16 @@ namespace error_system::core {
 
 /**
  * @brief 错误上下文输出流运算符重载
- * @param os 输出流
+ * @param stream 输出流
  * @param context 错误上下文
  * @return std::ostream& 输出流
  */
-inline std::ostream& operator<<(std::ostream& os, const error_context_t& context) noexcept {
+[[nodiscard]] inline std::ostream& operator<<(std::ostream& stream, const error_context_t& context) noexcept {
     try {
-        return os << error_context_serializer_t::to_string(context);
+        return stream << error_context_serializer_t::to_string(context);
     } catch (...) {
         std::fprintf(stderr, "[error_formatter] operator<< threw exception\n");
-        return os;
+        return stream;
     }
 }
 

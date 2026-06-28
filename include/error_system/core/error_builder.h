@@ -52,12 +52,12 @@ namespace error_system::core {
          *     subsys_t::db_conn, module_t::timeout, 0x0001);
          */
         template <typename SubSystemEnum, typename ModuleEnum>
-        static constexpr error_code_t make_error_code(error_level_t level,
+        [[nodiscard]] static constexpr error_code_t make_error_code(error_level_t level,
                                                       domain::system_domain_t system,
-                                                      SubSystemEnum subsys,
+                                                      SubSystemEnum subsystem,
                                                       ModuleEnum module,
                                                       uint16_t number) noexcept {
-            return error_code_t{level, system, static_cast<uint16_t>(subsys), static_cast<uint16_t>(module), number};
+            return error_code_t{level, system, static_cast<uint16_t>(subsystem), static_cast<uint16_t>(module), number};
         }
 
         /**
@@ -71,7 +71,7 @@ namespace error_system::core {
          * code_t raw = recv_from_network();
          * error_code_t code = error_builder_t::from_raw(raw);
          */
-        static constexpr error_code_t from_raw(code_t code) noexcept { return error_code_t(code); }
+        [[nodiscard]] static constexpr error_code_t from_raw(code_t code) noexcept { return error_code_t(code); }
     };
 
 }  // namespace error_system::core

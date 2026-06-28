@@ -45,7 +45,7 @@ namespace error_system::config {
 
         /**
          * @brief 自定义格式化函数存储
-         * @details 保护全局配置项并发访问的互斥锁
+         * @details 使用 shared_mutex 保护并发读写
          * @return formatter_callback_t& 自定义格式化函数引用
          */
         static formatter_callback_t& get_custom_formatter_() noexcept {
@@ -75,7 +75,7 @@ namespace error_system::config {
          * @details 返回格式化函数的线程安全拷贝，调用方无需持有锁即可安全调用
          * @return formatter_callback_t 格式化函数副本
          */
-        static formatter_callback_t get_custom_formatter() noexcept {
+        [[nodiscard]] static formatter_callback_t get_custom_formatter() noexcept {
             std::shared_lock<std::shared_mutex> lock(get_formatter_mutex_());
             return get_custom_formatter_();
         }

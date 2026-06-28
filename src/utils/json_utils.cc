@@ -1,5 +1,16 @@
 #include "error_system/utils/json_utils.h"
 
+/**
+ * @file json_utils.cc
+ * @brief JSON 字典与序列化工具实现
+ * @details 实现基于状态机的 JSON 解析（支持嵌套对象与点分路径键）、JSON 字典查询、
+ *          以及 JSON 字符串安全转义（含控制字符 \u00XX 编码）。
+ * @author yiice
+ * @version 2.3.0
+ * @date 2026-06-28
+ * @copyright Copyright (c) 2026
+ */
+
 #include <array>
 #include <charconv>
 #include <cstdint>
@@ -16,10 +27,10 @@ namespace error_system::utils {
          * @details 定义JSON解析器的解析状态，用于标识当前解析位置
          */
         enum class parse_state_t {
-            expect_key_or_end,      // 期待键名（字符串）或 结尾 '}'
-            expect_colon,           // 期待冒号 ':'
-            expect_value_or_start,  // 期待值（字符串）或 嵌套起点 '{'
-            expect_comma_or_end     // 期待逗号 ',' 或 结尾 '}'
+            expect_key_or_end,
+            expect_colon,
+            expect_value_or_start,
+            expect_comma_or_end
         };
 
         /**
@@ -281,6 +292,31 @@ namespace error_system::utils {
         }
     }
 
+    namespace {
+
+        /**
+         * @brief 将控制字符转义为 \u00XX 形式
+         * @details 用于 escape_json 的 default 分支，处理 < 0x20 的控制字符。
+         *          使用 std::to_chars 生成两位十六进制，不足两位前补 '0'。
+         */
+        void append_control_escape(std::string& result, unsigned char c) noexcept {
+            result.append("\\u00");
+            std::array<char, 2> buffer;
+            auto [ptr, ec] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), c, 16);
+            if (ec != std::errc{}) {
+                return;
+            }
+            const size_t written = static_cast<size_t>(ptr - buffer.data());
+            if (written == 1) {
+                result.push_back('0');
+                result.push_back(buffer[0]);
+            } else {
+                result.append(buffer.data(), 2);
+            }
+        }
+
+    }  // namespace
+
     /**
      * @brief 安全转义 JSON 字符串
      * @details 将包含控制字符的字符串转义为合法的 JSON 字符串格式
@@ -292,46 +328,21 @@ namespace error_system::utils {
         try {
             result.reserve(value.size() + 16);
         } catch (...) {
-            std::fprintf(stderr, "[json_serializer] escape_json: reserve failed\n");
+            std::fprintf(stderr, "[json_utils] escape_json: reserve failed\n");
         }
 
         for (char c : value) {
             switch (c) {
-                case '"':
-                    result.append("\\\"");
-                    break;
-                case '\\':
-                    result.append("\\\\");
-                    break;
-                case '\b':
-                    result.append("\\b");
-                    break;
-                case '\f':
-                    result.append("\\f");
-                    break;
-                case '\n':
-                    result.append("\\n");
-                    break;
-                case '\r':
-                    result.append("\\r");
-                    break;
-                case '\t':
-                    result.append("\\t");
-                    break;
+                case '"':  result.append("\\\""); break;
+                case '\\': result.append("\\\\"); break;
+                case '\b': result.append("\\b");  break;
+                case '\f': result.append("\\f");  break;
+                case '\n': result.append("\\n");  break;
+                case '\r': result.append("\\r");  break;
+                case '\t': result.append("\\t");  break;
                 default:
                     if (static_cast<unsigned char>(c) < 0x20) {
-                        result.append("\\u00");
-                        std::array<char, 2> buffer;
-                        auto [ptr, ec] =
-                            std::to_chars(buffer.data(), buffer.data() + buffer.size(), static_cast<uint8_t>(c), 16);
-                        if (ec == std::errc{}) {
-                            if (ptr - buffer.data() == 1) {
-                                result.push_back('0');
-                                result.push_back(buffer[0]);
-                            } else {
-                                result.append(buffer.data(), 2);
-                            }
-                        }
+                        append_control_escape(result, static_cast<unsigned char>(c));
                     } else {
                         result.push_back(c);
                     }

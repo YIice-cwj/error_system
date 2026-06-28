@@ -4,13 +4,13 @@
     "domain": "application",
     "subsystem_id": 101,
     "modules": {
-        "order": { 
-            "id": 1, 
-            "desc": "订单模块" 
+        "order": {
+            "id": 1,
+            "desc": "订单模块"
         },
-        "cart": { 
-            "id": 2, 
-            "desc": "购物车模块" 
+        "cart": {
+            "id": 2,
+            "desc": "购物车模块"
         }
     },
     "errors": [
@@ -19,14 +19,23 @@
             "module": "order",
             "level": "error",
             "number": 1,
-            "desc": "订单不存在或已删除"
+            "desc": "订单不存在或已删除",
+            "i18n": {
+                "zh_CN": "订单不存在或已删除",
+                "en_US": "Order not found or has been deleted",
+                "ja_JP": "注文が見つからないか、削除されました"
+            }
         },
         {
             "name": "ERR_CART_IS_EMPTY",
             "module": "cart",
             "level": "warn",
             "number": 1,
-            "desc": "购物车为空，无法进行结算"
+            "desc": "购物车为空，无法进行结算",
+            "i18n": {
+                "zh_CN": "购物车为空，无法进行结算",
+                "en_US": "Cart is empty, cannot proceed to checkout"
+            }
         }
     ]
 }

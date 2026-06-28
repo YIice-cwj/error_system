@@ -126,7 +126,7 @@ namespace error_system::core {
          * @brief 获取当前重复处理策略
          * @return duplicate_policy_t 当前重复处理策略
          */
-        duplicate_policy_t get_policy() const noexcept {
+        [[nodiscard]] duplicate_policy_t get_policy() const noexcept {
             std::shared_lock<std::shared_mutex> lock(mutex_);
             return policy_;
         }
@@ -145,7 +145,7 @@ namespace error_system::core {
          * @brief 获取当前重复注册警告回调
          * @return const duplicate_warn_callback_t& 当前回调
          */
-        const duplicate_warn_callback_t& get_warn_callback() const noexcept {
+        [[nodiscard]] const duplicate_warn_callback_t& get_warn_callback() const noexcept {
             std::shared_lock<std::shared_mutex> lock(mutex_);
             return warn_callback_;
         }

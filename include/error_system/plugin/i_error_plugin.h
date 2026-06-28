@@ -31,14 +31,14 @@ namespace error_system::plugin {
          * @details 用于标识插件，注册时若名称重复则替换旧插件
          * @return std::string_view 插件名称
          */
-        virtual std::string_view name() const noexcept = 0;
+        [[nodiscard]] virtual std::string_view name() const noexcept = 0;
 
         /**
          * @brief 获取插件关注的最低错误级别
          * @details 仅接收级别 >= 此值的错误事件，默认返回 debug（接收所有级别）
          * @return error_level_t 最低错误级别
          */
-        virtual core::error_level_t min_level() const noexcept { return core::error_level_t::debug; }
+        [[nodiscard]] virtual core::error_level_t min_level() const noexcept { return core::error_level_t::debug; }
 
         /**
          * @brief 错误事件回调

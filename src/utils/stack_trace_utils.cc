@@ -1,5 +1,17 @@
 #include "error_system/utils/stack_trace_utils.h"
 
+/**
+ * @file stack_trace_utils.cc
+ * @brief 堆栈追踪工具实现
+ * @details 提供当前线程调用栈抓取与符号解析能力。POSIX 平台使用 backtrace/backtrace_symbols
+ *          + abi::__cxa_demangle；Windows 平台使用 CaptureStackBackTrace + DbgHelp。
+ *          未启用 ERROR_SYSTEM_ENABLE_STACKTRACE 时返回空。
+ * @author yiice
+ * @version 2.3.0
+ * @date 2026-06-28
+ * @copyright Copyright (c) 2026
+ */
+
 namespace error_system::utils {
 
 #ifdef ERROR_SYSTEM_ENABLE_STACKTRACE

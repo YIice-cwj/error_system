@@ -8,7 +8,7 @@
 #include "error_system/core/error_context.h"
 
 /**
- * @file result_t.h
+ * @file result.h
  * @brief 结果数据类定义
  * @details 定义结果数据结构、字段解析和访问接口
  * @author yiice
@@ -59,7 +59,7 @@ namespace error_system::core {
          * // 替代 result_t<int>(code, "失败")
          * return result_t<int>::make_error(ERR_DB_FAIL, "数据库操作失败");
          */
-        static result_t make_error(error_code_t code, const std::string& message = "",
+        [[nodiscard]] static result_t make_error(error_code_t code, const std::string& message = "",
                                   utils::source_location_t location = utils::source_location_t::current()) noexcept {
             return result_t(error_context_t{located_code_t{code, location}, message});
         }
@@ -71,7 +71,7 @@ namespace error_system::core {
          * @param location 源位置（默认捕获调用者位置）
          * @return result_t 包装了错误的结果对象
          */
-        static result_t make_error(error_code_t code, std::string&& message,
+        [[nodiscard]] static result_t make_error(error_code_t code, std::string&& message,
                                    utils::source_location_t location = utils::source_location_t::current()) noexcept {
             return result_t(error_context_t{located_code_t{code, location}, std::move(message)});
         }
@@ -81,7 +81,7 @@ namespace error_system::core {
          * @param context 错误上下文
          * @return result_t 包装了错误的结果对象
          */
-        static result_t make_error(const error_context_t& context) noexcept {
+        [[nodiscard]] static result_t make_error(const error_context_t& context) noexcept {
             return result_t(context);
         }
 
@@ -91,7 +91,7 @@ namespace error_system::core {
          * @param value 成功值
          * @return result_t 成功结果
          */
-        static result_t make_success(value_type_t value) noexcept {
+        [[nodiscard]] static result_t make_success(value_type_t value) noexcept {
             return result_t(std::move(value));
         }
 
@@ -113,13 +113,22 @@ namespace error_system::core {
          */
         explicit result_t(const error_context_t& error_context) noexcept : value_or_error_(error_context) {}
 
+        /**
+         * @brief 拷贝构造，noexcept 性跟随 value_type_t 与 error_context_t
+         */
         result_t(const result_t&) noexcept(std::is_nothrow_copy_constructible_v<value_type_t>
                                            && std::is_nothrow_copy_constructible_v<error_context_t>) = default;
-        // 移动构造的 noexcept 性取决于 T 是否可 noexcept 移动；
-        // error_context_t 已保证 noexcept 移动。无条件 noexcept 会在 T 抛出移动异常时调用 std::terminate。
+        /**
+         * @brief 移动构造，noexcept 性跟随 value_type_t
+         * @details error_context_t 已保证 noexcept 移动。无条件 noexcept 会在 T 抛出移动异常时调用 std::terminate。
+         */
         result_t(result_t&&) noexcept(std::is_nothrow_move_constructible_v<value_type_t>) = default;
         result_t& operator=(const result_t&) noexcept = delete;
-        result_t& operator=(result_t&&) noexcept = delete;
+        /**
+         * @brief 移动赋值，noexcept 性跟随 value_type_t
+         * @details error_context_t 已保证 noexcept 移动赋值。允许复用变量，改善易用性。
+         */
+        result_t& operator=(result_t&&) noexcept(std::is_nothrow_move_assignable_v<value_type_t>) = default;
         ~result_t() noexcept = default;
 
     public:
@@ -127,13 +136,13 @@ namespace error_system::core {
          * @brief 检查结果是否为错误
          * @return bool 如果结果为错误则返回true
          */
-        bool is_error() const noexcept { return std::holds_alternative<error_context_t>(value_or_error_); }
+        [[nodiscard]] bool is_error() const noexcept { return std::holds_alternative<error_context_t>(value_or_error_); }
 
         /**
          * @brief 检查结果是否为成功
          * @return bool 如果结果为成功则返回true
          */
-        bool is_success() const noexcept { return std::holds_alternative<value_type_t>(value_or_error_); }
+        [[nodiscard]] bool is_success() const noexcept { return std::holds_alternative<value_type_t>(value_or_error_); }
 
         /**
          * @brief 获取错误上下文
@@ -141,7 +150,7 @@ namespace error_system::core {
          *          调用方应在调用前通过 is_error() 检查，否则返回的哨兵值 is_error() 为 false。
          * @return const error_context_t& 错误上下文
          */
-        const error_context_t& error() const noexcept {
+        [[nodiscard]] const error_context_t& error() const noexcept {
             assert(is_error() && "result_t::error() called on a success result");
             auto* ptr = std::get_if<error_context_t>(&value_or_error_);
             if (ptr) {
@@ -157,7 +166,7 @@ namespace error_system::core {
          *          调用方应在调用前通过 is_error() 检查，否则返回的哨兵值无意义。
          * @return error_context_t& 错误上下文可变引用
          */
-        error_context_t& error() noexcept {
+        [[nodiscard]] error_context_t& error() noexcept {
             assert(is_error() && "result_t::error() called on a success result");
             auto* ptr = std::get_if<error_context_t>(&value_or_error_);
             if (ptr) {
@@ -174,7 +183,7 @@ namespace error_system::core {
          *          要求 T 必须可默认构造，若 T 不可默认构造请使用 value_pointer() 替代。
          * @return const value_type_t& 成功值
          */
-        const value_type_t& value() const noexcept {
+        [[nodiscard]] const value_type_t& value() const noexcept {
             static_assert(std::is_default_constructible_v<value_type_t>,
                           "result_t::value() requires T to be default-constructible. "
                           "Use value_pointer() for non-default-constructible types.");
@@ -193,7 +202,7 @@ namespace error_system::core {
          *          调用方应在调用前通过 is_success() 检查，否则返回的哨兵值可能无意义。
          * @return value_type_t& 成功值
          */
-        value_type_t& value() noexcept {
+        [[nodiscard]] value_type_t& value() noexcept {
             static_assert(std::is_default_constructible_v<value_type_t>,
                           "result_t::value() requires T to be default-constructible. "
                           "Use value_pointer() for non-default-constructible types.");
@@ -210,20 +219,20 @@ namespace error_system::core {
          * @brief 安全获取成功值指针
          * @return const value_type_t* 成功值指针，如果为错误则返回 nullptr
          */
-        const value_type_t* value_pointer() const noexcept { return std::get_if<value_type_t>(&value_or_error_); }
+        [[nodiscard]] const value_type_t* value_pointer() const noexcept { return std::get_if<value_type_t>(&value_or_error_); }
 
         /**
          * @brief 安全获取成功值指针
          * @return value_type_t* 成功值指针，如果为错误则返回 nullptr
          */
-        value_type_t* value_pointer() noexcept { return std::get_if<value_type_t>(&value_or_error_); }
+        [[nodiscard]] value_type_t* value_pointer() noexcept { return std::get_if<value_type_t>(&value_or_error_); }
 
         /**
          * @brief 安全获取成功值，失败时返回默认值
          * @param default_value 默认值引用，调用方保证其生命周期
          * @return const value_type_t& 成功值或默认值引用
          */
-        const value_type_t& value_or(const value_type_t& default_value) const noexcept {
+        [[nodiscard]] const value_type_t& value_or(const value_type_t& default_value) const noexcept {
             auto* ptr = std::get_if<value_type_t>(&value_or_error_);
             return ptr ? *ptr : default_value;
         }
@@ -233,7 +242,7 @@ namespace error_system::core {
          * @details 若结果为成功，返回包含的值；否则返回 T{} 默认值
          * @return T 成功值或默认值
          */
-        value_type_t unwrap() const noexcept {
+        [[nodiscard]] value_type_t unwrap() const noexcept {
             const value_type_t* ptr = std::get_if<value_type_t>(&value_or_error_);
             return ptr ? *ptr : value_type_t{};
         }
@@ -244,7 +253,7 @@ namespace error_system::core {
          * @param default_value 失败时的默认值
          * @return T 成功值或默认值
          */
-        value_type_t unwrap_or(value_type_t default_value) const noexcept {
+        [[nodiscard]] value_type_t unwrap_or(value_type_t default_value) const noexcept {
             const value_type_t* ptr = std::get_if<value_type_t>(&value_or_error_);
             return ptr ? *ptr : std::move(default_value);
         }
@@ -266,7 +275,7 @@ namespace error_system::core {
          * auto result = compute();
          * int value = result.expect();
          */
-        const value_type_t& expect() const noexcept {
+        [[nodiscard]] const value_type_t& expect() const noexcept {
             static_assert(std::is_default_constructible_v<value_type_t>,
                           "result_t::expect() requires T to be default-constructible. "
                           "Use value_pointer() for non-default-constructible types.");
@@ -286,7 +295,7 @@ namespace error_system::core {
          * @return result_t 转换后的结果，错误时传递错误上下文
          */
         template <typename Function>
-        auto map(Function&& function) const& noexcept -> result_t<decltype(std::invoke(std::forward<Function>(function),
+        [[nodiscard]] auto map(Function&& function) const& noexcept -> result_t<decltype(std::invoke(std::forward<Function>(function),
                                                                                std::declval<const value_type_t&>()))> {
             using new_type = decltype(std::invoke(std::forward<Function>(function), std::declval<const value_type_t&>()));
             if (is_error()) {
@@ -304,7 +313,7 @@ namespace error_system::core {
          * @brief 对成功值进行映射转换（移动语义）
          */
         template <typename Function>
-        auto map(Function&& function) && noexcept -> result_t<decltype(std::invoke(std::forward<Function>(function),
+        [[nodiscard]] auto map(Function&& function) && noexcept -> result_t<decltype(std::invoke(std::forward<Function>(function),
                                                                            std::move(value())))> {
             using new_type = decltype(std::invoke(std::forward<Function>(function), std::move(value())));
             if (is_error()) {
@@ -325,7 +334,7 @@ namespace error_system::core {
          * @return result_t 映射后的结果，成功时保持不变
          */
         template <typename Function>
-        result_t<value_type_t> map_error(Function&& function) const& noexcept {
+        [[nodiscard]] result_t<value_type_t> map_error(Function&& function) const& noexcept {
             if (is_error()) {
                 try {
                     return result_t<value_type_t>(std::invoke(std::forward<Function>(function), error()));
@@ -341,7 +350,7 @@ namespace error_system::core {
          * @brief 对错误上下文进行映射转换（移动语义）
          */
         template <typename Function>
-        result_t<value_type_t> map_error(Function&& function) && noexcept {
+        [[nodiscard]] result_t<value_type_t> map_error(Function&& function) && noexcept {
             if (is_error()) {
                 try {
                     return result_t<value_type_t>(std::invoke(std::forward<Function>(function), std::move(error())));
@@ -361,7 +370,7 @@ namespace error_system::core {
          *          如果当前结果为错误，则返回包含当前错误的新结果（移动语义）
          */
         template <typename Function>
-        auto and_then(Function&& function) && noexcept -> decltype(std::invoke(std::forward<Function>(function),
+        [[nodiscard]] auto and_then(Function&& function) && noexcept -> decltype(std::invoke(std::forward<Function>(function),
                                                                       std::move(value()))) {
             using return_type = decltype(std::invoke(std::forward<Function>(function), std::move(value())));
             if (is_error()) {
@@ -383,7 +392,7 @@ namespace error_system::core {
          *          如果当前结果为错误，则返回包含当前错误的新结果
          */
         template <typename Function>
-        auto and_then(Function&& function) & noexcept -> decltype(std::invoke(std::forward<Function>(function), value())) {
+        [[nodiscard]] auto and_then(Function&& function) & noexcept -> decltype(std::invoke(std::forward<Function>(function), value())) {
             using return_type = decltype(std::invoke(std::forward<Function>(function), value()));
             if (is_error()) {
                 return return_type(error());
@@ -404,7 +413,7 @@ namespace error_system::core {
          *          如果当前结果为错误，则返回包含当前错误的新结果
          */
         template <typename Function>
-        auto and_then(Function&& function) const& noexcept -> decltype(std::invoke(std::forward<Function>(function), value())) {
+        [[nodiscard]] auto and_then(Function&& function) const& noexcept -> decltype(std::invoke(std::forward<Function>(function), value())) {
             using return_type = decltype(std::invoke(std::forward<Function>(function), value()));
             if (is_error()) {
                 return return_type(error());
@@ -425,7 +434,7 @@ namespace error_system::core {
          *          如果当前结果为成功，则返回当前对象（移动语义）
          */
         template <typename Function>
-        result_t<value_type_t> or_else(Function&& function) && noexcept {
+        [[nodiscard]] result_t<value_type_t> or_else(Function&& function) && noexcept {
             if (is_error()) {
                 try {
                     return std::invoke(std::forward<Function>(function), std::move(error()));
@@ -445,7 +454,7 @@ namespace error_system::core {
          *          如果当前结果为成功，则返回当前对象的副本
          */
         template <typename Function>
-        result_t<value_type_t> or_else(Function&& function) & noexcept {
+        [[nodiscard]] result_t<value_type_t> or_else(Function&& function) & noexcept {
             if (is_error()) {
                 try {
                     return std::invoke(std::forward<Function>(function), error());
@@ -467,9 +476,8 @@ namespace error_system::core {
          * @return 处理函数的返回值
          */
         template <typename SuccessFn, typename ErrorFn>
-        auto match(SuccessFn&& success_fn, ErrorFn&& error_fn) const
-            -> decltype(success_fn(std::declval<const value_type_t&>()))
-        {
+        [[nodiscard]] auto match(SuccessFn&& success_fn, ErrorFn&& error_fn) const
+            -> decltype(success_fn(std::declval<const value_type_t&>())) {
             if (is_success()) {
                 auto* ptr = std::get_if<value_type_t>(&value_or_error_);
                 if (ptr) {
@@ -506,7 +514,7 @@ namespace error_system::core {
         result_t(const result_t&) noexcept = default;
         result_t(result_t&&) noexcept = default;
         result_t& operator=(const result_t&) noexcept = delete;
-        result_t& operator=(result_t&&) noexcept = delete;
+        result_t& operator=(result_t&&) noexcept = default;
         ~result_t() noexcept = default;
 
         /**
@@ -515,7 +523,7 @@ namespace error_system::core {
          * @param message 错误信息，默认为空
          * @return result_t<void> 包装了错误的结果对象
          */
-        static result_t<void> make_error(error_code_t code, const std::string& message = "",
+        [[nodiscard]] static result_t<void> make_error(error_code_t code, const std::string& message = "",
                                         utils::source_location_t location = utils::source_location_t::current()) noexcept {
             return result_t<void>(error_context_t{located_code_t{code, location}, message});
         }
@@ -527,7 +535,7 @@ namespace error_system::core {
          * @param location 源位置（默认捕获调用者位置）
          * @return result_t<void> 包装了错误的结果对象
          */
-        static result_t<void> make_error(error_code_t code, std::string&& message,
+        [[nodiscard]] static result_t<void> make_error(error_code_t code, std::string&& message,
                                          utils::source_location_t location = utils::source_location_t::current()) noexcept {
             return result_t<void>(error_context_t{located_code_t{code, location}, std::move(message)});
         }
@@ -537,7 +545,7 @@ namespace error_system::core {
          * @param context 错误上下文
          * @return result_t<void> 包装了错误的结果对象
          */
-        static result_t<void> make_error(const error_context_t& context) noexcept {
+        [[nodiscard]] static result_t<void> make_error(const error_context_t& context) noexcept {
             return result_t<void>(context);
         }
 
@@ -546,7 +554,7 @@ namespace error_system::core {
          * @details 工厂方法，创建成功结果（void 类型）
          * @return result_t<void> 成功结果
          */
-        static result_t make_success() noexcept {
+        [[nodiscard]] static result_t make_success() noexcept {
             return result_t();
         }
 
@@ -566,13 +574,13 @@ namespace error_system::core {
          * @brief 检查结果是否为错误
          * @return bool 如果结果为错误则返回true
          */
-        bool is_error() const noexcept { return error_context_.is_error(); }
+        [[nodiscard]] bool is_error() const noexcept { return error_context_.is_error(); }
 
         /**
          * @brief 检查结果是否为成功
          * @return bool 如果结果为成功则返回true
          */
-        bool is_success() const noexcept { return !is_error(); }
+        [[nodiscard]] bool is_success() const noexcept { return !is_error(); }
 
         /**
          * @brief 断言当前结果为成功
@@ -591,7 +599,7 @@ namespace error_system::core {
          * @brief 获取错误上下文
          * @return const error_context_t& 错误上下文
          */
-        const error_context_t& error() const noexcept { return error_context_; }
+        [[nodiscard]] const error_context_t& error() const noexcept { return error_context_; }
 
         /**
          * @brief 对结果进行链式操作（右值引用版本）
@@ -601,7 +609,7 @@ namespace error_system::core {
          *          如果当前结果为错误，则返回包含当前错误上下文的新结果（移动语义）
          */
         template <typename Function>
-        auto and_then(Function&& function) && noexcept -> decltype(std::invoke(std::forward<Function>(function))) {
+        [[nodiscard]] auto and_then(Function&& function) && noexcept -> decltype(std::invoke(std::forward<Function>(function))) {
             using return_type = decltype(std::invoke(std::forward<Function>(function)));
             if (is_error()) {
                 return return_type(std::move(error_context_));
@@ -622,7 +630,7 @@ namespace error_system::core {
          *          如果当前结果为错误，则返回包含当前错误上下文的新结果
          */
         template <typename Function>
-        auto and_then(Function&& function) & noexcept -> decltype(std::invoke(std::forward<Function>(function))) {
+        [[nodiscard]] auto and_then(Function&& function) & noexcept -> decltype(std::invoke(std::forward<Function>(function))) {
             using return_type = decltype(std::invoke(std::forward<Function>(function)));
             if (is_error()) {
                 return return_type(error_context_);
@@ -642,7 +650,7 @@ namespace error_system::core {
          * @return result_t<void> 映射后的结果,成功时保持不变
          */
         template <typename Function>
-        result_t<void> map_error(Function&& function) const& noexcept {
+        [[nodiscard]] result_t<void> map_error(Function&& function) const& noexcept {
             if (is_error()) {
                 try {
                     return result_t<void>(std::invoke(std::forward<Function>(function), error_context_));
@@ -658,7 +666,7 @@ namespace error_system::core {
          * @brief 对错误上下文进行映射转换（移动语义）
          */
         template <typename Function>
-        result_t<void> map_error(Function&& function) && noexcept {
+        [[nodiscard]] result_t<void> map_error(Function&& function) && noexcept {
             if (is_error()) {
                 try {
                     return result_t<void>(std::invoke(std::forward<Function>(function), std::move(error_context_)));
@@ -678,7 +686,7 @@ namespace error_system::core {
          *          如果当前结果为成功，则返回当前对象（移动语义）
          */
         template <typename Function>
-        result_t<void> or_else(Function&& function) && noexcept {
+        [[nodiscard]] result_t<void> or_else(Function&& function) && noexcept {
             if (is_error()) {
                 try {
                     return std::invoke(std::forward<Function>(function), std::move(error_context_));
@@ -698,7 +706,7 @@ namespace error_system::core {
          *          如果当前结果为成功，则返回当前对象的副本
          */
         template <typename Function>
-        result_t<void> or_else(Function&& function) & noexcept {
+        [[nodiscard]] result_t<void> or_else(Function&& function) & noexcept {
             if (is_error()) {
                 try {
                     return std::invoke(std::forward<Function>(function), error_context_);

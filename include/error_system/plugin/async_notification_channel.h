@@ -30,7 +30,7 @@ namespace error_system::plugin {
      *          使用示例：
      * @code
      *   async_notification_channel_t channel(
-     *       [](const core::error_context_t& ctx) { handle(ctx); });
+     *       [](const core::error_context_t& context) { handle(context); });
      *   channel.enqueue_notification(context);
      * @endcode
      */
@@ -99,7 +99,7 @@ namespace error_system::plugin {
          * @brief 获取待处理通知数量
          * @return size_t 队列大小
          */
-        size_t pending_notifications() const noexcept {
+        [[nodiscard]] size_t pending_notifications() const noexcept {
             return async_queue_.size();
         }
 
@@ -116,7 +116,7 @@ namespace error_system::plugin {
          * @brief 获取队列最大容量
          * @return size_t 队列最大容量，0 表示无限制
          */
-        size_t get_max_queue_size() const noexcept {
+        [[nodiscard]] size_t get_max_queue_size() const noexcept {
             return async_queue_.max_size();
         }
     };

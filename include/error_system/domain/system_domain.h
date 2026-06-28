@@ -44,7 +44,7 @@ namespace error_system::domain {
      * @param domain 系统域
      * @return uint8_t 系统域整数
      */
-    constexpr uint8_t to_int(system_domain_t domain) noexcept {
+    [[nodiscard]] constexpr uint8_t to_int(system_domain_t domain) noexcept {
         return static_cast<uint8_t>(domain);
     }
 
@@ -54,7 +54,7 @@ namespace error_system::domain {
      * @param domain 系统域
      * @return const char* 系统域字符串
      */
-    constexpr const char* to_string(system_domain_t domain) noexcept {
+    [[nodiscard]] constexpr const char* to_string(system_domain_t domain) noexcept {
         if (to_int(domain) >= to_int(system_domain_t::count)) {
             return "unknown";
         }
@@ -67,7 +67,7 @@ namespace error_system::domain {
      * @param domain 系统域整数
      * @return bool 系统域整数是否有效
      */
-    constexpr bool is_valid(uint8_t domain) noexcept {
+    [[nodiscard]] constexpr bool is_valid(uint8_t domain) noexcept {
         return domain < to_int(system_domain_t::count);
     }
 
@@ -77,7 +77,7 @@ namespace error_system::domain {
      * @param domain 系统域整数
      * @return system_domain_t 系统域
      */
-    constexpr system_domain_t from_int(uint8_t domain) noexcept {
+    [[nodiscard]] constexpr system_domain_t from_int(uint8_t domain) noexcept {
         if (!is_valid(domain)) {
             return system_domain_t::none;
         }
@@ -90,7 +90,7 @@ namespace error_system::domain {
      * @param string 系统域字符串
      * @return system_domain_t 系统域
      */
-    constexpr system_domain_t from_string(const char* string) noexcept {
+    [[nodiscard]] constexpr system_domain_t from_string(const char* string) noexcept {
         switch (utils::string_utils_t::hash(string)) {
             case utils::string_utils_t::hash("none"):
                 return system_domain_t::none;

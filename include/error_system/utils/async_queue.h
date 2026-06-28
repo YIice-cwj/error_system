@@ -133,7 +133,6 @@ namespace error_system::utils {
             {
                 std::lock_guard<std::mutex> lock(mutex_);
                 if (!running_.load()) {
-                    // 在锁内创建线程：保证 running_=true 与 worker_ 就绪原子可见
                     try {
                         worker_ = std::thread(&async_queue_t::worker_loop_, this);
                         running_.store(true);
@@ -169,7 +168,7 @@ namespace error_system::utils {
          * @brief 获取最大队列容量
          * @return size_t 最大容量，0 表示无限制
          */
-        size_t max_size() const noexcept {
+        [[nodiscard]] size_t max_size() const noexcept {
             std::lock_guard<std::mutex> lock(mutex_);
             return max_size_;
         }
@@ -178,7 +177,7 @@ namespace error_system::utils {
          * @brief 获取当前队列中待处理任务数
          * @return size_t 队列大小
          */
-        size_t size() const noexcept {
+        [[nodiscard]] size_t size() const noexcept {
             std::lock_guard<std::mutex> lock(mutex_);
             return queue_.size();
         }
@@ -187,7 +186,7 @@ namespace error_system::utils {
          * @brief 判断队列是否为空
          * @return bool 是否为空
          */
-        bool empty() const noexcept {
+        [[nodiscard]] bool empty() const noexcept {
             std::lock_guard<std::mutex> lock(mutex_);
             return queue_.empty();
         }

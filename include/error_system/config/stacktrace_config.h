@@ -29,7 +29,7 @@ namespace error_system::config {
     private:
         /**
          * @brief 触发堆栈追踪的最小错误等级存储
-         * @details 保护全局配置项并发访问的互斥锁
+         * @details 使用 std::atomic 保证无锁并发读写
          * @return std::atomic<core::error_level_t>& 触发堆栈追踪的最小错误等级引用
          */
         static std::atomic<core::error_level_t>& get_min_stacktrace_level_() noexcept {
@@ -63,11 +63,11 @@ namespace error_system::config {
 
         /**
          * @brief 获取堆栈等级
-         * @details 保护全局配置项并发访问的互斥锁。
+         * @details 通过 std::atomic 无锁读取全局阈值。
          *          若编译期未启用堆栈追踪，始终返回 warn。
          * @return error_level_t 堆栈等级
          */
-        static core::error_level_t get_stacktrace_level() noexcept {
+        [[nodiscard]] static core::error_level_t get_stacktrace_level() noexcept {
             if constexpr (feature_flags_t::STACKTRACE_ENABLED) {
                 return get_min_stacktrace_level_().load();
             } else {
@@ -77,7 +77,7 @@ namespace error_system::config {
 
         /**
          * @brief 设置堆栈等级
-         * @details 保护全局配置项并发访问的互斥锁。
+         * @details 通过 std::atomic 无锁写入全局阈值。
          *          若编译期未启用堆栈追踪，此调用无实际操作。
          * @param level 堆栈等级
          */
@@ -108,7 +108,7 @@ namespace error_system::config {
          * @param identity_code 错误码的 identity_code
          * @return std::optional<core::error_level_t> 若已设置则返回覆盖值，否则返回空
          */
-        static std::optional<core::error_level_t> get_per_code_stacktrace_level(uint64_t identity_code) noexcept {
+        [[nodiscard]] static std::optional<core::error_level_t> get_per_code_stacktrace_level(uint64_t identity_code) noexcept {
             if constexpr (feature_flags_t::STACKTRACE_ENABLED) {
                 std::shared_lock<std::shared_mutex> lock(get_per_code_mutex_());
                 const auto& map = get_per_code_stacktrace_map_();

@@ -42,7 +42,7 @@ namespace error_system::utils {
          * @param key JSON键，格式为 "key1.key2"
          * @return std::optional<std::string> 字符串值，若键不存在则返回空可选
          */
-        std::optional<std::string> operator[](const std::string& key) const noexcept;
+        [[nodiscard]] std::optional<std::string> operator[](const std::string& key) const noexcept;
 
         /**
          * @brief 获取JSON字典中的字符串值
@@ -50,7 +50,7 @@ namespace error_system::utils {
          * @param key JSON键，格式为 "key1.key2"
          * @return std::optional<std::string> 字符串值，若键不存在则返回空可选
          */
-        std::optional<std::string> get_value(const std::string& key) const noexcept;
+        [[nodiscard]] std::optional<std::string> get_value(const std::string& key) const noexcept;
 
         /**
          * @brief 获取JSON字典中的字符串值，若键不存在则返回默认值
@@ -59,7 +59,7 @@ namespace error_system::utils {
          * @param default_value 键不存在时返回的默认值
          * @return std::string 若键存在则返回对应值，否则返回 default_value
          */
-        std::optional<std::string> get_value_or(const std::string& key,
+        [[nodiscard]] std::optional<std::string> get_value_or(const std::string& key,
                                                 const std::string& default_value) const noexcept;
 
         /**
@@ -68,21 +68,21 @@ namespace error_system::utils {
          * @param key JSON键，格式为 "key1.key2"
          * @return bool 是否包含指定键
          */
-        bool contains(const std::string& key) const noexcept;
+        [[nodiscard]] bool contains(const std::string& key) const noexcept;
 
         /**
          * @brief 检查JSON字典是否为空
          * @details 检查JSON字典是否为空，若为空则返回true，否则返回false
          * @return bool 是否为空
          */
-        bool empty() const noexcept;
+        [[nodiscard]] bool empty() const noexcept;
 
         /**
          * @brief 获取JSON字典的大小
          * @details 获取JSON字典的大小，即键值对的数量
          * @return size_t JSON字典的大小
          */
-        size_t size() const noexcept;
+        [[nodiscard]] size_t size() const noexcept;
 
     public:
         /**
@@ -91,7 +91,7 @@ namespace error_system::utils {
          * @param json_path JSON文件路径
          * @return std::optional<json_dict_t> JSON字典
          */
-        static std::optional<json_dict_t> from_file(const std::filesystem::path& json_path) noexcept;
+        [[nodiscard]] static std::optional<json_dict_t> from_file(const std::filesystem::path& json_path) noexcept;
 
         /**
          * @brief 解析JSON字符串
@@ -99,7 +99,7 @@ namespace error_system::utils {
          * @param json_content JSON字符串内容
          * @return std::optional<json_dict_t> 解析后的JSON字典，若解析失败则返回空可选
          */
-        static std::optional<json_dict_t> parse(const std::string& json_content) noexcept;
+        [[nodiscard]] static std::optional<json_dict_t> parse(const std::string& json_content) noexcept;
     };
 
     /**
@@ -128,7 +128,7 @@ namespace error_system::utils {
          * @param value 输入字符串视图
          * @return std::string 转义后的字符串
          */
-        static std::string escape_json(std::string_view value) noexcept;
+        [[nodiscard]] static std::string escape_json(std::string_view value) noexcept;
     };
 
 }  // namespace error_system::utils

@@ -1,5 +1,16 @@
 #include "error_system/utils/file_utils.h"
 
+/**
+ * @file file_utils.cc
+ * @brief 文件操作工具实现
+ * @details 提供文件读取、写入、创建、删除、存在性检查等基础文件操作能力。
+ *          读取时进行文件大小校验，避免恶意大文件导致 OOM。
+ * @author yiice
+ * @version 2.3.0
+ * @date 2026-06-28
+ * @copyright Copyright (c) 2026
+ */
+
 #include <cstdio>
 #include <fstream>
 
@@ -29,7 +40,6 @@ namespace error_system::utils {
             if (size < 0) {
                 return std::nullopt;
             }
-            // 文件大小校验，避免恶意大文件导致 OOM
             if (static_cast<size_t>(size) > MAX_READ_FILE_SIZE) {
                 std::fprintf(stderr, "[file_utils] read_file: file too large (%lld bytes, max=%zu)\n",
                              static_cast<long long>(size), MAX_READ_FILE_SIZE);
@@ -131,10 +141,10 @@ namespace error_system::utils {
     }
 
     /**
-     * @brief 检查文件路径是否存在
-     * @details 检查指定文件路径是否存在
-     * @param path 文件路径
-     * @return bool 文件路径存在则返回 true，否则返回 false
+     * @brief 检查目录路径是否存在
+     * @details 检查指定路径是否存在且为目录
+     * @param path 目录路径
+     * @return bool 目录路径存在则返回 true，否则返回 false
      */
     bool file_utils_t::dir_exists(const std::filesystem::path& path) noexcept {
         std::error_code error{};

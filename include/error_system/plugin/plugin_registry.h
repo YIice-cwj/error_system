@@ -151,16 +151,70 @@ namespace error_system::plugin {
         void enqueue_notification(const core::error_context_t& context) noexcept;
 
         /**
+         * @brief 累积延迟通知到线程本地缓冲（sync_deferred 模式）
+         * @details 通知不会立即触发，而是累积到当前线程的本地缓冲中，
+         *          直至调用 flush_deferred_notifications() 时统一批量通知。
+         *          适用于请求处理等批处理场景：在请求处理期间累积错误，
+         *          请求结束时一次性 flush，避免每个错误都阻塞在插件回调上。
+         *          缓冲满时（默认 1024）丢弃新通知并设置溢出标志。
+         * @param context 错误上下文
+         */
+        void enqueue_deferred_notification(const core::error_context_t& context) noexcept;
+
+        /**
+         * @brief 触发当前线程累积的所有延迟通知
+         * @details 在 sync_deferred 模式下，将线程本地缓冲中的所有错误上下文
+         *          依次通知给已注册插件（按 min_level 过滤），通知完成后清空缓冲。
+         *          通知期间产生的新错误不会进入缓冲（避免无限递归）。
+         * @note 必须由累积通知的同一线程调用，否则无法 flush 该线程的缓冲。
+         */
+        void flush_deferred_notifications() noexcept;
+
+        /**
+         * @brief 获取当前线程待 flush 的延迟通知数量
+         * @return size_t 待通知数量
+         */
+        [[nodiscard]] size_t pending_deferred_notifications() const noexcept;
+
+        /**
+         * @brief 清空当前线程的延迟通知缓冲（不触发通知）
+         * @details 用于异常恢复场景：请求处理中途异常退出时丢弃累积的通知。
+         * @return size_t 被丢弃的通知数量
+         */
+        size_t clear_deferred_notifications() noexcept;
+
+        /**
+         * @brief 设置延迟通知缓冲最大容量
+         * @details 缓冲满时新通知将被丢弃，overflow_dropped 标志置位。
+         *          默认容量 1024。仅影响后续 enqueue，不截断已有缓冲。
+         * @param max_size 最大容量，0 表示无限制
+         */
+        void set_deferred_buffer_size(size_t max_size) noexcept;
+
+        /**
+         * @brief 获取延迟通知缓冲最大容量
+         * @return size_t 最大容量，0 表示无限制
+         */
+        [[nodiscard]] size_t get_deferred_buffer_size() const noexcept;
+
+        /**
+         * @brief 查询延迟通知缓冲是否发生过溢出丢弃
+         * @details 溢出标志在 flush/clear 时重置。
+         * @return bool 是否发生过丢弃
+         */
+        [[nodiscard]] bool deferred_buffer_overflowed() const noexcept;
+
+        /**
          * @brief 获取已注册插件数量
          * @return size_t 插件数量
          */
-        size_t size() const noexcept;
+        [[nodiscard]] size_t size() const noexcept;
 
         /**
          * @brief 判断是否有已注册的插件
          * @return bool 是否为空
          */
-        bool empty() const noexcept;
+        [[nodiscard]] bool empty() const noexcept;
 
         /**
          * @brief 清空所有已注册插件
@@ -171,7 +225,7 @@ namespace error_system::plugin {
          * @brief 获取异步队列中待处理通知数量
          * @return size_t 队列大小
          */
-        size_t pending_notifications() const noexcept;
+        [[nodiscard]] size_t pending_notifications() const noexcept;
 
         /**
          * @brief 设置异步通知队列最大容量
@@ -184,7 +238,7 @@ namespace error_system::plugin {
          * @brief 获取异步通知队列最大容量
          * @return size_t 队列最大容量，0 表示无限制
          */
-        size_t get_max_queue_size() const noexcept;
+        [[nodiscard]] size_t get_max_queue_size() const noexcept;
 
         /**
          * @brief 获取单例实例

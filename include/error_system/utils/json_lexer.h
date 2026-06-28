@@ -64,9 +64,9 @@ namespace error_system::utils::detail {
         /**
          * @brief 构造函数
          * @details 构造函数，初始化JSON字符串
-         * @param json_str JSON字符串视图
+         * @param json_text JSON字符串视图
          */
-        explicit json_lexer_t(std::string_view json_str) noexcept;
+        explicit json_lexer_t(std::string_view json_text) noexcept;
 
         ~json_lexer_t() noexcept = default;
         json_lexer_t(const json_lexer_t&) = default;
@@ -79,7 +79,7 @@ namespace error_system::utils::detail {
          * @details 获取下一个token，直到遇到文件结束标识
          * @return token_t 下一个token
          */
-        token_t next() noexcept;
+        [[nodiscard]] token_t next() noexcept;
     };
 
 }  // namespace error_system::utils::detail

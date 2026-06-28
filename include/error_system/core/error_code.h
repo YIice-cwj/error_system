@@ -36,7 +36,7 @@ namespace error_system::core {
         code_t code_{0};
 
         static constexpr uint32_t SIGN_SHIFT = 63;      // 符号位位移
-        static constexpr uint32_t RESERVED_SHIFT = 60;  // 预留位位移
+        static constexpr uint32_t RESERVED_SHIFT = 60;  // 预留位位移（含 retryable/transient 语义）
         static constexpr uint32_t LEVEL_SHIFT = 56;     // 错误等级位移
         static constexpr uint32_t SYSTEM_SHIFT = 48;    // 系统域位移
         static constexpr uint32_t SUBSYS_SHIFT = 32;    // 子系统位移
@@ -50,6 +50,18 @@ namespace error_system::core {
         static constexpr uint64_t SUBSYS_MASK = 0xFFFFULL;  // 16 bits
         static constexpr uint64_t MODULE_MASK = 0xFFFFULL;  // 16 bits
         static constexpr uint64_t NUMBER_MASK = 0xFFFFULL;  // 16 bits
+
+        /**
+         * @brief Reserved 字段内 retryable 标志位位移（相对 RESERVED_SHIFT 的 bit 偏移）
+         * @details Reserved 3 bits 布局：bit0 = retryable, bit1 = transient, bit2 = reserved
+         *          - retryable=1 表示该错误可重试（如网络抖动、临时限流）
+         *          - transient=1 表示该错误是瞬态的（可能自动恢复）
+         *          默认均为 0（不可重试 / 非瞬态），与历史行为兼容。
+         */
+        static constexpr uint32_t RETRYABLE_BIT = 0;
+        static constexpr uint32_t TRANSIENT_BIT = 1;
+        static constexpr uint64_t RETRYABLE_MASK = 0x1ULL;
+        static constexpr uint64_t TRANSIENT_MASK = 0x2ULL;
 
     public:
         /**
@@ -87,7 +99,7 @@ namespace error_system::core {
          *          sign 位默认为 0（false = 错误），符合计算机 0=false/1=true 语义。
          * @param level 错误等级 (bits 59-56)
          * @param system 系统域 (bits 55-48)
-         * @param subsys 子系统 ID (bits 47-32)
+         * @param subsystem 子系统 ID (bits 47-32)
          * @param module 模块 ID (bits 31-16)
          * @param number 错误编号 (bits 15-0)
          *
@@ -95,10 +107,10 @@ namespace error_system::core {
          * error_code_t code(error_level_t::error, system_domain_t::database, 1, 2, 0x0010);
          */
         constexpr error_code_t(error_level_t level, domain::system_domain_t system,
-                               uint16_t subsys, uint16_t module, uint16_t number) noexcept
+                               uint16_t subsystem, uint16_t module, uint16_t number) noexcept
             : code_((static_cast<code_t>(level) << LEVEL_SHIFT)
                     | (static_cast<code_t>(system) << SYSTEM_SHIFT)
-                    | (static_cast<code_t>(subsys) << SUBSYS_SHIFT)
+                    | (static_cast<code_t>(subsystem) << SUBSYS_SHIFT)
                     | (static_cast<code_t>(module) << MODULE_SHIFT)
                     | (static_cast<code_t>(number) << NUMBER_SHIFT)) {}
 
@@ -106,31 +118,31 @@ namespace error_system::core {
          * @brief 获取原始错误码
          * @return code_t 64位原始错误码值
          */
-        constexpr code_t get_code() const noexcept { return code_; }
+        [[nodiscard]] constexpr code_t get_code() const noexcept { return code_; }
 
         /**
          * @brief 判断错误码是否表示错误
          * @return bool sign=0（false）时为错误，sign=1（true）时为成功
          */
-        constexpr bool is_error_code() const noexcept { return get_sign() == 0; }
+        [[nodiscard]] constexpr bool is_error_code() const noexcept { return get_sign() == 0; }
 
         /**
          * @brief 判断错误码是否表示成功
          * @return bool sign=1（true）时为成功
          */
-        constexpr bool is_success_code() const noexcept { return get_sign() == 1; }
+        [[nodiscard]] constexpr bool is_success_code() const noexcept { return get_sign() == 1; }
 
         /**
          * @brief 获取符号位
          * @return uint8_t 符号位 (bit 63)，0 = 错误(false)，1 = 成功(true)
          */
-        constexpr uint8_t get_sign() const noexcept { return static_cast<uint8_t>((code_ >> SIGN_SHIFT) & SIGN_MASK); }
+        [[nodiscard]] constexpr uint8_t get_sign() const noexcept { return static_cast<uint8_t>((code_ >> SIGN_SHIFT) & SIGN_MASK); }
 
         /**
          * @brief 获取预留位
          * @return uint8_t 预留位 (bits 62-60)
          */
-        constexpr uint8_t get_reserved() const noexcept {
+        [[nodiscard]] constexpr uint8_t get_reserved() const noexcept {
             return static_cast<uint8_t>((code_ >> RESERVED_SHIFT) & RESERVED_MASK);
         }
 
@@ -140,8 +152,8 @@ namespace error_system::core {
          * @param sign 符号位值 (0 = 错误，1 = 成功)
          */
         constexpr void set_sign(uint8_t sign) noexcept {
-            const code_t v = (sign <= 1) ? static_cast<code_t>(sign) : 0ULL;
-            code_ = (code_ & ~(SIGN_MASK << SIGN_SHIFT)) | (v << SIGN_SHIFT);
+            const code_t sign_value = (sign <= 1) ? static_cast<code_t>(sign) : 0ULL;
+            code_ = (code_ & ~(SIGN_MASK << SIGN_SHIFT)) | (sign_value << SIGN_SHIFT);
         }
 
         /**
@@ -150,8 +162,48 @@ namespace error_system::core {
          * @param reserved 预留位值 (0-7)
          */
         constexpr void set_reserved(uint8_t reserved) noexcept {
-            const code_t v = (reserved <= 7) ? static_cast<code_t>(reserved) : 0ULL;
-            code_ = (code_ & ~(RESERVED_MASK << RESERVED_SHIFT)) | (v << RESERVED_SHIFT);
+            const code_t reserved_value = (reserved <= 7) ? static_cast<code_t>(reserved) : 0ULL;
+            code_ = (code_ & ~(RESERVED_MASK << RESERVED_SHIFT)) | (reserved_value << RESERVED_SHIFT);
+        }
+
+        /**
+         * @brief 查询错误是否可重试
+         * @details 读取 Reserved.bit0。retryable=1 表示业务可对该错误执行重试逻辑
+         *          （如网络抖动、临时限流、leader 切换等）。
+         *          默认 0（不可重试），与历史行为兼容。
+         * @return bool 是否可重试
+         */
+        [[nodiscard]] constexpr bool is_retryable() const noexcept {
+            return ((code_ >> RESERVED_SHIFT) & RETRYABLE_MASK) != 0;
+        }
+
+        /**
+         * @brief 设置错误是否可重试
+         * @param retryable true=可重试，false=不可重试
+         */
+        constexpr void set_retryable(bool retryable) noexcept {
+            const code_t bit = retryable ? RETRYABLE_MASK : 0ULL;
+            code_ = (code_ & ~(RETRYABLE_MASK << RESERVED_SHIFT)) | (bit << RESERVED_SHIFT);
+        }
+
+        /**
+         * @brief 查询错误是否为瞬态
+         * @details 读取 Reserved.bit1。transient=1 表示该错误是瞬态的，
+         *          可能在短时间内自动恢复（与 retryable 通常同时为 true）。
+         *          默认 0（非瞬态）。
+         * @return bool 是否瞬态
+         */
+        [[nodiscard]] constexpr bool is_transient() const noexcept {
+            return ((code_ >> RESERVED_SHIFT) & TRANSIENT_MASK) != 0;
+        }
+
+        /**
+         * @brief 设置错误是否为瞬态
+         * @param transient true=瞬态，false=非瞬态
+         */
+        constexpr void set_transient(bool transient) noexcept {
+            const code_t bit = transient ? TRANSIENT_MASK : 0ULL;
+            code_ = (code_ & ~(TRANSIENT_MASK << RESERVED_SHIFT)) | (bit << RESERVED_SHIFT);
         }
 
         /**
@@ -159,7 +211,7 @@ namespace error_system::core {
          * @details 通过 from_int 校验，非法值（5-15）回退为 fatal，避免下游越界
          * @return error_level_t 错误等级 (bits 59-56)
          */
-        constexpr error_level_t get_level() const noexcept {
+        [[nodiscard]] constexpr error_level_t get_level() const noexcept {
             return from_int(static_cast<uint8_t>((code_ >> LEVEL_SHIFT) & LEVEL_MASK));
         }
 
@@ -168,7 +220,7 @@ namespace error_system::core {
          * @details 通过 from_int 校验，非法值回退为 none，避免下游越界
          * @return domain::system_domain_t 系统域 (bits 55-48)
          */
-        constexpr domain::system_domain_t get_system() const noexcept {
+        [[nodiscard]] constexpr domain::system_domain_t get_system() const noexcept {
             return domain::from_int(static_cast<uint8_t>((code_ >> SYSTEM_SHIFT) & SYSTEM_MASK));
         }
 
@@ -176,7 +228,7 @@ namespace error_system::core {
          * @brief 获取子系统值
          * @return uint16_t 子系统值 (bits 47-32)
          */
-        constexpr uint16_t get_subsys() const noexcept {
+        [[nodiscard]] constexpr uint16_t get_subsys() const noexcept {
             return static_cast<uint16_t>((code_ >> SUBSYS_SHIFT) & SUBSYS_MASK);
         }
 
@@ -184,7 +236,7 @@ namespace error_system::core {
          * @brief 获取模块值
          * @return uint16_t 模块值 (bits 31-16)
          */
-        constexpr uint16_t get_module() const noexcept {
+        [[nodiscard]] constexpr uint16_t get_module() const noexcept {
             return static_cast<uint16_t>((code_ >> MODULE_SHIFT) & MODULE_MASK);
         }
 
@@ -192,7 +244,7 @@ namespace error_system::core {
          * @brief 获取错误编号
          * @return uint16_t 错误编号 (bits 15-0)
          */
-        constexpr uint16_t get_number() const noexcept {
+        [[nodiscard]] constexpr uint16_t get_number() const noexcept {
             return static_cast<uint16_t>((code_ >> NUMBER_SHIFT) & NUMBER_MASK);
         }
 
@@ -201,14 +253,14 @@ namespace error_system::core {
          * @details 高8位(Sign+Reserved+Level)和低16位(Number)置零，保留系统域(8位)、子系统(16位)和模块(16位)
          * @return uint64_t 模块的聚合隔离 ID
          */
-        constexpr module_group_id_t get_module_group_id() const noexcept { return code_ & 0x00FFFFFFFFFF0000ULL; }
+        [[nodiscard]] constexpr module_group_id_t get_module_group_id() const noexcept { return code_ & 0x00FFFFFFFFFF0000ULL; }
 
         /**
          * @brief 获取清除符号位和预留位后的错误码
          * @details 返回符号位(bit63)和预留位(bits62-60)被置0后的错误码值，用于注册和查询时统一忽略这些差异
          * @return code_t 清除符号位和预留位后的64位错误码值
          */
-        constexpr code_t get_identity_code() const noexcept {
+        [[nodiscard]] constexpr code_t get_identity_code() const noexcept {
             return code_ & ~((SIGN_MASK << SIGN_SHIFT) | (RESERVED_MASK << RESERVED_SHIFT));
         }
 
@@ -224,21 +276,21 @@ namespace error_system::core {
          * @param other 另一个错误码
          * @return bool 相等返回 true
          */
-        constexpr bool operator==(const error_code_t& other) const noexcept { return code_ == other.code_; }
+        [[nodiscard]] constexpr bool operator==(const error_code_t& other) const noexcept { return code_ == other.code_; }
 
         /**
          * @brief 不等比较运算符
          * @param other 另一个错误码
          * @return bool 不等返回 true
          */
-        constexpr bool operator!=(const error_code_t& other) const noexcept { return code_ != other.code_; }
+        [[nodiscard]] constexpr bool operator!=(const error_code_t& other) const noexcept { return code_ != other.code_; }
 
         /**
          * @brief 小于比较运算符
          * @param other 另一个错误码
          * @return bool 小于返回 true
          */
-        constexpr bool operator<(const error_code_t& other) const noexcept { return code_ < other.code_; }
+        [[nodiscard]] constexpr bool operator<(const error_code_t& other) const noexcept { return code_ < other.code_; }
     };
 
 }  // namespace error_system::core

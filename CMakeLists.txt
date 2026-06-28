@@ -95,9 +95,16 @@ set(SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/duplicate_policy.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context_initializer.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context_serializer.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context_serializer_text.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context_serializer_json.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_context_serializer_binary.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/error_registry.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/domain/subsystem_module_registry.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/i18n/i18n.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/i18n/subsystem_module_catalog.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/mapping/grpc_status.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/mapping/http_status.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/migration/error_migration.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/error_dedup_sampler.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/error_router_plugin.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/plugin/plugin_registry.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/file_utils.cc

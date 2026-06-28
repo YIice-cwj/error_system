@@ -40,8 +40,8 @@ namespace error_system::core {
         error_code_t code;
         utils::source_location_t location;
 
-        located_code_t(error_code_t c, utils::source_location_t loc = utils::source_location_t::current()) noexcept
-            : code(c), location(loc) {}
+        located_code_t(error_code_t code, utils::source_location_t location = utils::source_location_t::current()) noexcept
+            : code(code), location(location) {}
     };
 
     /**
@@ -74,26 +74,6 @@ namespace error_system::core {
         friend class error_context_serializer_t;
         friend class error_context_initializer_t;
 
-        /**
-         * @brief 查找 payload 值指针（避免 optional 拷贝）
-         * @param key 键名
-         * @return const std::string* 值指针，未找到返回 nullptr
-         */
-        const std::string* find_payload_(const std::string& key) const noexcept {
-            for (size_t i = 0; i < payload_count_ && i < PAYLOAD_SSO_CAPACITY; ++i) {
-                if (payload_small_[i].first == key) {
-                    return &payload_small_[i].second;
-                }
-            }
-            if (payload_overflow_) {
-                auto it = payload_overflow_->find(key);
-                if (it != payload_overflow_->end()) {
-                    return &it->second;
-                }
-            }
-            return nullptr;
-        }
-
         error_code_t code_{};
         /**
          * @brief 缓存的元数据（值副本）
@@ -113,6 +93,43 @@ namespace error_system::core {
          * @brief 溢出 payload：超过 SSO 容量后的堆存储，惰性初始化
          */
         std::unique_ptr<std::unordered_map<std::string, std::string>> payload_overflow_;
+
+        /**
+         * @brief payload 写入错误标志
+         * @details with()/with_batch() 内部分配失败时置位，调用方可通过 has_payload_error() 查询，
+         *          避免 bad_alloc 被静默吞掉而无信号（O10 修复）。
+         */
+        bool payload_error_{false};
+
+        /**
+         * @brief 反序列化位置字符串存储
+         * @details 仅由 error_context_serializer_t::from_binary / from_json 填充，
+         *          用于持有从二进制/JSON 还原的文件名与函数名字符串，
+         *          使 file_name 与 source_location 中的 const char* 拥有稳定生命周期。
+         *          运行时构造的上下文不使用这两个字段，保持空字符串（SSO 零堆开销）。
+         */
+        std::string loc_file_storage_{};
+        std::string loc_func_storage_{};
+
+        /**
+         * @brief 查找 payload 值指针（避免 optional 拷贝）
+         * @param key 键名
+         * @return const std::string* 值指针，未找到返回 nullptr
+         */
+        const std::string* find_payload_(const std::string& key) const noexcept {
+            for (size_t i = 0; i < payload_count_ && i < PAYLOAD_SSO_CAPACITY; ++i) {
+                if (payload_small_[i].first == key) {
+                    return &payload_small_[i].second;
+                }
+            }
+            if (payload_overflow_) {
+                auto it = payload_overflow_->find(key);
+                if (it != payload_overflow_->end()) {
+                    return &it->second;
+                }
+            }
+            return nullptr;
+        }
 
         /**
          * @brief 插入或更新 payload 字段（核心逻辑）
@@ -158,6 +175,7 @@ namespace error_system::core {
                 payload_count_ = 0;
             } catch (...) {
                 std::fprintf(stderr, "[error_context] insert_or_update_payload_: std::bad_alloc\n");
+                payload_error_ = true;
             }
             return *this;
         }
@@ -186,51 +204,29 @@ namespace error_system::core {
          *          POD 字段在初始化列表完成，string/容器拷贝放入 try 块，
          *          避免 bad_alloc 突破 noexcept 触发 terminate（规范 14）。
          *          分配失败时对象处于部分构造状态，但调用方仍可安全析构。
+         * @note 实现见 error_context.cc
          */
-        error_context_t(const error_context_t& other) noexcept
-            : code_(other.code_),
-            payload_count_(other.payload_count_),
-            source_location(other.source_location), file_name(other.file_name) {
-            try {
-                metadata_ = other.metadata_;
-                message = other.message;
-                for (size_t i = 0; i < payload_count_ && i < PAYLOAD_SSO_CAPACITY; ++i) {
-                    payload_small_[i] = other.payload_small_[i];
-                }
-                if (other.payload_overflow_) {
-                    payload_overflow_ = std::make_unique<std::unordered_map<std::string, std::string>>(
-                        *other.payload_overflow_);
-                }
-                if (other.cause) {
-                    cause = other.cause;
-                }
-                if constexpr (error_system::config::feature_flags_t::STACKTRACE_ENABLED) {
-                    stack_frames = other.stack_frames;
-                }
-            } catch (...) {
-                std::fprintf(stderr, "[error_context] copy constructor: std::bad_alloc\n");
-            }
-        }
+        error_context_t(const error_context_t& other) noexcept;
+
         error_context_t& operator=(const error_context_t&) = delete;
-        error_context_t& operator=(error_context_t&&) = delete;
+
+        /**
+         * @brief 移动赋值运算符
+         * @details 提供移动赋值以允许复用变量（此前为 = delete 导致必须每次声明新变量）。
+         *          自赋值安全：先释放自身溢出存储与 cause，再从源对象移动。
+         * @param other 源对象（移动后处于有效但未指定状态）
+         * @return error_context_t& 自身引用
+         * @note 实现见 error_context.cc
+         */
+        error_context_t& operator=(error_context_t&& other) noexcept;
 
         /**
          * @brief 移动构造函数
          * @details 显式清零源对象 payload_count_，避免移动后源对象状态不一致
+         * @note 实现见 error_context.cc
          */
-        error_context_t(error_context_t&& other) noexcept
-            : code_(other.code_),
-            metadata_(std::move(other.metadata_)),
-            payload_count_(other.payload_count_),
-            payload_small_(std::move(other.payload_small_)),
-            payload_overflow_(std::move(other.payload_overflow_)),
-            message(std::move(other.message)),
-            source_location(other.source_location), file_name(other.file_name),
-            cause(std::move(other.cause)),
-            stack_frames(std::move(other.stack_frames)) {
-            other.payload_count_ = 0;
-            other.file_name = nullptr;
-        }
+        error_context_t(error_context_t&& other) noexcept;
+
         ~error_context_t() noexcept = default;
 
         /**
@@ -240,7 +236,7 @@ namespace error_system::core {
          *          2. 通过 located_code_t 隐式转换捕获源位置（调用者真实位置）
          *          3. 根据全局配置校验错误码、抓取堆栈、通知插件
          *          若错误码 sign=1（成功），则跳过步骤 3
-         * @param lc 携带源位置的错误码（error_code_t 可隐式转换）
+         * @param located_code 携带源位置的错误码（error_code_t 可隐式转换）
          * @param message_format 错误信息格式化字符串（支持 {} 占位符）
          * @param args 格式化参数列表
          *
@@ -252,11 +248,11 @@ namespace error_system::core {
          * error_context_t context(ERR_TIMEOUT, "请求超时: {}ms, 重试: {}次", 3000, 2);
          */
         template <typename... Args>
-        error_context_t(located_code_t lc, std::string message_format, Args&&... args) noexcept
-            : code_(lc.code),
+        error_context_t(located_code_t located_code, std::string message_format, Args&&... args) noexcept
+            : code_(located_code.code),
             message(utils::string_format_t::format(std::move(message_format), std::forward<Args>(args)...)) {
             try {
-                auto info = error_registry_t::instance().get_info(lc.code);
+                auto info = error_registry_t::instance().get_info_cached(located_code.code);
                 if (info) {
                     metadata_ = std::move(*info);
                 }
@@ -264,7 +260,7 @@ namespace error_system::core {
                 std::fprintf(stderr, "[error_context] constructor: metadata copy failed\n");
             }
             if constexpr (error_system::config::feature_flags_t::LOCATION_ENABLED) {
-                source_location = lc.location;
+                source_location = located_code.location;
             }
             if (is_success()) {
                 return;
@@ -276,13 +272,13 @@ namespace error_system::core {
          * @brief 从标准异常创建错误上下文
          * @details 从 std::exception 或派生类创建错误上下文，提取错误消息
          * @param code 错误码
-         * @param ex 标准异常对象
+         * @param exception 标准异常对象
          * @param location 源位置（默认捕获调用者位置）
          * @return error_context_t 错误上下文
          */
-        static error_context_t from_exception(error_code_t code, const std::exception& ex,
+        static error_context_t from_exception(error_code_t code, const std::exception& exception,
                                               utils::source_location_t location = utils::source_location_t::current()) noexcept {
-            return error_context_t(located_code_t{code, location}, ex.what());
+            return error_context_t(located_code_t{code, location}, exception.what());
         }
 
         /**
@@ -308,14 +304,14 @@ namespace error_system::core {
          * @param underlying 底层错误上下文
          * @return error_context_t 包含因果链的新错误上下文
          */
-        error_context_t wrap(const error_context_t& underlying) const noexcept;
+        [[nodiscard]] error_context_t wrap(const error_context_t& underlying) const noexcept;
 
         /**
          * @brief 包装底层错误为当前错误的直接原因（移动语义版本）
          * @param underlying 底层错误上下文（将被移动）
          * @return error_context_t 包含因果链的新错误上下文
          */
-        error_context_t wrap(error_context_t&& underlying) const noexcept;
+        [[nodiscard]] error_context_t wrap(error_context_t&& underlying) const noexcept;
 
         /**
          * @brief 添加字符串类型负载字段
@@ -453,7 +449,7 @@ namespace error_system::core {
          * @brief 获取 payload 副本（SSO 安全）
          * @return std::vector<std::pair<std::string, std::string>> payload 键值对列表
          */
-        std::vector<std::pair<std::string, std::string>> get_payload() const noexcept;
+        [[nodiscard]] std::vector<std::pair<std::string, std::string>> get_payload() const noexcept;
 
         /**
          * @brief 根据键获取 payload 值
@@ -461,13 +457,13 @@ namespace error_system::core {
          * @param key 键名
          * @return std::optional<std::string> 值，若键不存在则返回 std::nullopt
          */
-        std::optional<std::string> get_payload_value(const std::string& key) const noexcept;
+        [[nodiscard]] std::optional<std::string> get_payload_value(const std::string& key) const noexcept;
 
         /**
          * @brief 获取 payload 项数
          * @return size_t payload 项数
          */
-        size_t payload_size() const noexcept {
+        [[nodiscard]] size_t payload_size() const noexcept {
             return payload_count_ + (payload_overflow_ ? payload_overflow_->size() : 0);
         }
 
@@ -475,7 +471,35 @@ namespace error_system::core {
          * @brief 判断 payload 是否为空
          * @return bool payload 为空时返回 true
          */
-        bool is_payload_empty() const noexcept { return payload_count_ == 0 && !payload_overflow_; }
+        [[nodiscard]] bool is_payload_empty() const noexcept { return payload_count_ == 0 && !payload_overflow_; }
+
+        /**
+         * @brief 查询 payload 写入是否发生过分配失败
+         * @details with()/with_batch() 内部 bad_alloc 时置位，置位后不会自动清除。
+         *          调用方可在关键路径后查询本标志以决定降级策略。
+         * @return bool 是否发生过 payload 写入错误
+         */
+        [[nodiscard]] bool has_payload_error() const noexcept { return payload_error_; }
+
+        /**
+         * @brief 仅按错误码比较（忽略 message/payload/cause/stack）
+         * @details 适用于错误归类、去重等场景，O(1) 复杂度
+         * @param other 另一个错误上下文
+         * @return bool 错误码是否相等
+         */
+        [[nodiscard]] bool equals_by_code(const error_context_t& other) const noexcept {
+            return code_.get_code() == other.code_.get_code();
+        }
+
+        /**
+         * @brief 严格相等比较（含 cause 链与 stack_frames 深比较）
+         * @details operator== 仅比较 code/message/payload；本方法额外比较 cause 链与堆栈，
+         *          适用于完整状态比对（如测试断言、缓存键）。
+         * @param other 另一个错误上下文
+         * @return bool 是否严格相等
+         * @note 实现见 error_context.cc
+         */
+        [[nodiscard]] bool equals_strict(const error_context_t& other) const noexcept;
 
         /**
          * @brief 遍历所有 payload 项
@@ -496,7 +520,11 @@ namespace error_system::core {
 
         /**
          * @brief 获取 C 风格错误描述字符串
-         * @return const char* 错误消息的 C 字符串，生命周期与 error_context_t 对象绑定
+         * @details 返回内部 message 的 c_str()，遵循 std::string::c_str() 语义：
+         *          指针有效期限为对象存活期间且 message 未被修改。
+         *          若需跨对象生命期持有错误描述（如抛出异常），请使用 error_exception_t，
+         *          其内部缓存完整描述字符串，保证 what() 在异常传播期间稳定。
+         * @return const char* 错误消息的 C 字符串
          */
         const char* what() const noexcept { return message.c_str(); }
     };

@@ -32,6 +32,12 @@
  */
 namespace error_system::utils {
 
+    /**
+     * @brief 堆栈跟踪工具类
+     * @details 提供当前线程函数调用栈的抓取能力，返回每一层调用栈的可读字符串。
+     *          类不可实例化，所有方法均为静态。跨平台支持 POSIX（backtrace +
+     *          cxxabi）与 Windows（StackWalk64）。
+     */
     class stack_trace_utils_t {
     public:
         stack_trace_utils_t() = delete;
@@ -47,7 +53,7 @@ namespace error_system::utils {
          * @param max_frames 最大抓取深度
          * @return std::vector<std::string> 每一层调用栈的可读字符串
          */
-        static std::vector<std::string> generate(int skip_frames = 1, int max_frames = 16) noexcept;
+        [[nodiscard]] static std::vector<std::string> generate(int skip_frames = 1, int max_frames = 16) noexcept;
     };
 
 }  // namespace error_system::utils

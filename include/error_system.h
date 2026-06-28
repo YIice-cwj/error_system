@@ -32,6 +32,18 @@
 // ─── Domain ───────────────────────────────────────────────────────────────────
 #include "error_system/domain/system_domain.h"
 
+// ─── i18n ──────────────────────────────────────────────────────────────────────
+#include "error_system/i18n/i18n.h"
+#include "error_system/i18n/locale.h"
+
+// ─── Mapping ───────────────────────────────────────────────────────────────────
+#include "error_system/mapping/grpc_status.h"
+#include "error_system/mapping/http_status.h"
+#include "error_system/mapping/status_mapper.h"
+
+// ─── Migration ──────────────────────────────────────────────────────────────────
+#include "error_system/migration/error_migration.h"
+
 // ─── Plugin ─────────────────────────────────────────────────────────────────────
 #include "error_system/plugin/async_notification_channel.h"
 #include "error_system/plugin/error_router_plugin.h"

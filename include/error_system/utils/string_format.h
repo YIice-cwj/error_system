@@ -220,12 +220,12 @@ namespace error_system::utils {
          * @endcode
          */
         template <typename... Args>
-        static inline std::string format(std::string_view format_str, Args&&... args) noexcept {
+        [[nodiscard]] static inline std::string format(std::string_view format_str, Args&&... args) noexcept {
             std::string result{};
 
             size_t estimated_size = format_str.size();
-            auto add_size = [&estimated_size](const auto& arg) {
-                using arg_t = std::decay_t<decltype(arg)>;
+            auto add_size = [&estimated_size](const auto& argument) {
+                using arg_t = std::decay_t<decltype(argument)>;
                 if constexpr (std::is_integral_v<arg_t>) {
                     estimated_size += 24;
                 } else if constexpr (std::is_floating_point_v<arg_t>) {
@@ -233,7 +233,7 @@ namespace error_system::utils {
                 } else if constexpr (std::is_pointer_v<arg_t> || std::is_same_v<arg_t, std::nullptr_t>) {
                     estimated_size += 24;
                 } else {
-                    estimated_size += std::string_view{arg}.size();
+                    estimated_size += std::string_view{argument}.size();
                 }
             };
             (add_size(args), ...);

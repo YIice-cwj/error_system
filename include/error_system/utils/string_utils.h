@@ -45,7 +45,7 @@ namespace error_system::utils {
          * @param string 输入字符串
          * @return uint64_t 字符串的哈希值
          */
-        static constexpr uint64_t hash(std::string_view string) noexcept {
+        [[nodiscard]] static constexpr uint64_t hash(std::string_view string) noexcept {
             constexpr uint64_t FNV_PRIME = 1099511628211ULL;
             constexpr uint64_t FNV_OFFSET_BASIS = 14695981039346656037ULL;
             uint64_t hash_value = FNV_OFFSET_BASIS;
@@ -65,7 +65,7 @@ namespace error_system::utils {
          * @param max_length 最大哈希长度
          * @return uint64_t 字符串的哈希值
          */
-        static constexpr uint64_t hash_limit(std::string_view string, size_t max_length = 128) noexcept {
+        [[nodiscard]] static constexpr uint64_t hash_limit(std::string_view string, size_t max_length = 128) noexcept {
             if (string.size() > max_length) {
                 return hash(string.substr(0, max_length));
             }
@@ -78,7 +78,7 @@ namespace error_system::utils {
          * @param prefix 前缀
          * @return bool 是否以指定前缀开头
          */
-        static constexpr bool starts_with(std::string_view string, std::string_view prefix) noexcept {
+        [[nodiscard]] static constexpr bool starts_with(std::string_view string, std::string_view prefix) noexcept {
             return string.size() >= prefix.size() && string.compare(0, prefix.size(), prefix) == 0;
         }
 
@@ -88,7 +88,7 @@ namespace error_system::utils {
          * @param suffix 后缀
          * @return bool 是否以指定后缀结尾
          */
-        static constexpr bool ends_with(std::string_view string, std::string_view suffix) noexcept {
+        [[nodiscard]] static constexpr bool ends_with(std::string_view string, std::string_view suffix) noexcept {
             return string.size() >= suffix.size() &&
                    string.compare(string.size() - suffix.size(), suffix.size(), suffix) == 0;
         }
@@ -125,7 +125,7 @@ namespace error_system::utils {
          * @param delimiter 分隔符
          * @return std::vector<std::string_view> 分割后的字符串视图向量
          */
-        static std::vector<std::string_view> split(std::string_view string, std::string_view delimiter) noexcept;
+        [[nodiscard]] static std::vector<std::string_view> split(std::string_view string, std::string_view delimiter) noexcept;
 
         /**
          * @brief 合并字符串视图向量
@@ -133,28 +133,28 @@ namespace error_system::utils {
          * @param delimiter 分隔符
          * @return std::string 合并后的字符串
          */
-        static std::string join(const std::vector<std::string_view>& tokens, std::string_view delimiter) noexcept;
+        [[nodiscard]] static std::string join(const std::vector<std::string_view>& tokens, std::string_view delimiter) noexcept;
 
         /**
          * @brief 移除字符串视图首尾的空白符
          * @param string 输入字符串视图
          * @return std::string_view 移除空白符后的字符串视图
          */
-        static std::string_view trim(std::string_view string) noexcept;
+        [[nodiscard]] static std::string_view trim(std::string_view string) noexcept;
 
         /**
          * @brief 将字符串视图转换为小写
          * @param string 输入字符串视图
          * @return std::string 转换后的字符串
          */
-        static std::string to_lower(std::string_view string) noexcept;
+        [[nodiscard]] static std::string to_lower(std::string_view string) noexcept;
 
         /**
          * @brief 将字符串视图转换为大写
          * @param string 输入字符串视图
          * @return std::string 转换后的字符串
          */
-        static std::string to_upper(std::string_view string) noexcept;
+        [[nodiscard]] static std::string to_upper(std::string_view string) noexcept;
     };
 
 }  // namespace error_system::utils

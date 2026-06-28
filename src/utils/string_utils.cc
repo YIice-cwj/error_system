@@ -1,5 +1,15 @@
 #include "error_system/utils/string_utils.h"
 
+/**
+ * @file string_utils.cc
+ * @brief 字符串工具实现
+ * @details 提供字符串替换、分割、合并、首尾空白去除、大小写转换等基础字符串操作能力。
+ * @author yiice
+ * @version 2.3.0
+ * @date 2026-06-28
+ * @copyright Copyright (c) 2026
+ */
+
 #include <algorithm>
 #include <cctype>
 
@@ -132,8 +142,8 @@ namespace error_system::utils {
             std::fprintf(stderr, "[string_utils] to_lower: resize failed\n");
             return {};
         }
-        std::transform(string.begin(), string.end(), result.begin(), [](unsigned char c) {
-            return static_cast<char>(std::tolower(c));
+        std::transform(string.begin(), string.end(), result.begin(), [](unsigned char character) {
+            return static_cast<char>(std::tolower(character));
         });
         return result;
     }
@@ -153,8 +163,8 @@ namespace error_system::utils {
             return {};
         }
 
-        std::transform(string.begin(), string.end(), result.begin(), [](unsigned char c) {
-            return static_cast<char>(std::toupper(c));
+        std::transform(string.begin(), string.end(), result.begin(), [](unsigned char character) {
+            return static_cast<char>(std::toupper(character));
         });
         return result;
     }

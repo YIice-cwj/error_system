@@ -42,7 +42,7 @@ namespace error_system::core {
      * @param level 错误等级
      * @return uint8_t 错误等级整数
      */
-    constexpr uint8_t to_int(error_level_t level) noexcept {
+    [[nodiscard]] constexpr uint8_t to_int(error_level_t level) noexcept {
         return static_cast<uint8_t>(std::underlying_type_t<error_level_t>(level));
     }
 
@@ -52,7 +52,7 @@ namespace error_system::core {
      * @param level 错误等级整数
      * @return bool 错误等级整数是否有效
      */
-    constexpr bool is_valid(uint8_t level) noexcept {
+    [[nodiscard]] constexpr bool is_valid(uint8_t level) noexcept {
         return level <= to_int(error_level_t::fatal);
     }
 
@@ -62,7 +62,7 @@ namespace error_system::core {
      * @param level 错误等级整数
      * @return error_level_t 错误等级
      */
-    constexpr error_level_t from_int(uint8_t level) noexcept {
+    [[nodiscard]] constexpr error_level_t from_int(uint8_t level) noexcept {
         if (!is_valid(level)) {
             return error_level_t::fatal;
         }
@@ -75,7 +75,7 @@ namespace error_system::core {
      * @param level 错误等级字符串
      * @return error_level_t 错误等级
      */
-    constexpr error_level_t from_string(const char* string) noexcept {
+    [[nodiscard]] constexpr error_level_t from_string(const char* string) noexcept {
         switch (utils::string_utils_t::hash(string)) {
             case utils::string_utils_t::hash("debug"):
                 return error_level_t::debug;
@@ -99,7 +99,7 @@ namespace error_system::core {
      * @param level 错误等级
      * @return const char* 错误等级字符串
      */
-    constexpr const char* to_string(error_level_t level) noexcept {
+    [[nodiscard]] constexpr const char* to_string(error_level_t level) noexcept {
         const uint8_t idx = to_int(level);
         if (!is_valid(idx)) {
             return "unknown";
@@ -113,7 +113,7 @@ namespace error_system::core {
      * @param level 错误等级整数
      * @return error_level_t 错误等级整数的下一个错误等级
      */
-    constexpr error_level_t next_level(error_level_t level) noexcept {
+    [[nodiscard]] constexpr error_level_t next_level(error_level_t level) noexcept {
         return from_int(to_int(level) + 1);
     }
 
@@ -123,7 +123,7 @@ namespace error_system::core {
      * @param level 错误等级整数
      * @return error_level_t 错误等级整数的上一个错误等级
      */
-    constexpr error_level_t prev_level(error_level_t level) noexcept {
+    [[nodiscard]] constexpr error_level_t prev_level(error_level_t level) noexcept {
         return from_int(to_int(level) - 1);
     }
 
@@ -134,7 +134,7 @@ namespace error_system::core {
      * @param min_level 最小错误等级整数
      * @return bool 错误等级整数是否大于等于最小错误等级
      */
-    constexpr bool should_log(error_level_t current, error_level_t min_level) noexcept {
+    [[nodiscard]] constexpr bool should_log(error_level_t current, error_level_t min_level) noexcept {
         return to_int(current) >= to_int(min_level);
     }
 
