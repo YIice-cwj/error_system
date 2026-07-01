@@ -47,7 +47,7 @@ namespace error_system::core {
         EXPECT_EQ(code.get_level(), error_level_t::fatal);
     }
 
-    TEST_F(error_context_test_t, error_code_has_sign_zero) {
+    TEST(error_builder_test, error_code_has_sign_zero) {
         error_code_t code(error_level_t::debug, domain::system_domain_t::none, subsystem_id_t{0}, module_id_t{0}, error_number_t{0});
         EXPECT_EQ(code.get_sign(), 0);
     }
