@@ -9,7 +9,7 @@ namespace error_system::core {
      * @param raw_code 错误码原始值
      * @return bool 是否继续注册流程（skip 返回 false）
      */
-    bool duplicate_policy_handler_t::handle_duplicate_skip_(code_t /*raw_code*/) const noexcept {
+    bool duplicate_policy_handler_t::handle_duplicate_skip_([[maybe_unused]] code_t raw_code) const noexcept {
         return false;
     }
 
@@ -18,7 +18,7 @@ namespace error_system::core {
      * @param raw_code 错误码原始值
      * @return bool 是否继续注册流程（overwrite 返回 true，调用方负责擦除旧条目）
      */
-    bool duplicate_policy_handler_t::handle_duplicate_overwrite_(code_t /*raw_code*/) const noexcept {
+    bool duplicate_policy_handler_t::handle_duplicate_overwrite_([[maybe_unused]] code_t raw_code) const noexcept {
         return true;
     }
 
@@ -39,8 +39,8 @@ namespace error_system::core {
         if (callback_copy) {
             try {
                 callback_copy(raw_code, existing);
-            } catch (...) {
-                std::fprintf(stderr, "[duplicate_policy] warn callback threw, ignored\n");
+            } catch (const std::exception& e) {
+                std::fprintf(stderr, "[duplicate_policy] warn callback threw, ignored: %s\n", e.what());
             }
         }
         return false;

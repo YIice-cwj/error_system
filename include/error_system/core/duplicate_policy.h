@@ -111,7 +111,7 @@ namespace error_system::core {
          * @note 当 existing 为 nullptr 时，无论策略如何均返回 true（无重复可直接注册）。
          *       warn 策略下若 existing 非空，会触发警告回调（回调在释放锁后调用）。
          */
-        bool apply_duplicate_policy(code_t raw_code, const error_metadata_t* existing) noexcept;
+        [[nodiscard]] bool apply_duplicate_policy(code_t raw_code, const error_metadata_t* existing) noexcept;
 
         /**
          * @brief 设置重复处理策略

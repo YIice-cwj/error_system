@@ -3,6 +3,8 @@
 
 #include "error_system/config/error_config.h"
 #include "error_system/core/error_registry.h"
+#include "error_system/i18n/i_subsystem_module_resolver.h"
+#include "error_system/i18n/subsystem_module_catalog.h"
 
 using error_system::config::feature_flags_t;
 using error_system::config::formatter_config_t;
@@ -21,6 +23,54 @@ using error_system::core::detail::append_decimal;
  * @copyright Copyright (c) 2026
  */
 namespace error_system::core {
+
+    const error_system::i18n::i_subsystem_module_resolver_t*
+        error_context_serializer_t::subsystem_module_resolver_{nullptr};
+
+    void error_context_serializer_t::set_subsystem_module_resolver(
+        const error_system::i18n::i_subsystem_module_resolver_t* resolver) noexcept {
+        subsystem_module_resolver_ = resolver;
+    }
+
+    const error_system::i18n::i_subsystem_module_resolver_t*
+    error_context_serializer_t::get_subsystem_module_resolver_() noexcept {
+        if (subsystem_module_resolver_ != nullptr) {
+            return subsystem_module_resolver_;
+        }
+        static const auto* default_resolver = error_system::i18n::get_default_subsystem_module_resolver();
+        return default_resolver;
+    }
+
+    std::string error_context_serializer_t::build_subsystem_module_string_(const error_context_t& context) noexcept {
+        std::string subsys_module_str;
+        const auto code = context.get_code();
+        const bool use_text = i18n_config_t::is_i18n_enabled();
+        if (use_text) {
+            const auto* resolver = get_subsystem_module_resolver_();
+            const auto output_locale = i18n_config_t::resolve_output_locale();
+            const auto default_locale = i18n_config_t::get_default_locale();
+            const auto sm_info = resolver->resolve_subsystem_module(
+                output_locale, default_locale, code.get_subsys(), code.get_module());
+            try {
+                subsys_module_str.reserve(sm_info.subsystem_name.size() + sm_info.module_name.size() + 3);
+                subsys_module_str.append(sm_info.subsystem_name).append(" / ").append(sm_info.module_name);
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[error_context_serializer] build_subsystem_module_string: text mode failed\n");
+            }
+        } else {
+            try {
+                subsys_module_str.reserve(32);
+                subsys_module_str.append("SubSys: ");
+                append_decimal(subsys_module_str, code.get_subsys());
+                subsys_module_str.append(", Module: ");
+                append_decimal(subsys_module_str, code.get_module());
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[error_context_serializer] build_subsystem_module_string: numeric mode failed\n");
+            }
+        }
+        return subsys_module_str;
+    }
+
     namespace {
 
         /**
@@ -114,44 +164,6 @@ namespace error_system::core {
             }
         }
 
-        /**
-         * @brief 构建子系统/模块名称字符串
-         * @details i18n 启用且文本输出模式开启时，从 i18n_config_t 解析输出 locale，
-         *          查询本地化子系统/模块名称；
-         *          否则回退为 "SubSys: X, Module: Y" 数字形式。
-         *          分配失败时返回空字符串并记录日志。
-         */
-        std::string build_subsystem_module_string(const error_context_t& context) noexcept {
-            std::string subsys_module_str;
-            const auto code = context.get_code();
-            const bool use_text = feature_flags_t::is_text_output_enabled()
-                                  && i18n_config_t::is_i18n_enabled();
-            if (use_text) {
-                auto& registry = error_registry_t::instance();
-                const auto output_locale = i18n_config_t::resolve_output_locale();
-                const auto default_locale = i18n_config_t::get_default_locale();
-                const auto sm_info = registry.get_subsystem_module_info(
-                    output_locale, default_locale, code.get_subsys(), code.get_module());
-                try {
-                    subsys_module_str.reserve(sm_info.subsystem_name.size() + sm_info.module_name.size() + 3);
-                    subsys_module_str.append(sm_info.subsystem_name).append(" / ").append(sm_info.module_name);
-                } catch (...) {
-                    std::fprintf(stderr, "[error_context_serializer] build_subsystem_module_string: text mode failed\n");
-                }
-            } else {
-                try {
-                    subsys_module_str.reserve(32);
-                    subsys_module_str.append("SubSys: ");
-                    append_decimal(subsys_module_str, code.get_subsys());
-                    subsys_module_str.append(", Module: ");
-                    append_decimal(subsys_module_str, code.get_module());
-                } catch (...) {
-                    std::fprintf(stderr, "[error_context_serializer] build_subsystem_module_string: numeric mode failed\n");
-                }
-            }
-            return subsys_module_str;
-        }
-
     }  // namespace
 
     std::string error_context_serializer_t::to_string(const error_context_t& context) noexcept {
@@ -162,16 +174,15 @@ namespace error_system::core {
         if (auto formatter = formatter_config_t::get_custom_formatter()) {
             try {
                 return formatter(context);
-            } catch (...) {
-                std::fprintf(stderr, "[error_context_serializer] to_string: custom formatter threw\n");
+            } catch (const std::exception& e) {
+                std::fprintf(stderr, "[error_context_serializer] to_string: custom formatter threw: %s\n", e.what());
             }
         }
 
-        constexpr size_t MAX_CAUSE_DEPTH = 32;
         const bool has_metadata = !context.metadata_.name.empty();
         const std::string_view desc = has_metadata ? std::string_view{context.metadata_.description} : std::string_view{"未注册的未知错误"};
         const std::string_view name = has_metadata ? std::string_view{context.metadata_.name} : std::string_view{"UNKNOWN_ERR_CODE"};
-        const std::string subsys_module_str = build_subsystem_module_string(context);
+        const std::string subsys_module_str = build_subsystem_module_string_(context);
 
         std::string result;
         try {
@@ -189,7 +200,7 @@ namespace error_system::core {
             if (context.cause && depth < MAX_CAUSE_DEPTH) {
                 result.append("\n  ↳ Caused by: ").append(to_string_impl_(*context.cause, depth + 1));
             }
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_context_serializer] to_string: std::bad_alloc\n");
         }
         return result;

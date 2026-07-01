@@ -1,5 +1,6 @@
 #pragma once
 #include <cstddef>
+
 #include <string>
 #include <string_view>
 
@@ -21,27 +22,34 @@ namespace error_system::utils::detail {
     class json_lexer_t {
     public:
         /**
-         * @brief JSON词法分析器的token类型枚举
-         * @details
-         * 定义JSON词法分析器的token类型枚举，包括字符串、冒号、逗号、左大括号、右大括号、文件结束标识和无效字符或错误
-         */
-        enum class token_type_t {
-            string,       // 字符串 (键或值)
-            colon,        // 冒号 :
-            comma,        // 逗号 ,
-            left_brace,   // 左大括号 {
-            right_brace,  // 右大括号 }
-            eof,          // 文件结束标识
-            invalid       // 无效字符或错误
-        };
+     * @brief JSON词法分析器的token类型枚举
+     * @details
+     * 定义JSON词法分析器的token类型枚举，包括字符串、数字、关键字、
+     * 冒号、逗号、左右大括号、左右中括号、文件结束标识和无效字符或错误。
+     */
+    enum class token_type_t {
+        string,        // 字符串 (键或值)
+        number,        // 数字字面量
+        true_literal,  // true
+        false_literal, // false
+        null_literal,  // null
+        colon,         // 冒号 :
+        comma,         // 逗号 ,
+        left_brace,    // 左大括号 {
+        right_brace,   // 右大括号 }
+        left_bracket,  // 左中括号 [
+        right_bracket, // 右中括号 ]
+        eof,           // 文件结束标识
+        invalid        // 无效字符或错误
+    };
 
         /**
          * @brief JSON词法分析器的token结构体
          * @details 定义JSON词法分析器的token结构体，包含token类型和token值
          */
         struct token_t {
-            token_type_t type{token_type_t::eof};  // token类型
-            std::string value;  // 保存解析后的字符串内容
+            token_type_t type{token_type_t::eof};   ///< token 类型
+            std::string value;                      ///< 保存解析后的字符串内容
         };
 
     private:
@@ -59,6 +67,21 @@ namespace error_system::utils::detail {
          * @details 解析JSON字符串中的字符串token，直到遇到非字符串字符
          */
         token_t parse_string_() noexcept;
+
+        /**
+         * @brief 解析JSON数字字面量token
+         * @details 解析JSON数字字面量（RFC 8259 §6），包括可选负号、整数部分、
+         *          可选小数部分、可选指数部分。token 的 value 保存原始数字字符串。
+         */
+        token_t parse_number_() noexcept;
+
+        /**
+         * @brief 解析JSON关键字字面量token
+         * @details 解析 true/false/null 关键字，token 的 value 保存关键字字符串。
+         * @param keyword 期望的关键字字符串
+         * @param type 对应的关键字 token 类型
+         */
+        token_t parse_keyword_(std::string_view keyword, token_type_t type) noexcept;
 
     public:
         /**

@@ -23,8 +23,8 @@ namespace error_system::core {
      */
     class error_exception_t : public std::exception {
     private:
-        error_context_t context_;
-        std::string cached_message_;
+        error_context_t context_{};
+        std::string cached_message_{};
 
     public:
         /**

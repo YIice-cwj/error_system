@@ -34,7 +34,7 @@ namespace error_system::core {
      * @details 用于表示错误等级的字符串
      *          与错误等级分类一一对应，用于日志打印和错误处理
      */
-    constexpr const char* ERROR_LEVEL_STRING[] = {"debug", "info", "warn", "error", "fatal"};
+    inline constexpr const char* ERROR_LEVEL_STRING[] = {"debug", "info", "warn", "error", "fatal"};
 
     /**
      * @brief 错误等级整数

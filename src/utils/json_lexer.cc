@@ -12,6 +12,7 @@
  */
 
 #include <cstdint>
+#include <new>
 #include <optional>
 
 namespace error_system::utils::detail {
@@ -127,49 +128,105 @@ namespace error_system::utils::detail {
         std::string str{};
         try {
             str.reserve(32);
-        } catch (...) {
-            std::fprintf(stderr, "[json_lexer] parse_string_: reserve failed\n");
-        }
-        ++pos_;
-
-        while (pos_ < json_str_.size() && json_str_[pos_] != '"') {
-            if (json_str_[pos_] != '\\' || pos_ + 1 >= json_str_.size()) {
-                str += json_str_[pos_];
-                ++pos_;
-                continue;
-            }
             ++pos_;
-            switch (json_str_[pos_]) {
-                case 'n':  str += '\n'; break;
-                case 't':  str += '\t'; break;
-                case 'r':  str += '\r'; break;
-                case 'b':  str += '\b'; break;
-                case 'f':  str += '\f'; break;
-                case 'u': {
-                    if (pos_ + 4 >= json_str_.size()) {
-                        return {token_type_t::invalid, ""};
-                    }
-                    auto hex_opt = parse_hex4(json_str_, pos_);
-                    if (!hex_opt) {
-                        return {token_type_t::invalid, ""};
-                    }
-                    uint32_t codepoint = *hex_opt;
-                    try_merge_surrogate_pair(json_str_, pos_, codepoint);
-                    append_utf8(str, codepoint);
-                    break;
-                }
-                default:
+
+            while (pos_ < json_str_.size() && json_str_[pos_] != '"') {
+                if (json_str_[pos_] != '\\' || pos_ + 1 >= json_str_.size()) {
                     str += json_str_[pos_];
-                    break;
+                    ++pos_;
+                    continue;
+                }
+                ++pos_;
+                switch (json_str_[pos_]) {
+                    case '"':  str += '"';  break;
+                    case '\\': str += '\\'; break;
+                    case '/':  str += '/';  break;
+                    case 'n':  str += '\n'; break;
+                    case 't':  str += '\t'; break;
+                    case 'r':  str += '\r'; break;
+                    case 'b':  str += '\b'; break;
+                    case 'f':  str += '\f'; break;
+                    case 'u': {
+                        if (pos_ + 4 >= json_str_.size()) {
+                            return {token_type_t::invalid, ""};
+                        }
+                        auto hex_opt = parse_hex4(json_str_, pos_);
+                        if (!hex_opt) {
+                            return {token_type_t::invalid, ""};
+                        }
+                        uint32_t codepoint = *hex_opt;
+                        try_merge_surrogate_pair(json_str_, pos_, codepoint);
+                        append_utf8(str, codepoint);
+                        break;
+                    }
+                    default:
+                        return {token_type_t::invalid, ""};
+                }
+                ++pos_;
             }
-            ++pos_;
-        }
 
-        if (pos_ < json_str_.size() && json_str_[pos_] == '"') {
-            ++pos_;
-            return {token_type_t::string, str};
+            if (pos_ < json_str_.size() && json_str_[pos_] == '"') {
+                ++pos_;
+                return {token_type_t::string, str};
+            }
+            return {token_type_t::invalid, ""};
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[json_lexer] parse_string_: string append failed (bad_alloc)\n");
+            return {token_type_t::invalid, ""};
         }
-        return {token_type_t::invalid, ""};
+    }
+
+    /**
+     * @brief 解析JSON数字字面量token
+     * @details 解析JSON数字字面量（RFC 8259 §6），包括可选负号、整数部分、
+     *          可选小数部分、可选指数部分。token 的 value 保存原始数字字符串。
+     * @return token_t 数字token；若输入不符合JSON数字语法则返回 invalid
+     */
+    json_lexer_t::token_t json_lexer_t::parse_number_() noexcept {
+        const size_t start = pos_;
+        if (json_str_[pos_] == '-') {
+            ++pos_;
+        }
+        while (pos_ < json_str_.size() && json_str_[pos_] >= '0' && json_str_[pos_] <= '9') {
+            ++pos_;
+        }
+        if (pos_ < json_str_.size() && json_str_[pos_] == '.') {
+            ++pos_;
+            while (pos_ < json_str_.size() && json_str_[pos_] >= '0' && json_str_[pos_] <= '9') {
+                ++pos_;
+            }
+        }
+        if (pos_ < json_str_.size() && (json_str_[pos_] == 'e' || json_str_[pos_] == 'E')) {
+            ++pos_;
+            if (pos_ < json_str_.size() && (json_str_[pos_] == '+' || json_str_[pos_] == '-')) {
+                ++pos_;
+            }
+            while (pos_ < json_str_.size() && json_str_[pos_] >= '0' && json_str_[pos_] <= '9') {
+                ++pos_;
+            }
+        }
+        if (pos_ == start) {
+            return {token_type_t::invalid, {}};
+        }
+        return {token_type_t::number, std::string(json_str_.substr(start, pos_ - start))};
+    }
+
+    /**
+     * @brief 解析JSON关键字字面量token
+     * @details 按 keyword 长度匹配后续字符，完全一致时返回对应类型，否则返回 invalid。
+     * @param keyword 期望的关键字字符串
+     * @param type 对应的关键字 token 类型
+     * @return token_t 关键字token或 invalid
+     */
+    json_lexer_t::token_t json_lexer_t::parse_keyword_(std::string_view keyword, token_type_t type) noexcept {
+        if (pos_ + keyword.size() > json_str_.size()) {
+            return {token_type_t::invalid, {}};
+        }
+        if (json_str_.substr(pos_, keyword.size()) != keyword) {
+            return {token_type_t::invalid, {}};
+        }
+        pos_ += keyword.size();
+        return {type, std::string(keyword)};
     }
 
     /**
@@ -199,6 +256,14 @@ namespace error_system::utils::detail {
             ++pos_;
             return {token_type_t::right_brace, "}"};
         }
+        if (c == '[') {
+            ++pos_;
+            return {token_type_t::left_bracket, "["};
+        }
+        if (c == ']') {
+            ++pos_;
+            return {token_type_t::right_bracket, "]"};
+        }
         if (c == ':') {
             ++pos_;
             return {token_type_t::colon, ":"};
@@ -210,6 +275,20 @@ namespace error_system::utils::detail {
 
         if (c == '"') {
             return parse_string_();
+        }
+
+        if (c == 't') {
+            return parse_keyword_("true", token_type_t::true_literal);
+        }
+        if (c == 'f') {
+            return parse_keyword_("false", token_type_t::false_literal);
+        }
+        if (c == 'n') {
+            return parse_keyword_("null", token_type_t::null_literal);
+        }
+
+        if (c == '-' || (c >= '0' && c <= '9')) {
+            return parse_number_();
         }
 
         return {token_type_t::invalid, {}};

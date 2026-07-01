@@ -14,6 +14,14 @@
  * @date 2026-06-28
  * @copyright Copyright (c) 2026
  */
+namespace error_system::core {
+
+constexpr size_t MAX_PAYLOAD_ITEMS = 100000;   ///< 反序列化 payload 最大项数
+constexpr size_t MAX_STACK_FRAMES = 100000;    ///< 反序列化堆栈帧最大数量
+constexpr size_t MAX_CAUSE_DEPTH = 32;         ///< cause 链最大递归深度
+
+}  // namespace error_system::core
+
 namespace error_system::core::detail {
 
     /**
@@ -28,7 +36,7 @@ namespace error_system::core::detail {
         static_assert(std::is_integral_v<T>, "T must be an integral type");
         try {
             output.append(std::to_string(value));
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_context_serializer] append_decimal: std::bad_alloc\n");
         }
     }

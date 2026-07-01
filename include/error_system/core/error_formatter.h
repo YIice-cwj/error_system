@@ -25,7 +25,7 @@ namespace error_system::core {
 [[nodiscard]] inline std::ostream& operator<<(std::ostream& stream, const error_context_t& context) noexcept {
     try {
         return stream << error_context_serializer_t::to_string(context);
-    } catch (...) {
+    } catch (const std::exception&) {
         std::fprintf(stderr, "[error_formatter] operator<< threw exception\n");
         return stream;
     }

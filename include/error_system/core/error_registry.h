@@ -12,40 +12,30 @@
 
 #include "error_system/core/error_code.h"
 #include "error_system/core/error_level.h"
+#include "error_system/core/error_metadata.h"
 // IWYU pragma: begin_exports
 #include "error_system/core/duplicate_policy.h"
 #include "error_system/core/error_builder.h"
-#include "error_system/i18n/subsystem_module_catalog.h"
 // IWYU pragma: end_exports
 
 /**
  * @file error_registry.h
  * @brief 错误码注册器
  * @details 定义错误码注册器，用于注册和查找错误码。重复处理策略委托给 duplicate_policy_handler_t，
- *          子系统/模块名称映射委托给 i18n::subsystem_module_catalog_t，遵循单一职责原则。
+ *          遵循单一职责原则。子系统/模块名称映射请直接使用 i18n::subsystem_module_catalog_t。
  * @author yiice
- * @version 2.4.0
- * @date 2026-06-28
+ * @version 3.0.0
+ * @date 2026-06-29
  * @copyright Copyright (c) 2026
  */
 namespace error_system::core {
 
-    using error_system::i18n::subsystem_module_info_t;
-
-    /**
-     * @brief 错误码元数据信息 (数据负载)
-     */
-    struct error_metadata_t {
-        std::string name;
-        std::string description;
-        uint16_t module_id{0};
-        uint16_t error_number{0};
-        error_level_t level{error_level_t::info};
-    };
-
     /**
      * @brief 错误码注册器
-     * @details 用于注册和查找错误码
+     * @details 用于注册和查找错误码。错误码元数据定义见 error_metadata.h。
+     * @author yiice
+     * @version 3.0.1
+     * @date 2026-07-01
      */
     class error_registry_t {
     private:
@@ -78,12 +68,7 @@ namespace error_system::core {
         /**
          * @brief 重复处理策略处理器（自包含，自带互斥锁）
          */
-        duplicate_policy_handler_t duplicate_handler_;
-
-        /**
-         * @brief 子系统/模块名称多语言目录（自包含，自带互斥锁）
-         */
-        i18n::subsystem_module_catalog_t subsystem_module_registry_;
+        duplicate_policy_handler_t duplicate_handler_{};
 
         /**
          * @brief 单例初始化一次性标志（规范 22）
@@ -176,7 +161,7 @@ namespace error_system::core {
          * @return size_t 实际注册成功的错误码数量
          * @note 如果数组长度不一致，返回0且不执行任何注册
          */
-        size_t register_errors(const std::vector<error_code_t>& codes,
+        [[nodiscard]] size_t register_errors(const std::vector<error_code_t>& codes,
                                const std::vector<std::string_view>& names,
                                const std::vector<std::string_view>& descriptions) noexcept;
 
@@ -213,7 +198,7 @@ namespace error_system::core {
          * @return true 错误码已注册
          * @return false 错误码未注册
          */
-        bool is_registered(const error_code_t code) const noexcept;
+        [[nodiscard]] bool is_registered(const error_code_t code) const noexcept;
 
         /**
          * @brief 通过 64位错误码 获取详情（值副本，线程安全）
@@ -221,7 +206,7 @@ namespace error_system::core {
          * @param code 错误码
          * @return std::optional<error_metadata_t> 错误码元数据副本，若未注册则返回 nullopt
          */
-        std::optional<error_metadata_t> get_info(const error_code_t code) const noexcept;
+        [[nodiscard]] std::optional<error_metadata_t> get_info(const error_code_t code) const noexcept;
 
         /**
          * @brief 通过模块 ID 获取所有错误码（值副本，线程安全）
@@ -246,77 +231,7 @@ namespace error_system::core {
          * @param name 错误码名称
          * @return std::optional<error_code_t> 错误码，若未注册则返回空可选
          */
-        std::optional<error_code_t> find_by_name(const std::string_view name) const noexcept;
-
-        /**
-         * @brief 注册子系统/模块名称（默认 locale 为 zh_CN）
-         * @param subsystem_id 子系统 ID
-         * @param module_id 模块 ID
-         * @param subsystem_name 子系统名称
-         * @param module_name 模块名称
-         * @note 转发至 subsystem_module_registry_，默认注册为 zh_CN（向后兼容）
-         */
-        void register_subsystem_module(uint16_t subsystem_id,
-                                       uint16_t module_id,
-                                       const std::string_view subsystem_name,
-                                       const std::string_view module_name) noexcept {
-            subsystem_module_registry_.register_subsystem_module(subsystem_id, module_id, subsystem_name, module_name);
-        }
-
-        /**
-         * @brief 注册指定 locale 的子系统/模块名称
-         * @param locale 语言区域
-         * @param subsystem_id 子系统 ID
-         * @param module_id 模块 ID
-         * @param subsystem_name 子系统名称
-         * @param module_name 模块名称
-         */
-        void register_subsystem_module(i18n::locale_t locale,
-                                       uint16_t subsystem_id,
-                                       uint16_t module_id,
-                                       const std::string_view subsystem_name,
-                                       const std::string_view module_name) noexcept {
-            subsystem_module_registry_.register_subsystem_module(locale, subsystem_id, module_id, subsystem_name, module_name);
-        }
-
-        /**
-         * @brief 查询子系统/模块名称（值副本，线程安全，使用 zh_CN）
-         * @param subsystem_id 子系统 ID
-         * @param module_id 模块 ID
-         * @return subsystem_module_info_t 子系统/模块名称信息副本
-         * @note 转发至 subsystem_module_registry_，默认查询 zh_CN（向后兼容）
-         */
-        subsystem_module_info_t get_subsystem_module_info(uint16_t subsystem_id, uint16_t module_id) const noexcept {
-            return subsystem_module_registry_.get_subsystem_module_info(subsystem_id, module_id);
-        }
-
-        /**
-         * @brief 查询指定 locale 的子系统/模块名称（带回退）
-         * @param locale 首选语言区域
-         * @param fallback_locale 回退语言区域
-         * @param subsystem_id 子系统 ID
-         * @param module_id 模块 ID
-         * @return subsystem_module_info_t 子系统/模块名称信息副本
-         */
-        subsystem_module_info_t get_subsystem_module_info(i18n::locale_t locale,
-                                                          i18n::locale_t fallback_locale,
-                                                          uint16_t subsystem_id,
-                                                          uint16_t module_id) const noexcept {
-            return subsystem_module_registry_.get_subsystem_module_info(locale, fallback_locale, subsystem_id, module_id);
-        }
-
-        /**
-         * @brief 查询指定 locale 的子系统/模块名称（回退到 zh_CN）
-         * @param locale 首选语言区域
-         * @param subsystem_id 子系统 ID
-         * @param module_id 模块 ID
-         * @return subsystem_module_info_t 子系统/模块名称信息副本
-         */
-        subsystem_module_info_t get_subsystem_module_info(i18n::locale_t locale,
-                                                          uint16_t subsystem_id,
-                                                          uint16_t module_id) const noexcept {
-            return subsystem_module_registry_.get_subsystem_module_info(locale, subsystem_id, module_id);
-        }
+        [[nodiscard]] std::optional<error_code_t> find_by_name(const std::string_view name) const noexcept;
 
         /**
          * @brief 设置重复处理策略
@@ -394,25 +309,23 @@ namespace error_system::core {
 
     /**
      * @brief 错误码自动注册辅助类
-     * @details 配合 DEFINE_ERROR_CODE 宏使用，利用静态初始化在 main 函数前注册错误码
-     *          同时自动注册对应的子系统/模块名称
+     * @details 配合 DEFINE_ERROR_CODE 宏使用，利用静态初始化在 main 函数前注册错误码。
+     *          子系统/模块名称需通过 i18n::subsystem_module_catalog_t::instance() 单独注册。
      */
     struct error_registrar_t {
         /**
-         * @brief 构造函数（自动注册错误码及子系统/模块名称）
+         * @brief 构造函数（自动注册错误码）
          * @param code 错误码
          * @param name 错误码宏名称
          * @param description 错误码中文描述
-         * @param subsystem_name 子系统名称
-         * @param module_name 模块名称
+         * @param subsystem_name 子系统名称（已废弃，子统/模块名称请通过 i18n::subsystem_module_catalog_t 注册）
+         * @param module_name 模块名称（已废弃，子统/模块名称请通过 i18n::subsystem_module_catalog_t 注册）
          */
         error_registrar_t(const error_code_t code,
                           const char* name,
                           const char* description,
-                          const char* subsystem_name = "未知子系统",
-                          const char* module_name = "未知模块") noexcept {
-            error_registry_t::instance().register_subsystem_module(
-                code.get_subsys(), code.get_module(), subsystem_name, module_name);
+                          [[maybe_unused]] const char* subsystem_name = "未知子系统",
+                          [[maybe_unused]] const char* module_name = "未知模块") noexcept {
             error_registry_t::instance().register_error(code, name, description);
         }
 
@@ -433,12 +346,13 @@ namespace error_system::core {
  * @param MODULE 模块 ID
  * @param NUMBER 错误编号
  * @param DESC 错误描述字符串
- * @param SUBSYS_NAME 子系统名称（用于 to_string() 可读输出）
- * @param MODULE_NAME 模块名称（用于 to_string() 可读输出）
+ * @param SUBSYS_NAME 子系统名称（已废弃，保留参数以向后兼容；请通过 i18n::subsystem_module_catalog_t 注册）
+ * @param MODULE_NAME 模块名称（已废弃，保留参数以向后兼容；请通过 i18n::subsystem_module_catalog_t 注册）
  * @details 该宏会：
  *          1. 创建一个 constexpr error_code_t 常量（编译期可用，无初始化顺序问题）
  *          2. 在动态初始化阶段自动将错误码注册到 error_registry_t
- *          3. 同时注册子系统/模块名称到 error_registry_t 的映射表
+ * @note 子系统/模块名称不再由本宏自动注册，需调用方通过
+ *       i18n::subsystem_module_catalog_t::instance().register_subsystem_module(...) 单独注册
  * @note 必须在全局命名空间使用
  * @note 静态初始化顺序安全性：
  *       - error_registry_t 单例使用 std::call_once + 函数局部静态，跨 TU 安全；

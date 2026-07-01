@@ -28,6 +28,48 @@ namespace error_system::core {
     using module_group_id_t = uint64_t;
 
     /**
+     * @brief 子系统 ID 强类型包装
+     * @details 防止 subsystem/module/number 三个 uint16_t 参数传反
+     */
+    struct subsystem_id_t {
+        uint16_t value{0};  ///< 子系统 ID 原始值
+
+        /**
+         * @brief 显式构造
+         * @param v 子系统 ID
+         */
+        explicit constexpr subsystem_id_t(uint16_t v) noexcept : value(v) {}
+    };
+
+    /**
+     * @brief 模块 ID 强类型包装
+     * @details 防止 subsystem/module/number 三个 uint16_t 参数传反
+     */
+    struct module_id_t {
+        uint16_t value{0};  ///< 模块 ID 原始值
+
+        /**
+         * @brief 显式构造
+         * @param v 模块 ID
+         */
+        explicit constexpr module_id_t(uint16_t v) noexcept : value(v) {}
+    };
+
+    /**
+     * @brief 错误编号强类型包装
+     * @details 防止 subsystem/module/number 三个 uint16_t 参数传反
+     */
+    struct error_number_t {
+        uint16_t value{0};  ///< 错误编号原始值
+
+        /**
+         * @brief 显式构造
+         * @param v 错误编号
+         */
+        explicit constexpr error_number_t(uint16_t v) noexcept : value(v) {}
+    };
+
+    /**
      * @brief 错误码数据类
      * @details 封装64位错误码，提供字段解析和访问功能。基于位移操作实现，100% 避免严格别名规则与位域排布未定义行为。
      */
@@ -104,15 +146,16 @@ namespace error_system::core {
          * @param number 错误编号 (bits 15-0)
          *
          * @example
-         * error_code_t code(error_level_t::error, system_domain_t::database, 1, 2, 0x0010);
-         */
+         * error_code_t code(error_level_t::error, system_domain_t::database,
+         *                   subsystem_id_t{1}, module_id_t{2}, error_number_t{0x0010});
+     */
         constexpr error_code_t(error_level_t level, domain::system_domain_t system,
-                               uint16_t subsystem, uint16_t module, uint16_t number) noexcept
+                               subsystem_id_t subsystem, module_id_t module, error_number_t number) noexcept
             : code_((static_cast<code_t>(level) << LEVEL_SHIFT)
                     | (static_cast<code_t>(system) << SYSTEM_SHIFT)
-                    | (static_cast<code_t>(subsystem) << SUBSYS_SHIFT)
-                    | (static_cast<code_t>(module) << MODULE_SHIFT)
-                    | (static_cast<code_t>(number) << NUMBER_SHIFT)) {}
+                    | (static_cast<code_t>(subsystem.value) << SUBSYS_SHIFT)
+                    | (static_cast<code_t>(module.value) << MODULE_SHIFT)
+                    | (static_cast<code_t>(number.value) << NUMBER_SHIFT)) {}
 
         /**
          * @brief 获取原始错误码

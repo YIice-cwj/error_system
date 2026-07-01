@@ -21,6 +21,9 @@ namespace error_system::core {
     std::atomic<uint64_t> error_registry_t::epoch_counter_{0};
 
     namespace {
+        constexpr size_t MODULE_BUCKET_ESTIMATE_DIVISOR = 8;    ///< 模块组桶数量估算除数
+        constexpr uint16_t SUBSYSTEM_ID_MASK = 0xFFFF;          ///< 从 module_group_id 提取 subsystem_id 的掩码
+
         /**
          * @brief 线程本地元数据缓存（环形缓冲）
          * @details 容量 16，线性扫描查找；对错误码注册后基本不变的场景，
@@ -198,8 +201,8 @@ namespace error_system::core {
                 std::string(name), std::string(description), code.get_module(), code.get_number(), code.get_level()};
             name_index_.emplace(meta.name, identity_code);
             primary_index_.emplace(identity_code, std::move(meta));
-        } catch (...) {
-            fprintf(stderr, "[error_registry] register_error: std::bad_alloc\n");
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[error_registry] register_error: std::bad_alloc\n");
             return;
         }
         try {
@@ -207,7 +210,7 @@ namespace error_system::core {
             module_codes.reserve(module_codes.size() + 1);
             module_codes.push_back(identity_code);
         } catch (const std::bad_alloc&) {
-            fprintf(stderr, "[error_registry] register_error: module_index std::bad_alloc\n");
+            std::fprintf(stderr, "[error_registry] register_error: module_index std::bad_alloc\n");
         }
         {
             uint16_t subsystem_id = code.get_subsys();
@@ -225,7 +228,7 @@ namespace error_system::core {
      */
     void error_registry_t::preallocate_module_buckets_(const std::vector<error_code_t>& codes) noexcept {
         std::unordered_map<module_group_id_t, size_t> module_group_counts;
-        module_group_counts.reserve((codes.size() / 8) + 1);
+        module_group_counts.reserve((codes.size() / MODULE_BUCKET_ESTIMATE_DIVISOR) + 1);
         for (const auto& code : codes) {
             ++module_group_counts[code.get_module_group_id()];
         }
@@ -261,7 +264,7 @@ namespace error_system::core {
                                   code.get_level()};
             name_index_.emplace(meta.name, identity_code);
             primary_index_.emplace(identity_code, std::move(meta));
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_registry] register_single_entry_: std::bad_alloc\n");
             return false;
         }
@@ -325,8 +328,8 @@ namespace error_system::core {
         auto name_it = [&]() noexcept {
             try {
                 return name_index_.find(std::string(name));
-            } catch (...) {
-                fprintf(stderr, "[error_registry] unregister_error: std::bad_alloc\n");
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[error_registry] unregister_error: std::bad_alloc\n");
                 return name_index_.end();
             }
         }();
@@ -370,7 +373,7 @@ namespace error_system::core {
                 primary_index_.erase(primary_it);
             }
         }
-        uint16_t subsystem_id = static_cast<uint16_t>((module_group_id >> 32) & 0xFFFF);
+        uint16_t subsystem_id = static_cast<uint16_t>((module_group_id >> 32) & SUBSYSTEM_ID_MASK);
         erase_from_subsystem_index_(subsystem_id, module_group_id);
 
         module_index_.erase(mod_it);
@@ -386,7 +389,6 @@ namespace error_system::core {
         decltype(name_index_)().swap(name_index_);
         decltype(module_index_)().swap(module_index_);
         decltype(subsystem_index_)().swap(subsystem_index_);
-        subsystem_module_registry_.clear();
         bump_epoch_();
     }
 
@@ -414,8 +416,8 @@ namespace error_system::core {
         }
         try {
             return it->second;
-        } catch (...) {
-            fprintf(stderr, "[error_registry] get_info: std::bad_alloc\n");
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[error_registry] get_info: std::bad_alloc\n");
             return std::nullopt;
         }
     }
@@ -442,8 +444,8 @@ namespace error_system::core {
                     errors.push_back(primary_it->second);
                 }
             }
-        } catch (...) {
-            fprintf(stderr, "[error_registry] get_errors_by_module: std::bad_alloc\n");
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[error_registry] get_errors_by_module: std::bad_alloc\n");
         }
         return errors;
     }
@@ -494,7 +496,7 @@ namespace error_system::core {
                 errors.reserve(errors.size() + mod_it->second.size());
                 collect_module_errors(mod_it->second, primary_index_, errors);
             }
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_registry] get_errors_by_subsystem: std::bad_alloc\n");
         }
         return errors;
@@ -510,8 +512,8 @@ namespace error_system::core {
         auto name_it = [&]() noexcept {
             try {
                 return name_index_.find(std::string(name));
-            } catch (...) {
-                fprintf(stderr, "[error_registry] find_by_name: std::bad_alloc\n");
+            } catch (const std::bad_alloc&) {
+                std::fprintf(stderr, "[error_registry] find_by_name: std::bad_alloc\n");
                 return name_index_.end();
             }
         }();

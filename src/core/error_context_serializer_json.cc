@@ -8,10 +8,12 @@
 
 #include "error_system/config/error_config.h"
 #include "error_system/core/error_registry.h"
+#include "error_system/utils/json_lexer.h"
 #include "error_system/utils/json_utils.h"
 
 using error_system::config::feature_flags_t;
 using error_system::core::detail::append_decimal;
+using json_lexer_t = error_system::utils::detail::json_lexer_t;
 
 /**
  * @file error_context_serializer_json.cc
@@ -19,10 +21,11 @@ using error_system::core::detail::append_decimal;
  * @details 实现 error_context_serializer_t 的 JSON 序列化（to_json / to_json_impl_）
  *          与反序列化（from_json / from_json_node_）。
  *          从 error_context_serializer.cc 拆分而来，仅包含 JSON 格式相关的辅助函数与逻辑。
- *          反序列化采用流式解析（不构建中间 JSON 树），直接填充 error_context_t 私有字段。
+ *          反序列化复用 utils::detail::json_lexer_t 进行 token 化解析，避免重复实现
+ *          JSON 字符串/数字/关键字/跳过逻辑。
  * @author yiice
- * @version 1.0.0
- * @date 2026-06-28
+ * @version 1.1.0
+ * @date 2026-07-01
  * @copyright Copyright (c) 2026
  */
 namespace error_system::core {
@@ -36,7 +39,7 @@ namespace error_system::core {
                 output.push_back('"');
                 output.append(utils::json_serializer_t::escape_json(std::string(value)));
                 output.push_back('"');
-            } catch (...) {
+            } catch (const std::bad_alloc&) {
                 std::fprintf(stderr, "[error_context_serializer] append_escaped_json_string: std::bad_alloc\n");
             }
         }
@@ -146,319 +149,232 @@ namespace error_system::core {
                 }
                 output = static_cast<uint64_t>(value);
                 return true;
-            } catch (...) {
+            } catch (const std::invalid_argument&) {
+                return false;
+            } catch (const std::out_of_range&) {
                 return false;
             }
         }
 
         /**
-         * @brief 跳过空白字符
+         * @brief 将 JSON 数字字符串解析为 double
+         * @details 复用 lexer 已切分的数字字符串，调用 std::stod 转换。
+         *          失败（空串或异常）返回 false。
+         * @param text 数字字符串
+         * @param output 输出参数
+         * @return bool true=成功，false=失败
          */
-        void skip_ws(std::string_view text, size_t& position) noexcept {
-            while (position < text.size()) {
-                const char c = text[position];
-                if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
-                    ++position;
-                } else {
-                    break;
-                }
-            }
-        }
-
-        /**
-         * @brief 匹配并消费指定字符
-         */
-        bool match_char(std::string_view text, size_t& position, char expected) noexcept {
-            if (position < text.size() && text[position] == expected) {
-                ++position;
-                return true;
-            }
-            return false;
-        }
-
-        /**
-         * @brief 匹配并消费指定关键字
-         */
-        bool consume_keyword(std::string_view text, size_t& position, std::string_view keyword) noexcept {
-            if (position + keyword.size() > text.size()) {
-                return false;
-            }
-            if (text.substr(position, keyword.size()) != keyword) {
-                return false;
-            }
-            position += keyword.size();
-            return true;
-        }
-
-        /**
-         * @brief 解析 \uXXXX 转义序列的 4 位十六进制码点
-         * @details position 指向第一个十六进制位，成功时越过第 4 位。
-         *          仅处理 BMP（忽略代理对——错误上下文场景足够）。
-         *          码点按 UTF-8 编码追加到 output。
-         * @return bool true=成功，false=格式错误或数据不足
-         */
-        bool parse_unicode_escape(std::string_view text, size_t& position, std::string& output) noexcept {
-            if (position + 4 > text.size()) {
-                return false;
-            }
-            uint32_t cp = 0;
-            for (int i = 0; i < 4; ++i) {
-                const char h = text[position++];
-                cp <<= 4;
-                if (h >= '0' && h <= '9') {
-                    cp |= static_cast<uint32_t>(h - '0');
-                } else if (h >= 'a' && h <= 'f') {
-                    cp |= static_cast<uint32_t>(h - 'a' + 10);
-                } else if (h >= 'A' && h <= 'F') {
-                    cp |= static_cast<uint32_t>(h - 'A' + 10);
-                } else {
-                    return false;
-                }
-            }
-            if (cp < 0x80) {
-                output.push_back(static_cast<char>(cp));
-            } else if (cp < 0x800) {
-                output.push_back(static_cast<char>(0xC0 | (cp >> 6)));
-                output.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
-            } else {
-                output.push_back(static_cast<char>(0xE0 | (cp >> 12)));
-                output.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
-                output.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
-            }
-            return true;
-        }
-
-        /**
-         * @brief 处理反斜杠转义序列，position 指向转义字符
-         * @details 成功时 position 越过转义字符，解码结果追加到 output。
-         *          支持：\" \\ \/ \b \f \n \r \t \uXXXX。
-         * @return bool true=成功，false=格式错误或数据不足
-         */
-        bool parse_escape_sequence(std::string_view text, size_t& position, std::string& output) noexcept {
-            if (position >= text.size()) {
-                return false;
-            }
-            const char esc = text[position++];
-            switch (esc) {
-                case '"':  output.push_back('"');  return true;
-                case '\\': output.push_back('\\'); return true;
-                case '/':  output.push_back('/');  return true;
-                case 'b':  output.push_back('\b'); return true;
-                case 'f':  output.push_back('\f'); return true;
-                case 'n':  output.push_back('\n'); return true;
-                case 'r':  output.push_back('\r'); return true;
-                case 't':  output.push_back('\t'); return true;
-                case 'u':  return parse_unicode_escape(text, position, output);
-                default:   return false;
-            }
-        }
-
-        /**
-         * @brief 解析 JSON 字符串字面量（含转义），position 指向起始引号
-         * @details 成功时 position 越过结束引号；失败返回 std::nullopt。
-         *          支持标准 JSON 转义序列：\" \\ \/ \b \f \n \r \t \uXXXX。
-         *          \uXXXX 按 UTF-8 编码追加（仅处理 BMP，忽略代理对——错误上下文场景足够）。
-         *          分配失败（bad_alloc）时返回 std::nullopt 并记录日志。
-         */
-        std::optional<std::string> parse_json_string(std::string_view text, size_t& position) noexcept {
-            if (position >= text.size() || text[position] != '"') {
-                return std::nullopt;
-            }
-            ++position;
-            std::string output;
-            try {
-                output.reserve(16);
-                while (position < text.size()) {
-                    const char c = text[position++];
-                    if (c == '"') {
-                        return output;
-                    }
-                    if (c == '\\') {
-                        if (!parse_escape_sequence(text, position, output)) {
-                            return std::nullopt;
-                        }
-                    } else {
-                        output.push_back(c);
-                    }
-                }
-            } catch (...) {
-                std::fprintf(stderr, "[error_context_serializer] parse_json_string: std::bad_alloc\n");
-                return std::nullopt;
-            }
-            return std::nullopt;
-        }
-
-        /**
-         * @brief 解析 JSON 数字字面量到 double
-         * @details 支持 JSON 数字语法：可选负号、整数部分、可选小数部分、可选指数部分（e/E +/- digits）。
-         *          成功时 position 越过整个数字字面量，output 写入解析值。
-         *          失败（空字面量或 std::stod 异常）时 position 不变，返回 false。
-         */
-        bool parse_json_number(std::string_view text, size_t& position, double& output) noexcept {
-            const size_t start = position;
-            if (position < text.size() && text[position] == '-') {
-                ++position;
-            }
-            while (position < text.size() && text[position] >= '0' && text[position] <= '9') {
-                ++position;
-            }
-            if (position < text.size() && text[position] == '.') {
-                ++position;
-                while (position < text.size() && text[position] >= '0' && text[position] <= '9') {
-                    ++position;
-                }
-            }
-            if (position < text.size() && (text[position] == 'e' || text[position] == 'E')) {
-                ++position;
-                if (position < text.size() && (text[position] == '+' || text[position] == '-')) {
-                    ++position;
-                }
-                while (position < text.size() && text[position] >= '0' && text[position] <= '9') {
-                    ++position;
-                }
-            }
-            if (position == start) {
+        bool parse_json_number_value(const std::string& text, double& output) noexcept {
+            if (text.empty()) {
                 return false;
             }
             try {
-                const std::string number_text(text.substr(start, position - start));
                 size_t parsed_index = 0;
-                const double value = std::stod(number_text, &parsed_index);
-                if (parsed_index != number_text.size()) {
+                const double value = std::stod(text, &parsed_index);
+                if (parsed_index != text.size()) {
                     return false;
                 }
                 output = value;
                 return true;
-            } catch (...) {
+            } catch (const std::invalid_argument&) {
                 return false;
+            } catch (const std::out_of_range&) {
+                return false;
+            }
+        }
+
+        /**
+         * @brief 跳过 JSON 对象（{...}）
+         * @details 调用前 lexer 已消费起始 '{'。键必须是字符串，值递归调用 skip_json_value_。
+         *          成功时 lexer 已消费结束 '}'。
+         * @return bool true=成功，false=格式错误
+         */
+        bool skip_json_object_(json_lexer_t& lexer) noexcept;
+
+        /**
+         * @brief 跳过 JSON 数组（[...]）
+         * @details 调用前 lexer 已消费起始 '['。元素递归调用 skip_value_with_token_。
+         *          成功时 lexer 已消费结束 ']'。
+         * @return bool true=成功，false=格式错误
+         */
+        bool skip_json_array_(json_lexer_t& lexer) noexcept;
+
+        /**
+         * @brief 使用已消费的首 token 跳过任意 JSON 值
+         * @details 根据 token 类型分发到对象、数组或标量处理。
+         * @param lexer JSON 词法分析器
+         * @param token 已消费的首个 token
+         * @return bool true=成功，false=格式错误
+         */
+        bool skip_value_with_token_(json_lexer_t& lexer, const json_lexer_t::token_t& token) noexcept {
+            using token_type_t = json_lexer_t::token_type_t;
+            switch (token.type) {
+                case token_type_t::left_brace:
+                    return skip_json_object_(lexer);
+                case token_type_t::left_bracket:
+                    return skip_json_array_(lexer);
+                case token_type_t::string:
+                case token_type_t::number:
+                case token_type_t::true_literal:
+                case token_type_t::false_literal:
+                case token_type_t::null_literal:
+                    return true;
+                default:
+                    return false;
             }
         }
 
         /**
          * @brief 跳过任意 JSON 值（用于忽略未知字段）
          * @details 递归跳过完整的 JSON 值：对象 {}、数组 []、字符串、数字、true/false/null。
-         *          成功时 position 越过整个值；失败返回 false（position 状态未定义）。
-         *          递归深度无显式限制，依赖 JSON 输入深度合理性。
+         *          成功时 lexer 已消费整个值；失败返回 false。
+         * @param lexer JSON 词法分析器
+         * @return bool true=成功，false=格式错误
          */
-        bool skip_json_value(std::string_view text, size_t& position) noexcept;
+        bool skip_json_value_(json_lexer_t& lexer) noexcept {
+            return skip_value_with_token_(lexer, lexer.next());
+        }
+
+        bool skip_json_object_(json_lexer_t& lexer) noexcept {
+            using token_type_t = json_lexer_t::token_type_t;
+            while (true) {
+                auto token = lexer.next();
+                if (token.type == token_type_t::right_brace) {
+                    return true;
+                }
+                if (token.type != token_type_t::string) {
+                    return false;
+                }
+                token = lexer.next();
+                if (token.type != token_type_t::colon) {
+                    return false;
+                }
+                if (!skip_json_value_(lexer)) {
+                    return false;
+                }
+                token = lexer.next();
+                if (token.type == token_type_t::right_brace) {
+                    return true;
+                }
+                if (token.type != token_type_t::comma) {
+                    return false;
+                }
+            }
+        }
+
+        bool skip_json_array_(json_lexer_t& lexer) noexcept {
+            using token_type_t = json_lexer_t::token_type_t;
+            while (true) {
+                auto token = lexer.next();
+                if (token.type == token_type_t::right_bracket) {
+                    return true;
+                }
+                if (!skip_value_with_token_(lexer, token)) {
+                    return false;
+                }
+                token = lexer.next();
+                if (token.type == token_type_t::right_bracket) {
+                    return true;
+                }
+                if (token.type != token_type_t::comma) {
+                    return false;
+                }
+            }
+        }
 
         /**
-         * @brief 跳过 JSON 对象（{...}）
-         * @details position 指向起始 '{'，成功时越过结束 '}'。
-         *          支持空对象 {} 与嵌套对象。键必须是字符串，值递归调用 skip_json_value。
+         * @brief JSON location 对象解析状态
+         * @details 聚合 file/function/line 三个字段的解析结果与识别标志，
+         *          将 parse_location_member_ 的参数数量收敛到规范建议的 4 个以内。
          */
-        bool skip_json_object(std::string_view text, size_t& position) noexcept {
-            ++position;
-            skip_ws(text, position);
-            if (position < text.size() && text[position] == '}') {
-                ++position;
-                return true;
-            }
-            while (true) {
-                skip_ws(text, position);
-                if (!parse_json_string(text, position)) {
-                    return false;
-                }
-                skip_ws(text, position);
-                if (!match_char(text, position, ':')) {
-                    return false;
-                }
-                if (!skip_json_value(text, position)) {
-                    return false;
-                }
-                skip_ws(text, position);
-                if (match_char(text, position, ',')) {
-                    continue;
-                }
-                return match_char(text, position, '}');
-            }
-        }
-
-        /**
-         * @brief 跳过 JSON 数组（[...]）
-         * @details position 指向起始 '['，成功时越过结束 ']'。
-         *          支持空数组 [] 与嵌套数组。元素递归调用 skip_json_value。
-         */
-        bool skip_json_array(std::string_view text, size_t& position) noexcept {
-            ++position;
-            skip_ws(text, position);
-            if (position < text.size() && text[position] == ']') {
-                ++position;
-                return true;
-            }
-            while (true) {
-                if (!skip_json_value(text, position)) {
-                    return false;
-                }
-                skip_ws(text, position);
-                if (match_char(text, position, ',')) {
-                    continue;
-                }
-                return match_char(text, position, ']');
-            }
-        }
-
-        bool skip_json_value(std::string_view text, size_t& position) noexcept {
-            skip_ws(text, position);
-            if (position >= text.size()) {
-                return false;
-            }
-            const char c = text[position];
-            switch (c) {
-                case '{':
-                    return skip_json_object(text, position);
-                case '[':
-                    return skip_json_array(text, position);
-                case '"':
-                    return parse_json_string(text, position).has_value();
-                case 't':
-                    return consume_keyword(text, position, "true");
-                case 'f':
-                    return consume_keyword(text, position, "false");
-                case 'n':
-                    return consume_keyword(text, position, "null");
-                default:
-                    if (c == '-' || (c >= '0' && c <= '9')) {
-                        double d = 0;
-                        return parse_json_number(text, position, d);
-                    }
-                    return false;
-            }
-        }
+        struct location_parse_state_t {
+            std::string file{};          ///< 文件名
+            std::string function{};      ///< 函数名
+            uint32_t line{0};            ///< 行号
+            bool got_file{false};        ///< 是否已识别 file 字段
+            bool got_function{false};    ///< 是否已识别 function 字段
+            bool got_line{false};        ///< 是否已识别 line 字段
+        };
 
         /**
          * @brief 解析 JSON location 对象的单个字段
          * @details 用于 parse_json_location_field_ 的字段分发，替代 if-else 链。
          *          返回 true 表示已消费字段值（不论是否识别）；false 表示格式错误。
-         *          out_file/out_func/out_line 通过引用回写，仅识别 file/function/line 三个键。
+         * @param lexer JSON 词法分析器
+         * @param key 字段名
+         * @param state 解析状态（输入输出）
+         * @return bool true=成功，false=格式错误
          */
-        bool parse_location_member(std::string_view key, std::string_view json, size_t& offset,
-                                   std::string& out_file, std::string& out_func, uint32_t& out_line,
-                                   bool& got_file, bool& got_func, bool& got_line) noexcept {
+        bool parse_location_member_(json_lexer_t& lexer, const std::string& key,
+                                    location_parse_state_t& state) noexcept {
+            using token_type_t = json_lexer_t::token_type_t;
             if (key == "file") {
-                auto v = parse_json_string(json, offset);
-                if (!v) { return false; }
-                out_file = std::move(*v);
-                got_file = true;
+                auto token = lexer.next();
+                if (token.type != token_type_t::string) { return false; }
+                state.file = std::move(token.value);
+                state.got_file = true;
                 return true;
             }
             if (key == "function") {
-                auto v = parse_json_string(json, offset);
-                if (!v) { return false; }
-                out_func = std::move(*v);
-                got_func = true;
+                auto token = lexer.next();
+                if (token.type != token_type_t::string) { return false; }
+                state.function = std::move(token.value);
+                state.got_function = true;
                 return true;
             }
             if (key == "line") {
+                auto token = lexer.next();
+                if (token.type != token_type_t::number) { return false; }
                 double d = 0;
-                if (!parse_json_number(json, offset, d) || d < 0) {
+                if (!parse_json_number_value(token.value, d) || d < 0) {
                     return false;
                 }
-                out_line = static_cast<uint32_t>(d);
-                got_line = true;
+                state.line = static_cast<uint32_t>(d);
+                state.got_line = true;
                 return true;
             }
-            return skip_json_value(json, offset);
+            return skip_json_value_(lexer);
+        }
+
+        /**
+         * @brief 解析 location 对象体（{file,...,function,...,line:...}）
+         * @details 循环读取对象成员并委托 parse_location_member_，直到遇到右大括号。
+         *          空对象返回 false（location 字段要求至少包含一个成员语义上不完整）。
+         * @param lexer JSON 词法分析器（已消费左大括号）
+         * @param state 解析状态（输出）
+         * @return bool true=成功，false=格式错误
+         */
+        bool parse_location_object_body_(json_lexer_t& lexer, location_parse_state_t& state) noexcept {
+            using token_type_t = json_lexer_t::token_type_t;
+            auto token = lexer.next();
+            if (token.type == token_type_t::right_brace) {
+                return false;
+            }
+            while (true) {
+                if (token.type != token_type_t::string) {
+                    return false;
+                }
+                auto key = std::move(token.value);
+
+                token = lexer.next();
+                if (token.type != token_type_t::colon) {
+                    return false;
+                }
+
+                if (!parse_location_member_(lexer, key, state)) {
+                    return false;
+                }
+
+                token = lexer.next();
+                if (token.type == token_type_t::right_brace) {
+                    break;
+                }
+                if (token.type != token_type_t::comma) {
+                    return false;
+                }
+                token = lexer.next();
+            }
+            return true;
         }
 
     }  // namespace
@@ -491,26 +407,28 @@ namespace error_system::core {
             append_payload_json(json, context);
             append_stacktrace_json(json, context);
 
-            constexpr size_t MAX_CAUSE_DEPTH = 32;
             if (context.cause && depth < MAX_CAUSE_DEPTH) {
                 json.append(",\"cause\":").append(to_json_impl_(*context.cause, depth + 1));
             }
 
             json.push_back('}');
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_context_serializer] to_json: std::bad_alloc\n");
         }
         return json;
     }
 
     std::optional<error_context_t> error_context_serializer_t::from_json(std::string_view json) noexcept {
-        size_t offset = 0;
-        auto result = from_json_node_(json, offset);
+        if (json.empty()) {
+            return std::nullopt;
+        }
+        utils::detail::json_lexer_t lexer(json);
+        auto result = from_json_node_(lexer);
         if (!result) {
             return std::nullopt;
         }
-        skip_ws(json, offset);
-        if (offset != json.size()) {
+        const auto tail = lexer.next();
+        if (tail.type != utils::detail::json_lexer_t::token_type_t::eof) {
             return std::nullopt;
         }
         return result;
@@ -529,49 +447,48 @@ namespace error_system::core {
         return table;
     }
 
-    std::optional<error_context_t> error_context_serializer_t::from_json_node_(
-        std::string_view json, size_t& offset) noexcept {
-        skip_ws(json, offset);
-        if (!match_char(json, offset, '{')) {
+    std::optional<error_context_t> error_context_serializer_t::from_json_node_(json_lexer_t& lexer) noexcept {
+        using token_type_t = json_lexer_t::token_type_t;
+        auto token = lexer.next();
+        if (token.type != token_type_t::left_brace) {
             return std::nullopt;
         }
 
         error_context_t context;
 
-        skip_ws(json, offset);
-        if (match_char(json, offset, '}')) {
+        token = lexer.next();
+        if (token.type == token_type_t::right_brace) {
             return context;
         }
 
         while (true) {
-            skip_ws(json, offset);
-            auto key = parse_json_string(json, offset);
-            if (!key) {
+            if (token.type != token_type_t::string) {
                 return std::nullopt;
             }
-            skip_ws(json, offset);
-            if (!match_char(json, offset, ':')) {
+            auto key = std::move(token.value);
+
+            token = lexer.next();
+            if (token.type != token_type_t::colon) {
                 return std::nullopt;
             }
-            skip_ws(json, offset);
 
             const auto& table = field_dispatcher_table_();
-            auto it = table.find(*key);
+            auto it = table.find(key);
             bool ok = (it != table.end())
-                ? it->second(context, json, offset)
-                : skip_json_value(json, offset);
+                ? it->second(context, lexer)
+                : skip_json_value_(lexer);
             if (!ok) {
                 return std::nullopt;
             }
 
-            skip_ws(json, offset);
-            if (match_char(json, offset, ',')) {
-                continue;
-            }
-            if (match_char(json, offset, '}')) {
+            token = lexer.next();
+            if (token.type == token_type_t::right_brace) {
                 break;
             }
-            return std::nullopt;
+            if (token.type != token_type_t::comma) {
+                return std::nullopt;
+            }
+            token = lexer.next();
         }
         return context;
     }
@@ -580,13 +497,13 @@ namespace error_system::core {
      * @brief 解析 "code" 字段：字符串形式错误码 → uint64 → error_code_t，并补齐元数据
      */
     bool error_context_serializer_t::parse_json_code_field_(
-        error_context_t& context, std::string_view json, size_t& offset) noexcept {
-        auto code_str = parse_json_string(json, offset);
-        if (!code_str) {
+        error_context_t& context, json_lexer_t& lexer) noexcept {
+        const auto token = lexer.next();
+        if (token.type != json_lexer_t::token_type_t::string) {
             return false;
         }
         uint64_t raw_code = 0;
-        if (!parse_uint64(*code_str, raw_code)) {
+        if (!parse_uint64(token.value, raw_code)) {
             return false;
         }
         context.code_ = error_code_t{raw_code};
@@ -600,108 +517,103 @@ namespace error_system::core {
      * @brief 解析 "message" 字段：字符串 → context.message
      */
     bool error_context_serializer_t::parse_json_message_field_(
-        error_context_t& context, std::string_view json, size_t& offset) noexcept {
-        auto msg = parse_json_string(json, offset);
-        if (!msg) {
+        error_context_t& context, json_lexer_t& lexer) noexcept {
+        auto token = lexer.next();
+        if (token.type != json_lexer_t::token_type_t::string) {
             return false;
         }
-        context.message = std::move(*msg);
+        context.message = std::move(token.value);
         return true;
     }
 
     /**
      * @brief 解析 "location" 字段：{file,function,line} 对象
-     * @details 仅当三个子字段全部成功才写入 context。字段分发委托 parse_location_member。
+     * @details 仅当三个子字段全部成功才写入 context。字段分发委托 parse_location_member_。
      */
     bool error_context_serializer_t::parse_json_location_field_(
-        error_context_t& context, std::string_view json, size_t& offset) noexcept {
-        if (!match_char(json, offset, '{')) {
+        error_context_t& context, json_lexer_t& lexer) noexcept {
+        using token_type_t = json_lexer_t::token_type_t;
+        auto token = lexer.next();
+        if (token.type != token_type_t::left_brace) {
             return false;
         }
-        std::string file;
-        std::string func;
-        uint32_t line = 0;
-        bool got_file = false, got_func = false, got_line = false;
-        skip_ws(json, offset);
-        if (match_char(json, offset, '}')) {
+
+        location_parse_state_t state;
+        if (!parse_location_object_body_(lexer, state)) {
             return false;
         }
-        while (true) {
-            skip_ws(json, offset);
-            auto loc_key = parse_json_string(json, offset);
-            if (!loc_key) {
-                return false;
-            }
-            skip_ws(json, offset);
-            if (!match_char(json, offset, ':')) {
-                return false;
-            }
-            skip_ws(json, offset);
-            if (!parse_location_member(*loc_key, json, offset,
-                                       file, func, line,
-                                       got_file, got_func, got_line)) {
-                return false;
-            }
-            skip_ws(json, offset);
-            if (match_char(json, offset, ',')) {
-                continue;
-            }
-            if (match_char(json, offset, '}')) {
-                break;
-            }
-            return false;
-        }
-        if (got_file && got_func && got_line) {
-            context.loc_file_storage_ = std::move(file);
-            context.loc_func_storage_ = std::move(func);
+
+        if (state.got_file && state.got_function && state.got_line) {
+            context.loc_file_storage_ = std::move(state.file);
+            context.loc_func_storage_ = std::move(state.function);
             context.file_name = context.loc_file_storage_.c_str();
             context.source_location = utils::source_location_t(
-                context.loc_file_storage_.c_str(), context.loc_func_storage_.c_str(), line);
+                context.loc_file_storage_.c_str(), context.loc_func_storage_.c_str(), state.line);
         }
         return true;
     }
 
     /**
-     * @brief 解析 "payload" 字段：{key:value,...} 对象
-     * @details 限制项数 ≤ 100000 防止恶意输入
+     * @brief 解析 payload 对象中的单个键值对
+     * @details 调用前 lexer 已消费 key token；本函数从 colon 开始消费并写入 context。
+     * @param lexer JSON 词法分析器
+     * @param context 目标上下文
+     * @param key payload 键名
+     * @return bool true=成功，false=格式错误
      */
-    bool error_context_serializer_t::parse_json_payload_field_(
-        error_context_t& context, std::string_view json, size_t& offset) noexcept {
-        if (!match_char(json, offset, '{')) {
+    bool error_context_serializer_t::parse_single_payload_entry_(
+        json_lexer_t& lexer, error_context_t& context, std::string key) noexcept {
+        using token_type_t = json_lexer_t::token_type_t;
+        auto token = lexer.next();
+        if (token.type != token_type_t::colon) {
             return false;
         }
-        skip_ws(json, offset);
-        if (match_char(json, offset, '}')) {
+
+        token = lexer.next();
+        if (token.type != token_type_t::string) {
+            return false;
+        }
+        context.insert_or_update_payload_(std::move(key), std::move(token.value));
+        return true;
+    }
+
+    /**
+     * @brief 解析 "payload" 字段：{key:value,...} 对象
+     * @details 限制项数 ≤ MAX_PAYLOAD_ITEMS 防止恶意输入
+     */
+    bool error_context_serializer_t::parse_json_payload_field_(
+        error_context_t& context, json_lexer_t& lexer) noexcept {
+        using token_type_t = json_lexer_t::token_type_t;
+        auto token = lexer.next();
+        if (token.type != token_type_t::left_brace) {
+            return false;
+        }
+        token = lexer.next();
+        if (token.type == token_type_t::right_brace) {
             return true;
         }
         size_t payload_count = 0;
         while (true) {
-            skip_ws(json, offset);
-            auto pkey = parse_json_string(json, offset);
-            if (!pkey) {
+            if (token.type != token_type_t::string) {
                 return false;
             }
-            skip_ws(json, offset);
-            if (!match_char(json, offset, ':')) {
+            auto pkey = std::move(token.value);
+
+            if (!parse_single_payload_entry_(lexer, context, std::move(pkey))) {
                 return false;
             }
-            skip_ws(json, offset);
-            auto pval = parse_json_string(json, offset);
-            if (!pval) {
+            if (++payload_count > MAX_PAYLOAD_ITEMS) {
                 return false;
             }
-            context.insert_or_update_payload_(std::move(*pkey), std::move(*pval));
-            if (++payload_count > 100000) {
-                return false;
-            }
-            skip_ws(json, offset);
-            if (match_char(json, offset, ',')) {
-                continue;
-            }
-            if (match_char(json, offset, '}')) {
+
+            token = lexer.next();
+            if (token.type == token_type_t::right_brace) {
                 break;
             }
-            return false;
+            if (token.type != token_type_t::comma) {
+                return false;
+            }
+            token = lexer.next();
         }
         return true;
     }
@@ -711,43 +623,44 @@ namespace error_system::core {
      * @details STACKTRACE_ENABLED 关闭时跳过该字段值
      */
     bool error_context_serializer_t::parse_json_stack_frames_field_(
-        error_context_t& context, std::string_view json, size_t& offset) noexcept {
+        error_context_t& context, json_lexer_t& lexer) noexcept {
+        using token_type_t = json_lexer_t::token_type_t;
         if constexpr (feature_flags_t::STACKTRACE_ENABLED) {
-            if (!match_char(json, offset, '[')) {
+            auto token = lexer.next();
+            if (token.type != token_type_t::left_bracket) {
                 return false;
             }
-            skip_ws(json, offset);
-            if (match_char(json, offset, ']')) {
+            token = lexer.next();
+            if (token.type == token_type_t::right_bracket) {
                 return true;
             }
             size_t frame_count = 0;
             while (true) {
-                skip_ws(json, offset);
-                auto frame = parse_json_string(json, offset);
-                if (!frame) {
+                if (token.type != token_type_t::string) {
                     return false;
                 }
                 try {
-                    context.stack_frames.push_back(std::move(*frame));
-                } catch (...) {
+                    context.stack_frames.push_back(std::move(token.value));
+                } catch (const std::bad_alloc&) {
                     std::fprintf(stderr, "[error_context_serializer] parse_json_stack_frames_field_: push_back failed\n");
                     return false;
                 }
-                if (++frame_count > 100000) {
+                if (++frame_count > MAX_STACK_FRAMES) {
                     return false;
                 }
-                skip_ws(json, offset);
-                if (match_char(json, offset, ',')) {
-                    continue;
-                }
-                if (match_char(json, offset, ']')) {
+
+                token = lexer.next();
+                if (token.type == token_type_t::right_bracket) {
                     break;
                 }
-                return false;
+                if (token.type != token_type_t::comma) {
+                    return false;
+                }
+                token = lexer.next();
             }
             return true;
         } else {
-            return skip_json_value(json, offset);
+            return skip_json_value_(lexer);
         }
     }
 
@@ -755,14 +668,14 @@ namespace error_system::core {
      * @brief 解析 "cause" 字段：递归解析子对象到 context.cause
      */
     bool error_context_serializer_t::parse_json_cause_field_(
-        error_context_t& context, std::string_view json, size_t& offset) noexcept {
-        auto cause_ctx = from_json_node_(json, offset);
+        error_context_t& context, json_lexer_t& lexer) noexcept {
+        auto cause_ctx = from_json_node_(lexer);
         if (!cause_ctx) {
             return false;
         }
         try {
             context.cause = std::make_shared<error_context_t>(std::move(*cause_ctx));
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_context_serializer] parse_json_cause_field_: make_shared failed\n");
             return false;
         }

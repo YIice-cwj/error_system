@@ -56,9 +56,7 @@ namespace error_system::core {
                                                       domain::system_domain_t system,
                                                       SubSystemEnum subsystem,
                                                       ModuleEnum module,
-                                                      uint16_t number) noexcept {
-            return error_code_t{level, system, static_cast<uint16_t>(subsystem), static_cast<uint16_t>(module), number};
-        }
+                                                      uint16_t number) noexcept;
 
         /**
          * @brief 从原始 64 位码值恢复错误码
@@ -75,3 +73,5 @@ namespace error_system::core {
     };
 
 }  // namespace error_system::core
+
+#include "error_system/core/details/error_builder.inl"

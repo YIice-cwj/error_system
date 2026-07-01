@@ -47,7 +47,7 @@ namespace error_system::core {
             write_little_endian(buffer, length);
             try {
                 buffer.append(text.data(), length);
-            } catch (...) {
+            } catch (const std::bad_alloc&) {
                 std::fprintf(stderr, "[error_context_serializer] to_binary: write_string append failed\n");
             }
         }
@@ -129,7 +129,7 @@ namespace error_system::core {
             }
             try {
                 output.assign(data.data() + offset, length);
-            } catch (...) {
+            } catch (const std::bad_alloc&) {
                 std::fprintf(stderr, "[error_context_serializer] read_string_len_prefixed: std::bad_alloc\n");
                 return false;
             }
@@ -157,7 +157,6 @@ namespace error_system::core {
             write_location_binary(buf, context);
             write_payload_binary(buf, context);
 
-            constexpr size_t MAX_CAUSE_DEPTH = 32;
             if (context.cause && depth < MAX_CAUSE_DEPTH) {
                 buf.push_back(1);
                 std::string cause_binary = to_binary_impl_(*context.cause, depth + 1);
@@ -165,7 +164,7 @@ namespace error_system::core {
             } else {
                 buf.push_back(0);
             }
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_context_serializer] to_binary: std::bad_alloc\n");
         }
         return buf;
@@ -233,7 +232,7 @@ namespace error_system::core {
         if (!read_little_endian(data, offset, payload_count)) {
             return false;
         }
-        if (payload_count > 100000) {
+        if (payload_count > MAX_PAYLOAD_ITEMS) {
             return false;
         }
         for (uint32_t i = 0; i < payload_count; ++i) {
@@ -271,7 +270,7 @@ namespace error_system::core {
         }
         try {
             context.cause = std::make_shared<error_context_t>(std::move(*cause_ctx));
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_context_serializer] parse_binary_cause_field_: cause make_shared failed\n");
             return false;
         }
