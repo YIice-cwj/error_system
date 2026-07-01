@@ -2,13 +2,13 @@
 #include <array>
 #include <exception>
 #include <memory>
+#include <new>
 #include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
-#include "error_system/config/error_config.h"
 #include "error_system/core/error_code.h"
 #include "error_system/core/error_context_initializer.h"
 #include "error_system/core/error_level.h"
@@ -32,15 +32,15 @@ namespace error_system::core {
 
     /**
      * @brief 携带源位置的错误码包装
-     * @details 通过隐式转换从 error_code_t 构造时，自动捕获调用者位置
+     * @details 通过显式构造从 error_code_t 创建时，自动捕获调用者位置
      *          利用 source_location_t::current() 作为默认参数，在调用点展开 __builtin_FILE()
-     * @note 构造函数不加 explicit，以支持 error_code_t → located_code_t 的隐式转换
+     * @note 构造函数标记 explicit（规范 7.1），调用方需显式构造 located_code_t{code}
      */
     struct located_code_t {
         error_code_t code;
         utils::source_location_t location;
 
-        located_code_t(error_code_t code, utils::source_location_t location = utils::source_location_t::current()) noexcept
+        explicit located_code_t(error_code_t code, utils::source_location_t location = utils::source_location_t::current()) noexcept
             : code(code), location(location) {}
     };
 
@@ -53,11 +53,11 @@ namespace error_system::core {
      *          payload 采用 SSO（Small Size Optimization），≤4 项时栈上存储零堆分配。
      *
      * @note 构造成功码（sign=1）的上下文时，跳过所有运行时特性以提升性能。
-     * @note source_location 通过 located_code_t 隐式转换在调用点捕获真实位置，
+     * @note source_location 通过 located_code_t 在调用点捕获真实位置，
      *       而非构造函数体内调用 current()（那样会捕获库内部位置）。
      *
      * @example 基础用法
-     * error_context_t context(ERR_DB_TIMEOUT, "连接超时: {}ms", 3000);
+     * error_context_t context(located_code_t{ERR_DB_TIMEOUT}, "连接超时: {}ms", 3000);
      * context.with("host", "192.168.1.1")
      *        .with("retry_count", "3");
      * std::cout << error_context_serializer_t::to_string(context) << "\n";
@@ -92,7 +92,7 @@ namespace error_system::core {
         /**
          * @brief 溢出 payload：超过 SSO 容量后的堆存储，惰性初始化
          */
-        std::unique_ptr<std::unordered_map<std::string, std::string>> payload_overflow_;
+        std::unique_ptr<std::unordered_map<std::string, std::string>> payload_overflow_{};
 
         /**
          * @brief payload 写入错误标志
@@ -141,50 +141,63 @@ namespace error_system::core {
          * @return error_context_t& 自身引用
          */
         template <typename K, typename V>
-        error_context_t& insert_or_update_payload_(K&& key, V&& value) noexcept {
-            try {
-                const size_t sso_end = std::min<size_t>(payload_count_, PAYLOAD_SSO_CAPACITY);
-                for (size_t i = 0; i < sso_end; ++i) {
-                    if (payload_small_[i].first == key) {
-                        payload_small_[i].second = std::forward<V>(value);
-                        return *this;
-                    }
-                }
+        error_context_t& insert_or_update_payload_(K&& key, V&& value) noexcept;
 
-                if (payload_overflow_) {
-                    payload_overflow_->insert_or_assign(std::forward<K>(key), std::forward<V>(value));
-                    return *this;
-                }
+        /**
+         * @brief 根据编译期 LOCATION_ENABLED 开关写入源位置
+         * @details 将 location 写入 source_location，仅在编译期启用位置追踪时生效。
+         *          实现见 error_context.cc，避免头文件对 config 模块的依赖。
+         * @param location 调用点捕获的源位置
+         */
+        void apply_source_location_(const utils::source_location_t& location) noexcept;
 
-                if (payload_count_ < PAYLOAD_SSO_CAPACITY) {
-                    payload_small_[payload_count_].first = std::forward<K>(key);
-                    payload_small_[payload_count_].second = std::forward<V>(value);
-                    ++payload_count_;
-                    return *this;
-                }
+        /**
+         * @brief 拷贝基本字段
+         * @details 深拷贝 metadata_、payload_error_、loc_file_storage_、loc_func_storage_ 和 message
+         * @param other 源对象
+         */
+        void copy_basic_fields_(const error_context_t& other);
 
-                auto overflow = std::make_unique<std::unordered_map<std::string, std::string>>();
-                for (size_t i = 0; i < PAYLOAD_SSO_CAPACITY; ++i) {
-                    overflow->emplace(payload_small_[i].first, payload_small_[i].second);
-                }
-                overflow->insert_or_assign(std::forward<K>(key), std::forward<V>(value));
-                payload_overflow_ = std::move(overflow);
-                for (size_t i = 0; i < PAYLOAD_SSO_CAPACITY; ++i) {
-                    payload_small_[i] = {};
-                }
-                payload_count_ = 0;
-            } catch (...) {
-                std::fprintf(stderr, "[error_context] insert_or_update_payload_: std::bad_alloc\n");
-                payload_error_ = true;
-            }
-            return *this;
-        }
+        /**
+         * @brief 拷贝 SSO payload
+         * @details 深拷贝栈上存储的前 payload_count_ 个 payload 项
+         * @param other 源对象
+         */
+        void copy_sso_payload_(const error_context_t& other);
+
+        /**
+         * @brief 拷贝溢出 payload
+         * @details 深拷贝堆上的溢出 map
+         * @param other 源对象
+         */
+        void copy_overflow_payload_(const error_context_t& other);
+
+        /**
+         * @brief 拷贝因果链
+         * @details 共享底层 cause 指针
+         * @param other 源对象
+         */
+        void copy_cause_(const error_context_t& other);
+
+        /**
+         * @brief 拷贝堆栈帧
+         * @details 仅在 STACKTRACE_ENABLED 为 true 时深拷贝 stack_frames
+         * @param other 源对象
+         */
+        void copy_stack_frames_(const error_context_t& other);
+
+        /**
+         * @brief 修复源位置指针
+         * @details 在拷贝或移动 loc_file_storage_ 后，将 file_name 和 source_location
+         *          重新指向本对象的 loc_file_storage_ 和 loc_func_storage_，避免悬垂指针
+         */
+        void repair_source_location_pointers_() noexcept;
 
     public:
         std::string message{};
         /**
          * @brief 源位置信息
-         * @details 构造时通过 located_code_t 隐式转换捕获调用者真实位置
+         * @details 构造时通过 located_code_t 捕获调用者真实位置
          */
         utils::source_location_t source_location{};
         /**
@@ -233,40 +246,22 @@ namespace error_system::core {
          * @brief 构造函数（接受 located_code_t，自动捕获调用位置和堆栈）
          * @details 在构造时自动完成以下操作：
          *          1. 格式化消息字符串
-         *          2. 通过 located_code_t 隐式转换捕获源位置（调用者真实位置）
+         *          2. 通过 located_code_t 捕获源位置（调用者真实位置）
          *          3. 根据全局配置校验错误码、抓取堆栈、通知插件
          *          若错误码 sign=1（成功），则跳过步骤 3
-         * @param located_code 携带源位置的错误码（error_code_t 可隐式转换）
+         * @param located_code 携带源位置的错误码（需显式构造 located_code_t{code}）
          * @param message_format 错误信息格式化字符串（支持 {} 占位符）
          * @param args 格式化参数列表
          *
          * @example
-         * // 简单消息（error_code_t 隐式转换为 located_code_t，自动捕获位置）
-         * error_context_t context(ERR_CONN_FAILED, "数据库连接失败");
+         * // 简单消息（显式构造 located_code_t，自动捕获位置）
+         * error_context_t context(located_code_t{ERR_CONN_FAILED}, "数据库连接失败");
          *
          * // 格式化消息
-         * error_context_t context(ERR_TIMEOUT, "请求超时: {}ms, 重试: {}次", 3000, 2);
+         * error_context_t context(located_code_t{ERR_TIMEOUT}, "请求超时: {}ms, 重试: {}次", 3000, 2);
          */
         template <typename... Args>
-        error_context_t(located_code_t located_code, std::string message_format, Args&&... args) noexcept
-            : code_(located_code.code),
-            message(utils::string_format_t::format(std::move(message_format), std::forward<Args>(args)...)) {
-            try {
-                auto info = error_registry_t::instance().get_info_cached(located_code.code);
-                if (info) {
-                    metadata_ = std::move(*info);
-                }
-            } catch (...) {
-                std::fprintf(stderr, "[error_context] constructor: metadata copy failed\n");
-            }
-            if constexpr (error_system::config::feature_flags_t::LOCATION_ENABLED) {
-                source_location = located_code.location;
-            }
-            if (is_success()) {
-                return;
-            }
-            error_context_initializer_t::initialize(*this);
-        }
+        error_context_t(located_code_t located_code, std::string message_format, Args&&... args) noexcept;
 
         /**
          * @brief 从标准异常创建错误上下文
@@ -285,7 +280,7 @@ namespace error_system::core {
          * @brief 获取错误码的只读引用
          * @return const error_code_t& 错误码只读引用
          */
-        const error_code_t& get_code() const noexcept { return code_; }
+        [[nodiscard]] const error_code_t& get_code() const noexcept { return code_; }
 
         /**
          * @brief 检查错误上下文是否表示成功
@@ -392,20 +387,7 @@ namespace error_system::core {
          *        .with("latency_ms", 150.5);
          */
         template <typename T>
-        error_context_t& with(const std::string& key, T value) noexcept {
-            try {
-                if constexpr (std::is_same_v<T, bool>) {
-                    return with(key, std::string(value ? "true" : "false"));
-                } else if constexpr (std::is_arithmetic_v<T>) {
-                    return with(key, std::to_string(value));
-                } else {
-                    return with(key, std::string(value));
-                }
-            } catch (...) {
-                std::fprintf(stderr, "[error_context] with(const string&, T): std::bad_alloc\n");
-                return *this;
-            }
-        }
+        error_context_t& with(const std::string& key, T value) noexcept;
 
         /**
          * @brief 添加自定义负载（const char* key）
@@ -415,18 +397,7 @@ namespace error_system::core {
          * @return error_context_t& 自身引用
          */
         template <typename T>
-        error_context_t& with(const char* key, T value) noexcept {
-            if (key == nullptr) {
-                std::fprintf(stderr, "[error_context] with(const char*, T): key is nullptr\n");
-                return *this;
-            }
-            try {
-                return with(std::string(key), std::move(value));
-            } catch (...) {
-                std::fprintf(stderr, "[error_context] with(const char*, T): std::bad_alloc\n");
-                return *this;
-            }
-        }
+        error_context_t& with(const char* key, T value) noexcept;
 
         /**
          * @brief 添加自定义负载（string_view key）
@@ -436,14 +407,7 @@ namespace error_system::core {
          * @return error_context_t& 自身引用
          */
         template <typename T>
-        error_context_t& with(std::string_view key, T value) noexcept {
-            try {
-                return with(std::string(key), std::move(value));
-            } catch (...) {
-                std::fprintf(stderr, "[error_context] with(string_view, T): std::bad_alloc\n");
-                return *this;
-            }
-        }
+        error_context_t& with(std::string_view key, T value) noexcept;
 
         /**
          * @brief 获取 payload 副本（SSO 安全）
@@ -507,16 +471,7 @@ namespace error_system::core {
          * @param visitor 接受 (const std::string& key, const std::string& value) 的回调
          */
         template <typename Visitor>
-        void for_each_payload(Visitor&& visitor) const noexcept {
-            for (size_t i = 0; i < payload_count_ && i < PAYLOAD_SSO_CAPACITY; ++i) {
-                visitor(payload_small_[i].first, payload_small_[i].second);
-            }
-            if (payload_overflow_) {
-                for (const auto& [key, value] : *payload_overflow_) {
-                    visitor(key, value);
-                }
-            }
-        }
+        void for_each_payload(Visitor&& visitor) const noexcept;
 
         /**
          * @brief 获取 C 风格错误描述字符串
@@ -526,6 +481,8 @@ namespace error_system::core {
          *          其内部缓存完整描述字符串，保证 what() 在异常传播期间稳定。
          * @return const char* 错误消息的 C 字符串
          */
-        const char* what() const noexcept { return message.c_str(); }
+        [[nodiscard]] const char* what() const noexcept { return message.c_str(); }
     };
 }  // namespace error_system::core
+
+#include "error_system/core/details/error_context.inl"

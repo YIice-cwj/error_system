@@ -35,30 +35,13 @@ namespace error_system::core {
         payload_count_(other.payload_count_),
         source_location(other.source_location), file_name(other.file_name) {
         try {
-            metadata_ = other.metadata_;
-            payload_error_ = other.payload_error_;
-            loc_file_storage_ = other.loc_file_storage_;
-            loc_func_storage_ = other.loc_func_storage_;
-            message = other.message;
-            for (size_t i = 0; i < payload_count_ && i < PAYLOAD_SSO_CAPACITY; ++i) {
-                payload_small_[i] = other.payload_small_[i];
-            }
-            if (other.payload_overflow_) {
-                payload_overflow_ = std::make_unique<std::unordered_map<std::string, std::string>>(
-                    *other.payload_overflow_);
-            }
-            if (other.cause) {
-                cause = other.cause;
-            }
-            if constexpr (error_system::config::feature_flags_t::STACKTRACE_ENABLED) {
-                stack_frames = other.stack_frames;
-            }
-            if (!loc_file_storage_.empty()) {
-                file_name = loc_file_storage_.c_str();
-                source_location = utils::source_location_t(
-                    loc_file_storage_.c_str(), loc_func_storage_.c_str(), source_location.line());
-            }
-        } catch (...) {
+            copy_basic_fields_(other);
+            copy_sso_payload_(other);
+            copy_overflow_payload_(other);
+            copy_cause_(other);
+            copy_stack_frames_(other);
+            repair_source_location_pointers_();
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_context] copy constructor: std::bad_alloc\n");
         }
     }
@@ -87,11 +70,7 @@ namespace error_system::core {
             payload_error_ = other.payload_error_;
             loc_file_storage_ = std::move(other.loc_file_storage_);
             loc_func_storage_ = std::move(other.loc_func_storage_);
-            if (!loc_file_storage_.empty()) {
-                file_name = loc_file_storage_.c_str();
-                source_location = utils::source_location_t(
-                    loc_file_storage_.c_str(), loc_func_storage_.c_str(), source_location.line());
-            }
+            repair_source_location_pointers_();
             other.payload_count_ = 0;
             other.file_name = nullptr;
             other.payload_error_ = false;
@@ -120,12 +99,73 @@ namespace error_system::core {
         other.payload_count_ = 0;
         other.file_name = nullptr;
         other.payload_error_ = false;
+        repair_source_location_pointers_();
+        other.source_location = utils::source_location_t{};
+    }
+
+    /**
+     * @brief 拷贝基本字段
+     */
+    void error_context_t::copy_basic_fields_(const error_context_t& other) {
+        metadata_ = other.metadata_;
+        payload_error_ = other.payload_error_;
+        loc_file_storage_ = other.loc_file_storage_;
+        loc_func_storage_ = other.loc_func_storage_;
+        message = other.message;
+    }
+
+    /**
+     * @brief 拷贝 SSO payload
+     */
+    void error_context_t::copy_sso_payload_(const error_context_t& other) {
+        for (size_t i = 0; i < payload_count_ && i < PAYLOAD_SSO_CAPACITY; ++i) {
+            payload_small_[i] = other.payload_small_[i];
+        }
+    }
+
+    /**
+     * @brief 拷贝溢出 payload
+     */
+    void error_context_t::copy_overflow_payload_(const error_context_t& other) {
+        if (other.payload_overflow_) {
+            payload_overflow_ = std::make_unique<std::unordered_map<std::string, std::string>>(
+                *other.payload_overflow_);
+        }
+    }
+
+    /**
+     * @brief 拷贝因果链
+     */
+    void error_context_t::copy_cause_(const error_context_t& other) {
+        if (other.cause) {
+            cause = other.cause;
+        }
+    }
+
+    /**
+     * @brief 拷贝堆栈帧
+     */
+    void error_context_t::copy_stack_frames_(const error_context_t& other) {
+        if constexpr (error_system::config::feature_flags_t::STACKTRACE_ENABLED) {
+            stack_frames = other.stack_frames;
+        }
+    }
+
+    /**
+     * @brief 修复源位置指针
+     */
+    void error_context_t::repair_source_location_pointers_() noexcept {
         if (!loc_file_storage_.empty()) {
             file_name = loc_file_storage_.c_str();
             source_location = utils::source_location_t(
                 loc_file_storage_.c_str(), loc_func_storage_.c_str(), source_location.line());
         }
-        other.source_location = utils::source_location_t{};
+    }
+
+    void error_context_t::apply_source_location_(const utils::source_location_t& location) noexcept {
+        if constexpr (error_system::config::feature_flags_t::LOCATION_ENABLED) {
+            source_location = location;
+        }
     }
 
     bool error_context_t::is_error() const noexcept {
@@ -140,7 +180,7 @@ namespace error_system::core {
         error_context_t new_code_context = *this;
         try {
             new_code_context.cause = std::make_shared<error_context_t>(underlying);
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_context] wrap: std::bad_alloc\n");
         }
         return new_code_context;
@@ -150,7 +190,7 @@ namespace error_system::core {
         error_context_t new_code_context = *this;
         try {
             new_code_context.cause = std::make_shared<error_context_t>(std::move(underlying));
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_context] wrap(&&): std::bad_alloc\n");
         }
         return new_code_context;
@@ -167,7 +207,7 @@ namespace error_system::core {
     error_context_t& error_context_t::with(std::string_view key, std::string_view value) noexcept {
         try {
             return insert_or_update_payload_(std::string(key), std::string(value));
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_context] with(string_view): std::bad_alloc\n");
             return *this;
         }
@@ -213,7 +253,7 @@ namespace error_system::core {
             for_each_payload([&](const std::string& key, const std::string& value) {
                 result.emplace_back(key, value);
             });
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_context] get_payload: std::bad_alloc\n");
         }
         return result;
@@ -232,7 +272,7 @@ namespace error_system::core {
                     return it->second;
                 }
             }
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_context] get_payload_value: std::bad_alloc\n");
         }
         return std::nullopt;
