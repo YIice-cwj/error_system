@@ -32,15 +32,16 @@ namespace error_system::core {
 
     /**
      * @brief 携带源位置的错误码包装
-     * @details 通过显式构造从 error_code_t 创建时，自动捕获调用者位置
+     * @details 从 error_code_t 隐式构造时，自动捕获调用者位置
      *          利用 source_location_t::current() 作为默认参数，在调用点展开 __builtin_FILE()
-     * @note 构造函数标记 explicit（规范 7.1），调用方需显式构造 located_code_t{code}
+     * @note 构造函数未标记 explicit，允许 error_code_t 隐式转换为 located_code_t，
+     *       使 error_context_t 可直接接受 error_code_t 作为首参数，简化调用方代码
      */
     struct located_code_t {
         error_code_t code;
         utils::source_location_t location;
 
-        explicit located_code_t(error_code_t code, utils::source_location_t location = utils::source_location_t::current()) noexcept
+        located_code_t(error_code_t code, utils::source_location_t location = utils::source_location_t::current()) noexcept
             : code(code), location(location) {}
     };
 
@@ -57,7 +58,7 @@ namespace error_system::core {
      *       而非构造函数体内调用 current()（那样会捕获库内部位置）。
      *
      * @example 基础用法
-     * error_context_t context(located_code_t{ERR_DB_TIMEOUT}, "连接超时: {}ms", 3000);
+     * error_context_t context(ERR_DB_TIMEOUT, "连接超时: {}ms", 3000);
      * context.with("host", "192.168.1.1")
      *        .with("retry_count", "3");
      * std::cout << error_context_serializer_t::to_string(context) << "\n";
@@ -242,16 +243,16 @@ namespace error_system::core {
          *          2. 通过 located_code_t 捕获源位置（调用者真实位置）
          *          3. 根据全局配置校验错误码、抓取堆栈、通知插件
          *          若错误码 sign=1（成功），则跳过步骤 3
-         * @param located_code 携带源位置的错误码（需显式构造 located_code_t{code}）
+         * @param located_code 携带源位置的错误码（支持从 error_code_t 隐式构造）
          * @param message_format 错误信息格式化字符串（支持 {} 占位符）
          * @param args 格式化参数列表
          *
          * @example
-         * // 简单消息（显式构造 located_code_t，自动捕获位置）
-         * error_context_t context(located_code_t{ERR_CONN_FAILED}, "数据库连接失败");
+         * // 简单消息（error_code_t 隐式转换为 located_code_t，自动捕获位置）
+         * error_context_t context(ERR_CONN_FAILED, "数据库连接失败");
          *
          * // 格式化消息
-         * error_context_t context(located_code_t{ERR_TIMEOUT}, "请求超时: {}ms, 重试: {}次", 3000, 2);
+         * error_context_t context(ERR_TIMEOUT, "请求超时: {}ms, 重试: {}次", 3000, 2);
          */
         template <typename... Args>
         error_context_t(located_code_t located_code, std::string message_format, Args&&... args) noexcept;
