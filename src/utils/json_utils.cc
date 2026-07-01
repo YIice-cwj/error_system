@@ -110,7 +110,7 @@ namespace error_system::utils {
                     }
                     full_path += context.current_key;
                     context.temp_dict.emplace(std::move(full_path), token.value);
-                } catch (...) {
+                } catch (const std::bad_alloc&) {
                     std::fprintf(stderr, "[json_utils] handle_expect_value_or_start: emplace failed\n");
                 }
 
@@ -172,15 +172,16 @@ namespace error_system::utils {
 
     /**
      * @brief 获取JSON字典中的字符串值
-     * @details 根据键获取JSON字典中的字符串值
+     * @details 根据键获取JSON字典中的字符串值，若键不存在则返回默认值
      * @param key JSON键，格式为 "key1.key2"
-     * @return std::optional<std::string> 字符串值，若键不存在则返回空可选
+     * @param default_value 键不存在时返回的默认值
+     * @return std::string 若键存在则返回对应值，否则返回 default_value
      */
-    std::optional<std::string> json_dict_t::get_value_or(const std::string& key,
-                                                         const std::string& default_value) const noexcept {
+    std::string json_dict_t::get_value_or(const std::string& key,
+                                          const std::string& default_value) const noexcept {
         auto value = get_value(key);
         if (value.has_value()) {
-            return value;
+            return std::move(*value);
         }
         return default_value;
     }
@@ -286,9 +287,6 @@ namespace error_system::utils {
 
         } catch (const std::bad_alloc&) {
             return std::nullopt;
-        } catch (...) {
-            std::fprintf(stderr, "[json_utils] parse exception caught and ignored\n");
-            return std::nullopt;
         }
     }
 
@@ -327,7 +325,7 @@ namespace error_system::utils {
         std::string result{};
         try {
             result.reserve(value.size() + 16);
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[json_utils] escape_json: reserve failed\n");
         }
 

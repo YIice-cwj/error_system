@@ -59,7 +59,7 @@ namespace error_system::utils {
          * @param default_value 键不存在时返回的默认值
          * @return std::string 若键存在则返回对应值，否则返回 default_value
          */
-        [[nodiscard]] std::optional<std::string> get_value_or(const std::string& key,
+        [[nodiscard]] std::string get_value_or(const std::string& key,
                                                 const std::string& default_value) const noexcept;
 
         /**

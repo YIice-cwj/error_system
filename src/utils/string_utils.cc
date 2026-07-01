@@ -36,7 +36,7 @@ namespace error_system::utils {
             } else {
                 result.reserve(string.size());
             }
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[string_utils] replace_all: reserve failed\n");
         }
 
@@ -101,7 +101,7 @@ namespace error_system::utils {
         std::string result{};
         try {
             result.reserve(total_length);
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[string_utils] join: reserve failed\n");
         }
         result.append(tokens[0]);
@@ -138,7 +138,7 @@ namespace error_system::utils {
         std::string result{};
         try {
             result.resize(string.size());
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[string_utils] to_lower: resize failed\n");
             return {};
         }
@@ -158,7 +158,7 @@ namespace error_system::utils {
         std::string result{};
         try {
             result.resize(string.size());
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[string_utils] to_upper: resize failed\n");
             return {};
         }

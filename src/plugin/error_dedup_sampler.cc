@@ -14,9 +14,14 @@
 #include <chrono>
 #include <limits>
 #include <mutex>
+#include <new>
 #include <unordered_map>
 
 namespace error_system::plugin {
+
+    namespace {
+        constexpr size_t DEDUP_CLEANUP_THRESHOLD = 4096;  ///< 去重表大小超过该阈值时触发过期清理
+    }  // namespace
 
     /**
      * @brief 清理去重表中过期的表项
@@ -71,46 +76,82 @@ namespace error_system::plugin {
     }
 
     /**
+     * @brief 采样判定
+     * @details 在持锁状态下更新 sampled_count_ 并返回是否应被采样抑制。
+     *          采样为原子操作，但计数更新需要锁保护。
+     * @return bool true=被采样抑制，false=通过采样
+     */
+    bool error_dedup_sampler_t::is_sampling_suppressed_() noexcept {
+        constexpr uint64_t SUPPRESS_ALL = std::numeric_limits<uint64_t>::max();
+        if (sample_interval_ == 0) {
+            return false;
+        }
+        if (sample_interval_ == SUPPRESS_ALL) {
+            ++sampled_count_;
+            return true;
+        }
+        const uint64_t seq = sample_counter_.fetch_add(1);
+        if (seq % sample_interval_ == 0) {
+            return false;
+        }
+        ++sampled_count_;
+        return true;
+    }
+
+    /**
+     * @brief 去重判定
+     * @details 在持锁状态下检查 identity code 是否在时间窗口内已放行。
+     *          若未命中或已过期则更新去重表；返回 true 表示被去重抑制。
+     * @param identity 错误码 identity
+     * @param now 当前时间点
+     * @return bool true=被去重抑制，false=通过去重
+     */
+    bool error_dedup_sampler_t::is_dedup_suppressed_(core::code_t identity, time_point_t now) noexcept {
+        if (dedup_window_ms_ == 0) {
+            return false;
+        }
+        auto it = dedup_map_.find(identity);
+        if (it != dedup_map_.end()) {
+            const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - it->second.last_forwarded).count();
+            if (static_cast<uint64_t>(elapsed) < dedup_window_ms_) {
+                ++it->second.suppressed_count;
+                ++deduped_count_;
+                return true;
+            }
+        }
+        try {
+            dedup_map_[identity].last_forwarded = now;
+        } catch (const std::bad_alloc&) {
+            ++forwarded_count_;
+            return false;
+        }
+        if (dedup_map_.size() > DEDUP_CLEANUP_THRESHOLD) {
+            cleanup_expired_(now);
+        }
+        return false;
+    }
+
+    /**
      * @brief 判定错误上下文是否应放行
      * @details 先过采样（廉价，原子操作），再过去重（需锁）。
      *          两关都通过才返回 true。任何一关失败都更新对应统计。
      * @param context 错误上下文
      * @return bool true=放行，false=抑制
      */
-    bool error_dedup_sampler_t::should_forward(const core::error_context_t& context) noexcept {
-        constexpr uint64_t SUPPRESS_ALL = std::numeric_limits<uint64_t>::max();
-        if (sample_interval_ != 0 && sample_interval_ != SUPPRESS_ALL) {
-            const uint64_t seq = sample_counter_.fetch_add(1, std::memory_order_relaxed);
-            if (seq % sample_interval_ != 0) {
-                std::lock_guard<std::mutex> lock(mutex_);
-                ++sampled_count_;
+    bool error_dedup_sampler_t::should_be_forwarded(const core::error_context_t& context) noexcept {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (is_sampling_suppressed_()) {
                 return false;
             }
-        } else if (sample_interval_ == SUPPRESS_ALL) {
-            std::lock_guard<std::mutex> lock(mutex_);
-            ++sampled_count_;
-            return false;
         }
 
         std::lock_guard<std::mutex> lock(mutex_);
         const core::code_t identity = context.get_code().get_identity_code();
         const auto now = clock_t::now();
-
-        if (dedup_window_ms_ > 0) {
-            auto it = dedup_map_.find(identity);
-            if (it != dedup_map_.end()) {
-                const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    now - it->second.last_forwarded).count();
-                if (static_cast<uint64_t>(elapsed) < dedup_window_ms_) {
-                    ++it->second.suppressed_count;
-                    ++deduped_count_;
-                    return false;
-                }
-            }
-            dedup_map_[identity].last_forwarded = now;
-            if (dedup_map_.size() > 4096) {
-                cleanup_expired_(now);
-            }
+        if (is_dedup_suppressed_(identity, now)) {
+            return false;
         }
 
         ++forwarded_count_;
@@ -148,7 +189,7 @@ namespace error_system::plugin {
      * @brief 重置所有统计计数与采样计数器
      * @details 将 deduped/sampled/forwarded 计数归零，并重置采样计数器，
      *          使后续采样从 seq=0 开始（保证测试可重复）。
-     *          注意：并发调用时重置后的计数可能与正在进行的 should_forward 产生竞争，
+     *          注意：并发调用时重置后的计数可能与正在进行的 should_be_forwarded 产生竞争，
      *          仅建议在无并发或测试场景下使用。
      */
     void error_dedup_sampler_t::reset_stats() noexcept {
@@ -156,7 +197,7 @@ namespace error_system::plugin {
         deduped_count_ = 0;
         sampled_count_ = 0;
         forwarded_count_ = 0;
-        sample_counter_.store(0, std::memory_order_relaxed);
+        sample_counter_.store(0);
     }
 
     /**

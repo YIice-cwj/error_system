@@ -101,14 +101,7 @@ namespace error_system::utils {
          * @return std::optional<T> 解析后的数字，失败返回 nullopt
          */
         template <typename T>
-        static inline std::optional<T> parse_number(std::string_view string) noexcept {
-            T value{};
-            auto [pointer, error] = std::from_chars(string.data(), string.data() + string.size(), value);
-            if (error == std::errc{}) {
-                return value;
-            }
-            return std::nullopt;
-        }
+        static std::optional<T> parse_number(std::string_view string) noexcept;
 
         /**
          * @brief 替换字符串中所有的指定子串
@@ -117,7 +110,7 @@ namespace error_system::utils {
          * @param to 替换后的子串
          * @return std::string 替换后的字符串
          */
-        static std::string replace_all(std::string string, std::string_view from, std::string_view to) noexcept;
+        [[nodiscard]] static std::string replace_all(std::string string, std::string_view from, std::string_view to) noexcept;
 
         /**
          * @brief 分割字符串视图
@@ -158,3 +151,5 @@ namespace error_system::utils {
     };
 
 }  // namespace error_system::utils
+
+#include "error_system/utils/details/string_utils.inl"

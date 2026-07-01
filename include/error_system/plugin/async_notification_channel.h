@@ -89,7 +89,7 @@ namespace error_system::plugin {
             try {
                 auto copy = std::make_shared<core::error_context_t>(context);
                 async_queue_.enqueue(std::move(copy));
-            } catch (...) {
+            } catch (const std::bad_alloc&) {
                 std::fprintf(stderr,
                              "[async_notification_channel] enqueue_notification failed to allocate memory\n");
             }

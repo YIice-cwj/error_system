@@ -52,8 +52,8 @@ namespace error_system::plugin {
         if (handler) {
             try {
                 handler(context);
-            } catch (...) {
-                std::fprintf(stderr, "[error_router_plugin] handler exception caught and ignored\n");
+            } catch (const std::exception& e) {
+                std::fprintf(stderr, "[error_router_plugin] handler exception caught and ignored: %s\n", e.what());
             }
         }
     }
@@ -71,7 +71,7 @@ namespace error_system::plugin {
         try {
             std::unique_lock<std::shared_mutex> lock(mutex_);
             specific_handlers_[code.get_code()] = std::move(handler);
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_router_plugin] register_handler_by_code: std::bad_alloc\n");
         }
     }
@@ -89,7 +89,7 @@ namespace error_system::plugin {
         try {
             std::unique_lock<std::shared_mutex> lock(mutex_);
             module_group_handlers_[module_group_id] = std::move(handler);
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_router_plugin] register_handler_by_module_group_id: std::bad_alloc\n");
         }
     }
@@ -107,7 +107,7 @@ namespace error_system::plugin {
         try {
             std::unique_lock<std::shared_mutex> lock(mutex_);
             domain_handlers_[domain] = std::move(handler);
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_router_plugin] register_handler_by_domain: std::bad_alloc\n");
         }
     }

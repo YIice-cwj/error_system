@@ -5,6 +5,8 @@
  * @brief 插件注册表单例实现，支持 sync/async_queue/sync_deferred 三种通知模式
  * @details 提供插件注册、注销、错误事件分发能力。snapshot 基于原子读写实现无锁通知路径；
  *          async_queue 通过通知通道异步排队；sync_deferred 通过线程本地缓冲累积后显式 flush。
+ *          本类实现 core::i_error_notifier_t 接口，并在 instance() 中自注册为默认通知器，
+ *          使 core 层经由抽象接口完成通知，解耦 core→plugin 反向依赖。
  * @author yiice
  * @version 2.3.0
  * @date 2026-06-28
@@ -17,11 +19,16 @@
 #include <mutex>
 #include <vector>
 
+#include "error_system/core/error_context_initializer.h"
+
 namespace error_system::plugin {
 
     std::once_flag plugin_registry_t::once_flag_;
+    std::atomic<bool> plugin_registry_t::initialized_{false};
 
     namespace {
+        constexpr size_t DEFAULT_DEFERRED_BUFFER_SIZE = 1024;  ///< 默认线程本地延迟缓冲容量
+
         /**
          * @brief 线程本地延迟通知缓冲
          * @details sync_deferred 模式下累积错误上下文，由调用方显式 flush。
@@ -30,7 +37,7 @@ namespace error_system::plugin {
          */
         struct deferred_buffer_t {
             std::vector<core::error_context_t> buffer;
-            size_t max_size{1024};
+            size_t max_size{DEFAULT_DEFERRED_BUFFER_SIZE};
             bool overflow_dropped{false};
             bool flushing{false};
         };
@@ -113,11 +120,11 @@ namespace error_system::plugin {
             if (context.get_code().get_level() >= plugin->min_level()) {
                 try {
                     plugin->on_error(context);
-                } catch (...) {
+                } catch (const std::exception& e) {
                     auto name = plugin->name();
                     std::fprintf(stderr,
-                                 "[plugin_registry] plugin '%.*s' on_error threw exception\n",
-                                 static_cast<int>(name.size()), name.data());
+                                 "[plugin_registry] plugin '%.*s' on_error threw exception: %s\n",
+                                 static_cast<int>(name.size()), name.data(), e.what());
                 }
             }
         }
@@ -137,7 +144,7 @@ namespace error_system::plugin {
         }
         try {
             tls_deferred_.buffer.push_back(context);
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr,
                          "[plugin_registry] enqueue_deferred_notification: std::bad_alloc\n");
             tls_deferred_.overflow_dropped = true;
@@ -159,11 +166,11 @@ namespace error_system::plugin {
                 }
                 try {
                     plugin->on_error(context);
-                } catch (...) {
+                } catch (const std::exception& e) {
                     auto name = plugin->name();
                     std::fprintf(stderr,
-                                 "[plugin_registry] deferred plugin '%.*s' on_error threw\n",
-                                 static_cast<int>(name.size()), name.data());
+                                 "[plugin_registry] deferred plugin '%.*s' on_error threw: %s\n",
+                                 static_cast<int>(name.size()), name.data(), e.what());
                 }
             }
         }
@@ -250,7 +257,9 @@ namespace error_system::plugin {
 
     /**
      * @brief 获取单例实例
-     * @details 使用 std::call_once + 函数局部静态保证线程安全的单例初始化
+     * @details 使用 std::call_once + 函数局部静态保证线程安全的单例初始化。
+     *          初始化完成后自注册为默认错误通知器（仅在未设置自定义 notifier 时）。
+     *          若已存在自定义通知器，输出提示信息，避免用户误以为插件注册表已被使用。
      * @return 单例引用
      */
     plugin_registry_t& plugin_registry_t::instance() noexcept {
@@ -258,8 +267,21 @@ namespace error_system::plugin {
         std::call_once(once_flag_, [] {
             static plugin_registry_t instance;
             instance_ptr = &instance;
+            initialized_.store(true, std::memory_order_release);
+            auto* existing_notifier = core::error_context_initializer_t::get_error_notifier();
+            if (existing_notifier == nullptr) {
+                core::error_context_initializer_t::set_error_notifier(instance_ptr);
+            } else if (existing_notifier != instance_ptr) {
+                std::fprintf(stderr,
+                             "[plugin_registry] instance: custom error notifier already set; "
+                             "plugin_registry_t will not receive error notifications.\n");
+            }
         });
         return *instance_ptr;
+    }
+
+    bool plugin_registry_t::is_initialized() noexcept {
+        return initialized_.load(std::memory_order_acquire);
     }
 
 }  // namespace error_system::plugin

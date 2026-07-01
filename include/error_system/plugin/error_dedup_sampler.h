@@ -1,8 +1,9 @@
 #pragma once
-#include <atomic>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
+
+#include <atomic>
+#include <chrono>
 #include <limits>
 #include <mutex>
 #include <unordered_map>
@@ -32,7 +33,7 @@ namespace error_system::plugin {
      *   error_dedup_sampler_t sampler;
      *   sampler.set_dedup_window_ms(1000);   // 同一 identity code 1s 内只放行一次
      *   sampler.set_sample_rate(0.1);        // 放行 10%（每 10 个放行 1 个）
-     *   if (sampler.should_forward(ctx)) {
+     *   if (sampler.should_be_forwarded(ctx)) {
      *       channel.enqueue_notification(ctx);
      *   }
      * @endcode
@@ -97,6 +98,22 @@ namespace error_system::plugin {
          */
         void cleanup_expired_(time_point_t now) noexcept;
 
+        /**
+         * @brief 采样判定
+         * @details 在持锁状态下更新 sampled_count_ 并返回是否应被采样抑制。
+         * @return bool true=被采样抑制，false=通过采样
+         */
+        bool is_sampling_suppressed_() noexcept;
+
+        /**
+         * @brief 去重判定
+         * @details 在持锁状态下检查 identity code 是否在时间窗口内已放行。
+         * @param identity 错误码 identity
+         * @param now 当前时间点
+         * @return bool true=被去重抑制，false=通过去重
+         */
+        bool is_dedup_suppressed_(core::code_t identity, time_point_t now) noexcept;
+
     public:
         error_dedup_sampler_t() noexcept = default;
         ~error_dedup_sampler_t() noexcept = default;
@@ -130,7 +147,7 @@ namespace error_system::plugin {
          * @param context 错误上下文
          * @return bool true=放行，false=抑制
          */
-        [[nodiscard]] bool should_forward(const core::error_context_t& context) noexcept;
+        [[nodiscard]] bool should_be_forwarded(const core::error_context_t& context) noexcept;
 
         /**
          * @brief 获取被去重抑制的数量
@@ -154,7 +171,7 @@ namespace error_system::plugin {
          * @brief 重置所有统计计数与采样计数器
          * @details 将 deduped/sampled/forwarded 计数归零，并重置采样计数器，
          *          使后续采样从 seq=0 开始（保证测试可重复）。
-         *          注意：并发调用时重置后的计数可能与正在进行的 should_forward 产生竞争，
+         *          注意：并发调用时重置后的计数可能与正在进行的 should_be_forwarded 产生竞争，
          *          仅建议在无并发或测试场景下使用。
          */
         void reset_stats() noexcept;

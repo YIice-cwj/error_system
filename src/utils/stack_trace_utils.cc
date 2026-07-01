@@ -18,6 +18,8 @@ namespace error_system::utils {
 
     namespace {
 #if defined(__APPLE__) || defined(__linux__)
+        constexpr size_t MAX_LEADING_OFFSET_LENGTH = 10;  ///< 栈帧字符串前导地址/偏移的最大长度，超出则不再裁剪
+
         /**
          * @brief 抓取当前线程的函数调用栈
          * @param buffer 存储栈帧的缓冲区
@@ -60,7 +62,7 @@ namespace error_system::utils {
                 }
 
                 auto first_space = symbol_str.find_first_not_of("0123456789 ");
-                if (first_space != std::string::npos && first_space > 0 && first_space < 10) {
+                if (first_space != std::string::npos && first_space > 0 && first_space < MAX_LEADING_OFFSET_LENGTH) {
                     symbol_str = symbol_str.substr(first_space);
                 }
 
@@ -104,7 +106,7 @@ namespace error_system::utils {
                 std::ostringstream oss;
                 oss << "[Unknown Symbol] at " << address;
                 return oss.str();
-            } catch (...) {
+            } catch (const std::bad_alloc&) {
                 return "[Unknown Symbol]";
             }
         }
@@ -180,10 +182,8 @@ namespace error_system::utils {
      * @param max_frames 最大抓取深度
      * @return std::vector<std::string> 每一层调用栈的可读字符串
      */
-    std::vector<std::string> stack_trace_utils_t::generate(int skip_frames, int max_frames) noexcept {
+    std::vector<std::string> stack_trace_utils_t::generate([[maybe_unused]] int skip_frames, [[maybe_unused]] int max_frames) noexcept {
 #ifndef ERROR_SYSTEM_ENABLE_STACKTRACE
-        (void)skip_frames;
-        (void)max_frames;
         return {};
 
 #else

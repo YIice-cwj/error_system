@@ -1,12 +1,14 @@
 #pragma once
-#include <atomic>
 #include <cstdio>
+
+#include <atomic>
 #include <memory>
 #include <new>
 #include <shared_mutex>
 #include <string_view>
 #include <vector>
 
+#include "error_system/core/i_error_notifier.h"
 #include "error_system/plugin/async_notification_channel.h"
 #include "error_system/plugin/i_error_plugin.h"
 
@@ -18,6 +20,18 @@
  *          支持同步（默认）和异步队列两种通知模式。
  *          使用 RCU（Read-Copy-Update）快照机制，notify_error 热路径零拷贝无锁读取。
  *          异步通知通道由 async_notification_channel_t 封装，自动管理后台线程生命周期。
+ *
+ * @section init_timing 初始化时序与最佳实践
+ * - 插件注册表必须在构造任何 error_context_t 之前完成初始化，否则错误通知会被静默丢弃。
+ * - 调用 plugin_registry_t::instance() 会自动完成初始化，并自注册为默认通知器。
+ * - 若需要自定义通知器，应在调用 instance() 之前通过
+ *   error_context_initializer_t::set_error_notifier() 设置；否则 instance() 会覆盖为默认值。
+ * - 在 async_queue / sync_deferred 模式下，后台线程/线程本地缓冲的生命周期由注册表管理，
+ *   无需手动创建线程。
+ * - 线程安全：register_plugin / unregister_plugin / notify_error 均线程安全；
+ *   flush_deferred_notifications / pending_deferred_notifications / clear_deferred_notifications
+ *   仅操作当前线程的缓冲，必须由同一线程调用。
+ *
  * @author yiice
  * @version 2.3.0
  * @date 2026-05-01
@@ -31,8 +45,11 @@ namespace error_system::plugin {
      *          register_plugin_ref() 提供非持有引用注册（用于单例等场景）。
      *          异步模式下自动启动后台工作线程处理通知队列，
      *          队列处理回调转发至本类的 notify_error。
+     *          实现 core::i_error_notifier_t 接口，通过 instance() 自注册到
+     *          error_context_initializer_t，使 core 层经由抽象接口完成通知，
+     *          解耦 core→plugin 反向依赖（依赖倒置原则）。
      */
-    class plugin_registry_t {
+    class plugin_registry_t : public core::i_error_notifier_t {
     public:
         using plugin_pointer_t = i_error_plugin_t*;
         using unique_plugin_ptr_t = std::unique_ptr<i_error_plugin_t>;
@@ -72,6 +89,13 @@ namespace error_system::plugin {
          */
         static std::once_flag once_flag_;
 
+        /**
+         * @brief 单例是否已完成初始化
+         * @details 用于检测在 instance() 之前误用非静态成员函数的时序错误。
+         *          由 instance() 在 std::call_once 中设置为 true。
+         */
+        static std::atomic<bool> initialized_;
+
         plugin_registry_t() noexcept;
 
         ~plugin_registry_t() noexcept = default;
@@ -95,18 +119,7 @@ namespace error_system::plugin {
          * @param modifier 修改新副本与 owned_plugins_ 的回调函数
          */
         template <typename Modifier>
-        void update_snapshot_(Modifier&& modifier) noexcept {
-            try {
-                std::unique_lock<std::shared_mutex> lock(plugins_mutex_);
-                auto old_snapshot = std::atomic_load(&plugins_snapshot_);
-                auto new_snapshot_ptr = std::make_shared<plugin_list_t>(*old_snapshot);
-                modifier(*new_snapshot_ptr, owned_plugins_);
-                std::atomic_store(&plugins_snapshot_,
-                                  std::static_pointer_cast<const plugin_list_t>(new_snapshot_ptr));
-            } catch (const std::bad_alloc&) {
-                std::fprintf(stderr, "[plugin_registry] update_snapshot_: std::bad_alloc\n");
-            }
-        }
+        void update_snapshot_(Modifier&& modifier) noexcept;
 
     public:
         /**
@@ -137,18 +150,20 @@ namespace error_system::plugin {
          * @details 通过 RCU 快照无锁读取插件列表，依次调用每个插件的 on_error()，
          *          异常不会向外传播。在 sync 模式下由 error_context_t 构造时直接调用。
          *          同时作为异步通道出队上下文的处理回调。
+         *          实现 core::i_error_notifier_t 接口。
          * @param context 错误上下文
          */
-        void notify_error(const core::error_context_t& context) noexcept;
+        void notify_error(const core::error_context_t& context) noexcept override;
 
         /**
          * @brief 异步入队错误通知
          * @details 将错误上下文副本推入后台队列，由工作线程异步处理。
          *          在 async_queue 模式下由 error_context_t 构造时调用。
          *          首次调用时自动启动后台工作线程。
+         *          实现 core::i_error_notifier_t 接口。
          * @param context 错误上下文
          */
-        void enqueue_notification(const core::error_context_t& context) noexcept;
+        void enqueue_notification(const core::error_context_t& context) noexcept override;
 
         /**
          * @brief 累积延迟通知到线程本地缓冲（sync_deferred 模式）
@@ -157,9 +172,10 @@ namespace error_system::plugin {
          *          适用于请求处理等批处理场景：在请求处理期间累积错误，
          *          请求结束时一次性 flush，避免每个错误都阻塞在插件回调上。
          *          缓冲满时（默认 1024）丢弃新通知并设置溢出标志。
+         *          实现 core::i_error_notifier_t 接口。
          * @param context 错误上下文
          */
-        void enqueue_deferred_notification(const core::error_context_t& context) noexcept;
+        void enqueue_deferred_notification(const core::error_context_t& context) noexcept override;
 
         /**
          * @brief 触发当前线程累积的所有延迟通知
@@ -242,9 +258,22 @@ namespace error_system::plugin {
 
         /**
          * @brief 获取单例实例
+         * @details 首次调用时完成单例构造，并尝试自注册为默认错误通知器。
+         *          若调用前已通过 error_context_initializer_t::set_error_notifier()
+         *          设置自定义通知器，则保留该通知器并输出提示。
          * @return plugin_registry_t& 单例引用
          */
         static plugin_registry_t& instance() noexcept;
+
+        /**
+         * @brief 判断插件注册表单例是否已完成初始化
+         * @details 用于 main 函数或测试在构造 error_context_t 前确认插件系统已就绪。
+         *          返回 true 不保证已有插件注册，只说明 instance() 已被调用过。
+         * @return bool true=已初始化，false=未初始化
+         */
+        [[nodiscard]] static bool is_initialized() noexcept;
     };
 
 }  // namespace error_system::plugin
+
+#include "error_system/plugin/details/plugin_registry.inl"

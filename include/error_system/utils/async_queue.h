@@ -57,68 +57,33 @@ namespace error_system::utils {
          *          必须在设置 running_ = false 之后再 notify，否则 worker 可能
          *          因 running_ 仍为 true 而回到 wait 状态，造成 join 死锁。
          */
-        void stop_() noexcept {
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                if (!running_.load()) {
-                    return;
-                }
-                running_.store(false);
-            }
-            cv_.notify_all();
-            if (worker_.joinable()) {
-                worker_.join();
-            }
-        }
+        void stop_() noexcept;
 
         /**
          * @brief 后台工作线程主循环
          * @details 阻塞等待队列有数据或退出信号，取出任务后调用处理器。
          *          处理器异常被捕获并忽略，不影响工作线程继续运行。
          */
-        void worker_loop_() noexcept {
-            while (true) {
-                value_type_t item;
-                {
-                    std::unique_lock<std::mutex> lock(mutex_);
-                    cv_.wait(lock, [this] {
-                        return !queue_.empty() || !running_.load();
-                    });
-                    if (queue_.empty() && !running_.load()) {
-                        return;
-                    }
-                    item = std::move(queue_.front());
-                    queue_.pop();
-                }
-                try {
-                    processor_(item);
-                } catch (...) {
-                    std::fprintf(stderr, "[async_queue] processor exception caught and ignored\n");
-                }
-            }
-        }
+        void worker_loop_() noexcept;
 
     public:
         /**
          * @brief 构造函数
          * @param processor 任务处理器，对每个出队元素调用 processor(item)
          */
-        explicit async_queue_t(processor_t processor) noexcept
-            : processor_(std::move(processor)) {}
+        explicit async_queue_t(processor_t processor) noexcept;
 
         /**
          * @brief 析构函数，自动停止工作线程
          */
-        ~async_queue_t() noexcept {
-            stop_();
-        }
+        ~async_queue_t() noexcept;
 
         async_queue_t(const async_queue_t&) = delete;
 
         async_queue_t& operator=(const async_queue_t&) = delete;
-        
+
         async_queue_t(async_queue_t&&) = delete;
-        
+
         async_queue_t& operator=(async_queue_t&&) = delete;
 
         /**
@@ -129,67 +94,33 @@ namespace error_system::utils {
          * @param item 要处理的任务（移动语义）
          * @return bool 是否成功入队
          */
-        bool enqueue(value_type_t item) noexcept {
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                if (!running_.load()) {
-                    try {
-                        worker_ = std::thread(&async_queue_t::worker_loop_, this);
-                        running_.store(true);
-                    } catch (...) {
-                        std::fprintf(stderr, "[async_queue] enqueue: failed to create worker thread\n");
-                        return false;  // 线程启动失败，拒绝入队
-                    }
-                }
-                if (max_size_ > 0 && queue_.size() >= max_size_) {
-                    return false;
-                }
-                try {
-                    queue_.push(std::move(item));
-                } catch (...) {
-                    std::fprintf(stderr, "[async_queue] enqueue: std::bad_alloc\n");
-                    return false;
-                }
-            }
-            cv_.notify_one();
-            return true;
-        }
+        bool enqueue(value_type_t item) noexcept;
 
         /**
          * @brief 设置最大队列容量（背压控制）
          * @param size 最大容量，0 表示无限制
          */
-        void set_max_size(size_t size) noexcept {
-            std::lock_guard<std::mutex> lock(mutex_);
-            max_size_ = size;
-        }
+        void set_max_size(size_t size) noexcept;
 
         /**
          * @brief 获取最大队列容量
          * @return size_t 最大容量，0 表示无限制
          */
-        [[nodiscard]] size_t max_size() const noexcept {
-            std::lock_guard<std::mutex> lock(mutex_);
-            return max_size_;
-        }
+        [[nodiscard]] size_t max_size() const noexcept;
 
         /**
          * @brief 获取当前队列中待处理任务数
          * @return size_t 队列大小
          */
-        [[nodiscard]] size_t size() const noexcept {
-            std::lock_guard<std::mutex> lock(mutex_);
-            return queue_.size();
-        }
+        [[nodiscard]] size_t size() const noexcept;
 
         /**
          * @brief 判断队列是否为空
          * @return bool 是否为空
          */
-        [[nodiscard]] bool empty() const noexcept {
-            std::lock_guard<std::mutex> lock(mutex_);
-            return queue_.empty();
-        }
+        [[nodiscard]] bool empty() const noexcept;
     };
 
 }  // namespace error_system::utils
+
+#include "details/async_queue.inl"
