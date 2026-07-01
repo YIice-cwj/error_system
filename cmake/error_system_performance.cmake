@@ -18,6 +18,7 @@ function(error_system_apply_warnings target_name)
         -Wshadow -Wconversion -Wsign-conversion
         -Wdouble-promotion -Wnull-dereference
         -Wformat=2 -Wnon-virtual-dtor
+        -Wunused -Wunused-parameter -Wunused-variable -Wunused-function
     )
     if(ERROR_SYSTEM_WARNINGS_AS_ERRORS)
         target_compile_options(${target_name} PRIVATE -Werror)
