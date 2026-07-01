@@ -18,6 +18,10 @@
  */
 namespace error_system::migration {
 
+    namespace {
+        constexpr size_t MAX_MIGRATION_RECURSION_DEPTH = 16;  ///< 迁移递归查找的最大深度
+    }  // namespace
+
     using error_system::core::code_t;
     using error_system::core::error_code_t;
 
@@ -33,24 +37,21 @@ namespace error_system::migration {
     }
 
     void error_migration_registry_t::mark_deprecated(error_code_t code,
-                                                      std::string_view reason,
-                                                      std::optional<error_code_t> replacement,
-                                                      std::string_view since_version,
-                                                      std::string_view removal_version) noexcept {
+                                                      const deprecation_meta_t& meta) noexcept {
         try {
             std::unique_lock<std::shared_mutex> lock(mutex_);
             deprecation_info_t info;
             info.deprecated = true;
-            info.reason = std::string(reason);
-            info.replacement = replacement;
-            info.since_version = std::string(since_version);
-            info.removal_version = std::string(removal_version);
+            info.reason = meta.reason;
+            info.replacement = meta.replacement;
+            info.since_version = meta.since_version;
+            info.removal_version = meta.removal_version;
             deprecations_[code.get_identity_code()] = std::move(info);
 
-            if (replacement) {
-                migrations_[code.get_identity_code()] = replacement->get_identity_code();
+            if (meta.replacement) {
+                migrations_[code.get_identity_code()] = meta.replacement->get_identity_code();
             }
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_migration] mark_deprecated: std::bad_alloc\n");
         }
     }
@@ -59,7 +60,7 @@ namespace error_system::migration {
         try {
             std::unique_lock<std::shared_mutex> lock(mutex_);
             migrations_[old_code.get_identity_code()] = new_code.get_identity_code();
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_migration] register_migration: std::bad_alloc\n");
         }
     }
@@ -72,7 +73,7 @@ namespace error_system::migration {
         }
         try {
             return it->second;
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_migration] get_deprecation_info: std::bad_alloc\n");
             return std::nullopt;
         }
@@ -96,7 +97,7 @@ namespace error_system::migration {
     error_code_t error_migration_registry_t::migrate_recursive(error_code_t old_code) const noexcept {
         std::shared_lock<std::shared_mutex> lock(mutex_);
         code_t current = old_code.get_identity_code();
-        for (size_t i = 0; i < 16; ++i) {
+        for (size_t i = 0; i < MAX_MIGRATION_RECURSION_DEPTH; ++i) {
             auto it = migrations_.find(current);
             if (it == migrations_.end()) {
                 break;
@@ -150,7 +151,7 @@ namespace error_system::migration {
             for (const auto& [identity, _] : deprecations_) {
                 codes.push_back(identity);
             }
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_migration] get_deprecated_codes: std::bad_alloc\n");
         }
         return codes;

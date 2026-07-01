@@ -1,6 +1,5 @@
 #pragma once
 #include <cstdint>
-#include <string_view>
 
 /**
  * @file http_status.h
@@ -16,15 +15,15 @@ namespace error_system::mapping {
 
     /**
      * @brief HTTP 状态码
-     * @details 包装常用 HTTP 状态码，提供 to_string / from_int / is_valid 转换。
-     *          枚举值嵌在类内，http_status_t::ok 等用法保持兼容。
+     * @details 包装常用 HTTP 状态码，提供 c_str / from_int / is_valid 转换。
+     *          枚举值嵌在类内，通过 http_status_t::value_t::ok 形式访问。
      *
      * @example
      * @code
-     * http_status_t s = http_status_t::service_unavailable;
+     * http_status_t s{http_status_t::value_t::service_unavailable};
      * s.to_int();       // → 503
-     * s.to_string();    // → "Service Unavailable"
-     * http_status_t::from_int(503); // → http_status_t::service_unavailable
+     * s.c_str();        // → "Service Unavailable"
+     * http_status_t::from_int(503); // → http_status_t::value_t::service_unavailable
      * @endcode
      */
     class http_status_t {
@@ -33,7 +32,7 @@ namespace error_system::mapping {
          * @brief HTTP 状态码枚举值
          * @details 数值与 HTTP 标准一致（RFC 7231）
          */
-        enum value_t : uint16_t {
+        enum class value_t : uint16_t {
             ok = 200,
 
             bad_request = 400,
@@ -55,6 +54,10 @@ namespace error_system::mapping {
             gateway_timeout = 504,
         };
 
+    private:
+        value_t value_{value_t::ok};
+
+    public:
         /**
          * @brief 默认构造，值为 ok
          */
@@ -64,14 +67,14 @@ namespace error_system::mapping {
          * @brief 从枚举值构造
          * @param value HTTP 状态码枚举值
          */
-        constexpr http_status_t(value_t value) noexcept : value_(value) {}
+        constexpr explicit http_status_t(value_t value) noexcept : value_(value) {}
 
         /**
          * @brief 从整数构造（用于接收外部 HTTP 响应码）
          * @param code HTTP 状态码整数值
          */
         constexpr explicit http_status_t(uint16_t code) noexcept
-            : value_(is_valid(code) ? static_cast<value_t>(code) : internal_server_error) {}
+            : value_(is_valid(code) ? static_cast<value_t>(code) : value_t::internal_server_error) {}
 
         /**
          * @brief 获取底层枚举值
@@ -92,7 +95,7 @@ namespace error_system::mapping {
          * @return const char* 状态码描述（如 "OK"、"Service Unavailable"）
          * @note 实现位于 http_status.cc（非 constexpr，分离以遵循规范第 5 条）
          */
-        [[nodiscard]] const char* to_string() const noexcept;
+        [[nodiscard]] const char* c_str() const noexcept;
 
         /**
          * @brief 从整数构造 HTTP 状态码
@@ -101,24 +104,24 @@ namespace error_system::mapping {
          */
         [[nodiscard]] static constexpr http_status_t from_int(int value) noexcept {
             switch (value) {
-                case 200: return http_status_t{ok};
-                case 400: return http_status_t{bad_request};
-                case 401: return http_status_t{unauthorized};
-                case 403: return http_status_t{forbidden};
-                case 404: return http_status_t{not_found};
-                case 405: return http_status_t{method_not_allowed};
-                case 408: return http_status_t{request_timeout};
-                case 409: return http_status_t{conflict};
-                case 410: return http_status_t{gone};
-                case 413: return http_status_t{payload_too_large};
-                case 414: return http_status_t{uri_too_long};
-                case 429: return http_status_t{too_many_requests};
-                case 500: return http_status_t{internal_server_error};
-                case 501: return http_status_t{not_implemented};
-                case 502: return http_status_t{bad_gateway};
-                case 503: return http_status_t{service_unavailable};
-                case 504: return http_status_t{gateway_timeout};
-                default:  return http_status_t{internal_server_error};
+                case 200: return http_status_t{value_t::ok};
+                case 400: return http_status_t{value_t::bad_request};
+                case 401: return http_status_t{value_t::unauthorized};
+                case 403: return http_status_t{value_t::forbidden};
+                case 404: return http_status_t{value_t::not_found};
+                case 405: return http_status_t{value_t::method_not_allowed};
+                case 408: return http_status_t{value_t::request_timeout};
+                case 409: return http_status_t{value_t::conflict};
+                case 410: return http_status_t{value_t::gone};
+                case 413: return http_status_t{value_t::payload_too_large};
+                case 414: return http_status_t{value_t::uri_too_long};
+                case 429: return http_status_t{value_t::too_many_requests};
+                case 500: return http_status_t{value_t::internal_server_error};
+                case 501: return http_status_t{value_t::not_implemented};
+                case 502: return http_status_t{value_t::bad_gateway};
+                case 503: return http_status_t{value_t::service_unavailable};
+                case 504: return http_status_t{value_t::gateway_timeout};
+                default:  return http_status_t{value_t::internal_server_error};
             }
         }
 
@@ -143,7 +146,7 @@ namespace error_system::mapping {
          * @brief 是否为成功类状态码（2xx）
          */
         [[nodiscard]] constexpr bool is_success() const noexcept {
-            return value_ == ok;
+            return value_ == value_t::ok;
         }
 
         /**
@@ -169,9 +172,6 @@ namespace error_system::mapping {
          * @brief 不等比较
          */
         constexpr bool operator!=(http_status_t other) const noexcept { return value_ != other.value_; }
-
-    private:
-        value_t value_{ok};
     };
 
 }  // namespace error_system::mapping

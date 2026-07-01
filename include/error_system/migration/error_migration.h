@@ -63,6 +63,33 @@ namespace error_system::migration {
     };
 
     /**
+     * @brief 废弃元数据（mark_deprecated 参数封装）
+     * @details 将 mark_deprecated 的后 4 个参数封装为结构体，提升可读性（规范 7.3：函数参数超过 4 个时封装为结构体）。
+     *          调用方使用聚合初始化构造，如 `{"废弃原因", replacement, "2.0.0", "3.0.0"}`。
+     */
+    struct deprecation_meta_t {
+        /**
+         * @brief 废弃说明（人类可读，建议包含迁移指引）
+         */
+        std::string reason;
+
+        /**
+         * @brief 替代错误码（nullopt 表示无直接替代）
+         */
+        std::optional<error_system::core::error_code_t> replacement{};
+
+        /**
+         * @brief 废弃起始版本（语义化版本字符串，如 "2.0.0"）
+         */
+        std::string since_version;
+
+        /**
+         * @brief 预期完全移除的版本（空表示未定）
+         */
+        std::string removal_version;
+    };
+
+    /**
      * @brief 错误码废弃与迁移注册器
      * @details 单例模式，管理错误码的废弃状态与旧码→新码迁移映射。
      *          查询接口返回值副本，避免锁释放后被另一线程修改导致悬垂引用。
@@ -75,7 +102,7 @@ namespace error_system::migration {
      * @example
      * @code
      * auto& reg = error_migration_registry_t::instance();
-     * reg.mark_deprecated(ERR_OLD_CODE, "使用 ERR_NEW_CODE 替代", ERR_NEW_CODE, "2.0.0", "3.0.0");
+     * reg.mark_deprecated(ERR_OLD_CODE, {"使用 ERR_NEW_CODE 替代", ERR_NEW_CODE, "2.0.0", "3.0.0"});
      *
      * if (auto info = reg.get_deprecation_info(ERR_OLD_CODE); info && info->deprecated) {
      *     log_warn("错误码 {} 已废弃: {}", ERR_OLD_CODE, info->reason);
@@ -118,16 +145,10 @@ namespace error_system::migration {
         /**
          * @brief 标记错误码为废弃
          * @param code 被废弃的错误码
-         * @param reason 废弃原因（建议包含迁移指引）
-         * @param replacement 替代错误码（可选，nullopt 表示无直接替代）
-         * @param since_version 废弃起始版本
-         * @param removal_version 预期移除版本（空表示未定）
+         * @param meta 废弃元数据（包含废弃原因、替代码、版本信息）
          */
         void mark_deprecated(error_system::core::error_code_t code,
-                             std::string_view reason,
-                             std::optional<error_system::core::error_code_t> replacement = std::nullopt,
-                             std::string_view since_version = "",
-                             std::string_view removal_version = "") noexcept;
+                             const deprecation_meta_t& meta) noexcept;
 
         /**
          * @brief 建立迁移映射（不标记废弃）

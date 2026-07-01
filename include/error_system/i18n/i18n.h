@@ -1,5 +1,4 @@
 #pragma once
-#include <atomic>
 #include <cstdint>
 #include <mutex>
 #include <optional>
@@ -23,10 +22,12 @@
  *          不依赖第三方 i18n 库，避免引入 ICU/gettext 等重依赖。
  *
  *          语言区域枚举定义见 locale.h（locale_t）。
+ *          locale 配置统一由 config::i18n_config_t 管理，本类仅保留消息目录，
+ *          查询时从 i18n_config_t 读取输出/默认 locale，避免双源配置不同步。
  * @note 本头文件仅含声明，实现见 i18n.cc
  * @author yiice
- * @version 2.1.0
- * @date 2026-06-28
+ * @version 2.2.0
+ * @date 2026-07-01
  * @copyright Copyright (c) 2026
  */
 namespace error_system::i18n {
@@ -37,25 +38,29 @@ namespace error_system::i18n {
     /**
      * @brief 多语言消息目录
      * @details 单例模式，按 locale_t 枚举分组管理错误码的本地化描述。
-     *          查询路径：active locale → default locale → 空字符串
-     *          （由调用方决定回退到 registry 默认描述）。
-     *
-     * @note 设计取舍：使用 unordered_map<locale_t, unordered_map<code, string>> 两级哈希。
-     *       对 locale 数量通常 < 10 的场景，外层哈希常数开销可忽略。
-     *       内层按 code_t（uint64）哈希，O(1) 查找。
-     *
-     * @example
-     * @code
-     * auto& catalog = i18n_t::instance();
-     * catalog.set_default_locale(locale_t::zh_CN);
-     * catalog.register_message(locale_t::en_US, ERR_DB_TIMEOUT, "Database connection timeout");
-     * catalog.register_message(locale_t::zh_CN, ERR_DB_TIMEOUT, "数据库连接超时");
-     *
-     * // 运行时按当前 locale 查询
-     * catalog.set_active_locale(locale_t::en_US);
-     * auto message = catalog.get_message(ERR_DB_TIMEOUT);
-     * @endcode
-     */
+ *          查询路径：output locale → default locale → 空字符串
+ *          （由调用方决定回退到 registry 默认描述）。
+ *
+ *          locale 状态不再由本类持有，统一委托给 config::i18n_config_t。
+ *          set_default_locale / set_active_locale 等接口保留以兼容现有调用方，
+ *          内部直接转发到 i18n_config_t 的对应静态方法。
+ *
+ * @note 设计取舍：使用 unordered_map<locale_t, unordered_map<code, string>> 两级哈希。
+ *       对 locale 数量通常 < 10 的场景，外层哈希常数开销可忽略。
+ *       内层按 code_t（uint64）哈希，O(1) 查找。
+ *
+ * @example
+ * @code
+ * auto& catalog = i18n_t::instance();
+ * catalog.set_default_locale(locale_t::zh_CN);
+ * catalog.register_message(locale_t::en_US, ERR_DB_TIMEOUT, "Database connection timeout");
+ * catalog.register_message(locale_t::zh_CN, ERR_DB_TIMEOUT, "数据库连接超时");
+ *
+ * // 运行时按当前 locale 查询
+ * catalog.set_active_locale(locale_t::en_US);
+ * auto message = catalog.get_message(ERR_DB_TIMEOUT);
+ * @endcode
+ */
     class i18n_t {
     public:
         using message_t = std::string;
@@ -63,27 +68,9 @@ namespace error_system::i18n {
 
     private:
         /**
-         * @brief active_locale_ 的"无激活 locale"哨兵值
-         * @details 使用 uint8_t 最大值作为哨兵，避免污染 locale_t 枚举。
-         *          locale_t 共 15 个值（0-14），255 永不冲突。
-         */
-        static constexpr uint8_t ACTIVE_LOCALE_NONE_ = 255;
-
-        /**
          * @brief locale → (code identity → message) 的两级映射
          */
         std::unordered_map<locale_t, std::unordered_map<code_identity_t, message_t>> catalog_;
-
-        /**
-         * @brief 默认 locale（回退查询使用）
-         */
-        locale_t default_locale_{locale_t::zh_CN};
-
-        /**
-         * @brief 当前激活 locale（运行时切换，原子操作）
-         * @details 值为 ACTIVE_LOCALE_NONE_ 时表示未设置，回退到 default_locale_。
-         */
-        std::atomic<uint8_t> active_locale_{ACTIVE_LOCALE_NONE_};
 
         /**
          * @brief 读写锁，读多写少场景
@@ -132,45 +119,51 @@ namespace error_system::i18n {
          * @details 查询顺序：指定 locale → 默认 locale → 空字符串
          * @param locale 语言区域
          * @param code 错误码
-         * @return std::string_view 本地化描述，未命中返回空 string_view
+         * @return std::string 本地化描述，未命中返回空 string
          */
-        [[nodiscard]] std::string_view get_message(locale_t locale, error_code_t code) const noexcept;
+        [[nodiscard]] std::string get_message(locale_t locale, error_code_t code) const noexcept;
 
         /**
-         * @brief 使用当前激活 locale 查询
-         * @details 若未设置激活 locale，使用默认 locale 查询
+         * @brief 使用当前输出 locale 查询
+         * @details 从 config::i18n_config_t 解析最终输出 locale（output_locale 优先，
+         *          未设置则回退 default_locale），未命中时再回退 default_locale。
          * @param code 错误码
-         * @return std::string_view 本地化描述，未命中返回空 string_view
+         * @return std::string 本地化描述，未命中返回空 string
          */
-        [[nodiscard]] std::string_view get_message(error_code_t code) const noexcept;
+        [[nodiscard]] std::string get_message(error_code_t code) const noexcept;
 
         /**
          * @brief 设置默认 locale（回退查询使用）
+         * @details 委托给 config::i18n_config_t::set_default_locale。
          * @param locale 语言区域
          */
         void set_default_locale(locale_t locale) noexcept;
 
         /**
          * @brief 获取默认 locale
+         * @details 委托给 config::i18n_config_t::get_default_locale。
          * @return locale_t 默认 locale
          */
         [[nodiscard]] locale_t get_default_locale() const noexcept;
 
         /**
-         * @brief 设置当前激活 locale（线程安全，原子操作）
-         * @details 设置后，get_message(code) 将使用此 locale 查询。
+         * @brief 设置当前输出 locale（运行时切换语言）
+         * @details 委托给 config::i18n_config_t::set_output_locale。
+         *          设置后，get_message(code) 将使用此 locale 查询。
          * @param locale 语言区域
          */
         void set_active_locale(locale_t locale) noexcept;
 
         /**
-         * @brief 清除当前激活 locale，回退到默认 locale
+         * @brief 清除当前输出 locale，回退到默认 locale
+         * @details 委托给 config::i18n_config_t::clear_output_locale。
          */
         void clear_active_locale() noexcept;
 
         /**
-         * @brief 获取当前激活 locale
-         * @return std::optional<locale_t> 激活 locale，未设置返回 nullopt
+         * @brief 获取当前输出 locale
+         * @details 委托给 config::i18n_config_t::get_output_locale。
+         * @return std::optional<locale_t> 输出 locale，未设置返回 nullopt
          */
         [[nodiscard]] std::optional<locale_t> get_active_locale() const noexcept;
 

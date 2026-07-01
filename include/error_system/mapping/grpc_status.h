@@ -1,12 +1,11 @@
 #pragma once
 #include <cstdint>
-#include <string_view>
 
 /**
  * @file grpc_status.h
  * @brief gRPC 状态码定义与转换
  * @details 与 grpc::StatusCode 数值一致，避免引入 gRPC 依赖。
- *          提供 to_string / from_int / is_valid 等转换函数。
+ *          提供 c_str / from_int / is_valid 等转换函数。
  * @author yiice
  * @version 1.0.0
  * @date 2026-06-28
@@ -17,13 +16,13 @@ namespace error_system::mapping {
     /**
      * @brief gRPC 状态码
      * @details 包装 gRPC 标准状态码，提供类型安全的转换接口。
-     *          枚举值嵌在类内，grpc_status_t::ok 等用法保持兼容。
+     *          枚举值嵌在类内，通过 grpc_status_t::value_t::ok 形式访问。
      *
      * @example
      * @code
-     * grpc_status_t s = grpc_status_t::internal;
-     * s.to_string();              // → "INTERNAL"
-     * grpc_status_t::from_int(13); // → grpc_status_t::internal
+     * grpc_status_t s{grpc_status_t::value_t::internal};
+     * s.c_str();                  // → "INTERNAL"
+     * grpc_status_t::from_int(13); // → grpc_status_t::value_t::internal
      * grpc_status_t::is_valid(13); // → true
      * @endcode
      */
@@ -33,7 +32,7 @@ namespace error_system::mapping {
          * @brief gRPC 状态码枚举值
          * @details 与 grpc::StatusCode 数值一致
          */
-        enum value_t : uint16_t {
+        enum class value_t : uint16_t {
             ok = 0,                  // 成功
             cancelled = 1,           // 调用取消
             unknown = 2,             // 未知错误
@@ -53,6 +52,10 @@ namespace error_system::mapping {
             unauthenticated = 16,    // 未认证
         };
 
+    private:
+        value_t value_{value_t::ok};
+
+    public:
         /**
          * @brief 默认构造，值为 ok
          */
@@ -62,7 +65,7 @@ namespace error_system::mapping {
          * @brief 从枚举值构造
          * @param value gRPC 状态码枚举值
          */
-        constexpr grpc_status_t(value_t value) noexcept : value_(value) {}
+        constexpr explicit grpc_status_t(value_t value) noexcept : value_(value) {}
 
         /**
          * @brief 获取底层枚举值
@@ -83,7 +86,7 @@ namespace error_system::mapping {
          * @return const char* 状态码名称（如 "OK"、"INTERNAL"）
          * @note 实现位于 grpc_status.cc（非 constexpr，分离以遵循规范第 5 条）
          */
-        [[nodiscard]] const char* to_string() const noexcept;
+        [[nodiscard]] const char* c_str() const noexcept;
 
         /**
          * @brief 从整数构造 gRPC 状态码
@@ -92,7 +95,7 @@ namespace error_system::mapping {
          */
         [[nodiscard]] static constexpr grpc_status_t from_int(int value) noexcept {
             if (value < 0 || value > 16) {
-                return grpc_status_t{unknown};
+                return grpc_status_t{value_t::unknown};
             }
             return grpc_status_t{static_cast<value_t>(value)};
         }
@@ -115,9 +118,6 @@ namespace error_system::mapping {
          * @brief 不等比较
          */
         constexpr bool operator!=(grpc_status_t other) const noexcept { return value_ != other.value_; }
-
-    private:
-        value_t value_{ok};
     };
 
 }  // namespace error_system::mapping

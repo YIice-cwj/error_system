@@ -1,10 +1,12 @@
 #pragma once
 #include <cstdint>
+#include <mutex>
 #include <shared_mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 
+#include "error_system/i18n/i_subsystem_module_resolver.h"
 #include "error_system/i18n/locale.h"
 
 /**
@@ -28,21 +30,14 @@
 namespace error_system::i18n {
 
     /**
-     * @brief 子系统/模块名称映射
-     * @details 通过 (subsystem_id << 16 | module_id) 作为 key 存储名称，避免每个错误码重复存储
-     */
-    struct subsystem_module_info_t {
-        std::string subsystem_name{"未知子系统"};
-        std::string module_name{"未知模块"};
-    };
-
-    /**
      * @brief 子系统/模块名称多语言目录
      * @details 维护 (subsystem_id, module_id) → (locale → subsystem_module_info_t) 的两级映射表，
      *          用于 to_string() 等可读输出场景。线程安全（自带读写锁）。
+     *          实现 i_subsystem_module_resolver_t 接口，供 core 层通过抽象接口查询，
+     *          避免 core 层直接依赖具体目录类。
      *
      *          locale 来源：本类不持有 locale 状态，查询时由调用方显式传入 locale，
-     *          通常从 i18n_t::instance().get_active_locale() / get_default_locale() 获取，
+     *          通常从 config::i18n_config_t 读取 output_locale / default_locale，
      *          保证子系统/模块名称与错误码消息使用同一 locale。
      *
      * @example
@@ -56,7 +51,7 @@ namespace error_system::i18n {
      * auto info = catalog.get_subsystem_module_info(locale_t::en_US, locale_t::zh_CN, 101, 1);
      * @endcode
      */
-    class subsystem_module_catalog_t {
+    class subsystem_module_catalog_t : public i_subsystem_module_resolver_t {
     private:
         /**
          * @brief (subsystem_id, module_id) → (locale → 名称) 两级映射
@@ -69,8 +64,12 @@ namespace error_system::i18n {
          */
         mutable std::shared_mutex mutex_;
 
-    public:
-        subsystem_module_catalog_t() = default;
+        /**
+         * @brief 单例初始化一次性标志（规范 22）
+         */
+        static std::once_flag once_flag_;
+
+        subsystem_module_catalog_t() noexcept = default;
 
         ~subsystem_module_catalog_t() noexcept = default;
 
@@ -81,6 +80,14 @@ namespace error_system::i18n {
         subsystem_module_catalog_t(subsystem_module_catalog_t&&) = delete;
 
         subsystem_module_catalog_t& operator=(subsystem_module_catalog_t&&) = delete;
+
+    public:
+        /**
+         * @brief 获取单例实例
+         * @details 使用 std::call_once + 函数局部静态保证线程安全的单例初始化
+         * @return subsystem_module_catalog_t& 单例引用
+         */
+        static subsystem_module_catalog_t& instance() noexcept;
 
         /**
          * @brief 注册指定 locale 的子系统/模块名称
@@ -152,6 +159,23 @@ namespace error_system::i18n {
         }
 
         /**
+         * @brief 实现 i_subsystem_module_resolver_t 接口
+         * @details 转发到 get_subsystem_module_info(output_locale, fallback_locale, subsystem_id, module_id)。
+         * @param output_locale 首选语言区域
+         * @param fallback_locale 回退语言区域
+         * @param subsystem_id 子系统 ID
+         * @param module_id 模块 ID
+         * @return subsystem_module_info_t 子系统/模块名称信息副本
+         */
+        [[nodiscard]] subsystem_module_info_t resolve_subsystem_module(
+            locale_t output_locale,
+            locale_t fallback_locale,
+            uint16_t subsystem_id,
+            uint16_t module_id) const noexcept override {
+            return get_subsystem_module_info(output_locale, fallback_locale, subsystem_id, module_id);
+        }
+
+        /**
          * @brief 清空所有子系统/模块名称映射
          */
         void clear() noexcept;
@@ -163,5 +187,13 @@ namespace error_system::i18n {
          */
         size_t clear_locale(locale_t locale) noexcept;
     };
+
+    /**
+     * @brief 获取默认子系统/模块名称解析器
+     * @details 返回 subsystem_module_catalog_t 单例的接口指针，供 core 层
+     *          在静态初始化后延迟绑定，避免 core 直接包含 catalog 头文件。
+     * @return i_subsystem_module_resolver_t* 默认解析器指针（永不返回 nullptr）
+     */
+    [[nodiscard]] i_subsystem_module_resolver_t* get_default_subsystem_module_resolver() noexcept;
 
 }  // namespace error_system::i18n

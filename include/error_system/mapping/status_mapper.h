@@ -63,30 +63,30 @@ namespace error_system::mapping {
                                                              domain::system_domain_t domain,
                                                              bool retryable, bool transient) noexcept {
             if (retryable || transient) {
-                return http_status_t{http_status_t::service_unavailable};
+                return http_status_t{http_status_t::value_t::service_unavailable};
             }
             switch (level) {
                 case error_level_t::debug:
                 case error_level_t::info:
                 case error_level_t::warn:
-                    return http_status_t{http_status_t::ok};
+                    return http_status_t{http_status_t::value_t::ok};
                 case error_level_t::error:
                     switch (domain) {
                         case domain::system_domain_t::application:
-                            return http_status_t{http_status_t::bad_request};
+                            return http_status_t{http_status_t::value_t::bad_request};
                         case domain::system_domain_t::third_party:
-                            return http_status_t{http_status_t::bad_gateway};
+                            return http_status_t{http_status_t::value_t::bad_gateway};
                         case domain::system_domain_t::database:
                         case domain::system_domain_t::middleware:
-                            return http_status_t{http_status_t::service_unavailable};
+                            return http_status_t{http_status_t::value_t::service_unavailable};
                         case domain::system_domain_t::system:
                         case domain::system_domain_t::none:
                         default:
-                            return http_status_t{http_status_t::internal_server_error};
+                            return http_status_t{http_status_t::value_t::internal_server_error};
                     }
                 case error_level_t::fatal:
                 default:
-                    return http_status_t{http_status_t::internal_server_error};
+                    return http_status_t{http_status_t::value_t::internal_server_error};
             }
         }
 
@@ -109,31 +109,31 @@ namespace error_system::mapping {
                                                              domain::system_domain_t domain,
                                                              bool retryable, bool transient) noexcept {
             if (retryable || transient) {
-                return grpc_status_t{grpc_status_t::unavailable};
+                return grpc_status_t{grpc_status_t::value_t::unavailable};
             }
             switch (level) {
                 case error_level_t::debug:
                 case error_level_t::info:
                 case error_level_t::warn:
-                    return grpc_status_t{grpc_status_t::ok};
+                    return grpc_status_t{grpc_status_t::value_t::ok};
                 case error_level_t::error:
                     switch (domain) {
                         case domain::system_domain_t::application:
-                            return grpc_status_t{grpc_status_t::invalid_argument};
+                            return grpc_status_t{grpc_status_t::value_t::invalid_argument};
                         case domain::system_domain_t::third_party:
-                            return grpc_status_t{grpc_status_t::unavailable};
+                            return grpc_status_t{grpc_status_t::value_t::unavailable};
                         case domain::system_domain_t::database:
-                            return grpc_status_t{grpc_status_t::data_loss};
+                            return grpc_status_t{grpc_status_t::value_t::data_loss};
                         case domain::system_domain_t::middleware:
-                            return grpc_status_t{grpc_status_t::unavailable};
+                            return grpc_status_t{grpc_status_t::value_t::unavailable};
                         case domain::system_domain_t::system:
                         case domain::system_domain_t::none:
                         default:
-                            return grpc_status_t{grpc_status_t::internal};
+                            return grpc_status_t{grpc_status_t::value_t::internal};
                     }
                 case error_level_t::fatal:
                 default:
-                    return grpc_status_t{grpc_status_t::internal};
+                    return grpc_status_t{grpc_status_t::value_t::internal};
             }
         }
 
@@ -152,7 +152,7 @@ namespace error_system::mapping {
          */
         [[nodiscard]] static constexpr http_status_t to_http_status(error_code_t code) noexcept {
             if (code.is_success_code()) {
-                return http_status_t{http_status_t::ok};
+                return http_status_t{http_status_t::value_t::ok};
             }
             return to_http_status_impl_(code.get_level(), code.get_system(),
                                         code.is_retryable(), code.is_transient());
@@ -165,7 +165,7 @@ namespace error_system::mapping {
          */
         [[nodiscard]] static constexpr grpc_status_t to_grpc_status(error_code_t code) noexcept {
             if (code.is_success_code()) {
-                return grpc_status_t{grpc_status_t::ok};
+                return grpc_status_t{grpc_status_t::value_t::ok};
             }
             return to_grpc_status_impl_(code.get_level(), code.get_system(),
                                         code.is_retryable(), code.is_transient());

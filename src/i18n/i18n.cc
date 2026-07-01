@@ -4,11 +4,12 @@
  * @file i18n.cc
  * @brief 多语言消息目录实现
  * @details 提供多语言错误消息的注册与查询能力，基于 std::call_once 实现线程安全的单例初始化。
- *          查询路径：active locale → default locale → 空字符串。
+ *          查询路径：output locale → default locale → 空字符串。
+ *          locale 配置统一由 config::i18n_config_t 管理，本类仅保留消息目录。
  *          线程安全（读多写少场景使用 shared_mutex）。
  * @author yiice
- * @version 2.1.0
- * @date 2026-06-28
+ * @version 2.2.0
+ * @date 2026-07-01
  * @copyright Copyright (c) 2026
  */
 
@@ -17,6 +18,8 @@
 #include <shared_mutex>
 #include <string>
 #include <utility>
+
+#include "error_system/config/i18n_config.h"
 
 namespace error_system::i18n {
 
@@ -48,7 +51,7 @@ namespace error_system::i18n {
         try {
             std::unique_lock<std::shared_mutex> lock(mutex_);
             catalog_[locale][code.get_identity_code()] = std::string(message);
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[i18n] register_message: std::bad_alloc\n");
         }
     }
@@ -71,7 +74,7 @@ namespace error_system::i18n {
                 ++count;
             }
             return count;
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[i18n] register_messages: std::bad_alloc\n");
             return 0;
         }
@@ -82,9 +85,9 @@ namespace error_system::i18n {
      * @details 查询顺序：指定 locale → 默认 locale → 空字符串
      * @param locale 语言区域
      * @param code 错误码
-     * @return std::string_view 本地化描述，未命中返回空 string_view
+     * @return std::string 本地化描述，未命中返回空 string
      */
-    std::string_view i18n_t::get_message(locale_t locale, error_code_t code) const noexcept {
+    std::string i18n_t::get_message(locale_t locale, error_code_t code) const noexcept {
         std::shared_lock<std::shared_mutex> lock(mutex_);
         const auto identity = code.get_identity_code();
 
@@ -96,8 +99,9 @@ namespace error_system::i18n {
             }
         }
 
-        if (locale != default_locale_) {
-            auto def_it = catalog_.find(default_locale_);
+        const auto default_locale = config::i18n_config_t::get_default_locale();
+        if (locale != default_locale) {
+            auto def_it = catalog_.find(default_locale);
             if (def_it != catalog_.end()) {
                 auto msg_it = def_it->second.find(identity);
                 if (msg_it != def_it->second.end()) {
@@ -110,63 +114,66 @@ namespace error_system::i18n {
     }
 
     /**
-     * @brief 使用当前激活 locale 查询
-     * @details 若未设置激活 locale，使用默认 locale 查询
+     * @brief 使用当前输出 locale 查询
+     * @details 从 config::i18n_config_t 解析最终输出 locale，未命中时回退默认 locale。
      * @param code 错误码
-     * @return std::string_view 本地化描述，未命中返回空 string_view
+     * @return std::string 本地化描述，未命中返回空 string
      */
-    std::string_view i18n_t::get_message(error_code_t code) const noexcept {
-        const uint8_t raw = active_locale_.load(std::memory_order_acquire);
-        if (raw == ACTIVE_LOCALE_NONE_) {
-            return get_message(default_locale_, code);
+    std::string i18n_t::get_message(error_code_t code) const noexcept {
+        const auto output_locale = config::i18n_config_t::resolve_output_locale();
+        const auto message = get_message(output_locale, code);
+        if (!message.empty()) {
+            return message;
         }
-        return get_message(static_cast<locale_t>(raw), code);
+        const auto default_locale = config::i18n_config_t::get_default_locale();
+        if (default_locale != output_locale) {
+            return get_message(default_locale, code);
+        }
+        return {};
     }
 
     /**
      * @brief 设置默认 locale（回退查询使用）
+     * @details 委托给 config::i18n_config_t::set_default_locale。
      * @param locale 语言区域
      */
     void i18n_t::set_default_locale(locale_t locale) noexcept {
-        std::unique_lock<std::shared_mutex> lock(mutex_);
-        default_locale_ = locale;
+        config::i18n_config_t::set_default_locale(locale);
     }
 
     /**
      * @brief 获取默认 locale
+     * @details 委托给 config::i18n_config_t::get_default_locale。
      * @return locale_t 默认 locale
      */
     locale_t i18n_t::get_default_locale() const noexcept {
-        std::shared_lock<std::shared_mutex> lock(mutex_);
-        return default_locale_;
+        return config::i18n_config_t::get_default_locale();
     }
 
     /**
-     * @brief 设置当前激活 locale（线程安全，原子操作）
-     * @details 设置后，get_message(code) 将使用此 locale 查询。
+     * @brief 设置当前输出 locale（运行时切换语言）
+     * @details 委托给 config::i18n_config_t::set_output_locale。
      * @param locale 语言区域
      */
     void i18n_t::set_active_locale(locale_t locale) noexcept {
-        active_locale_.store(static_cast<uint8_t>(locale), std::memory_order_release);
+        config::i18n_config_t::set_output_locale(locale);
     }
 
     /**
-     * @brief 清除当前激活 locale，回退到默认 locale
+     * @brief 清除当前输出 locale，回退到默认 locale
+     * @details 委托给 config::i18n_config_t::clear_output_locale。
      */
     void i18n_t::clear_active_locale() noexcept {
-        active_locale_.store(ACTIVE_LOCALE_NONE_, std::memory_order_release);
+        config::i18n_config_t::clear_output_locale();
     }
 
     /**
-     * @brief 获取当前激活 locale
-     * @return std::optional<locale_t> 激活 locale，未设置返回 nullopt
+     * @brief 获取当前输出 locale
+     * @details 委托给 config::i18n_config_t::get_output_locale。
+     * @return std::optional<locale_t> 输出 locale，未设置返回 nullopt
      */
     std::optional<locale_t> i18n_t::get_active_locale() const noexcept {
-        const uint8_t raw = active_locale_.load(std::memory_order_acquire);
-        if (raw == ACTIVE_LOCALE_NONE_) {
-            return std::nullopt;
-        }
-        return static_cast<locale_t>(raw);
+        return config::i18n_config_t::get_output_locale();
     }
 
     /**
@@ -205,7 +212,7 @@ namespace error_system::i18n {
             for (const auto& [locale, _] : catalog_) {
                 locales.push_back(locale);
             }
-        } catch (...) {
+        } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[i18n] get_locales: std::bad_alloc\n");
         }
         return locales;
