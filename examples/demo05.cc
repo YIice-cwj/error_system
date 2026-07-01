@@ -4,6 +4,7 @@
 #include "error_system/config/error_config.h"
 #include "error_system/core/error_registry.h"
 #include "error_system/i18n/locale.h"
+#include "error_system/i18n/subsystem_module_catalog.h"
 // IWYU pragma: begin_exports
 #include "payment_service_errors.h"
 #include "trade_service_errors.h"
@@ -16,68 +17,59 @@ using namespace error_system::domain;
 int main() {
     std::cout << "===== Demo 5: 错误码元数据注册与文本输出 =====" << std::endl;
 
-    // 1. 注册子系统/模块名称 + 错误码（使用 error_code_t 构造函数替代 error_builder_t）
     std::cout << "\n--- 1. 注册子系统/模块名称和错误码 ---" << std::endl;
     auto& registry = error_registry_t::instance();
+    auto& catalog = error_system::i18n::subsystem_module_catalog_t::instance();
 
-    // 使用 error_code_t 构造函数: (level, system, subsys, module, number)
-    auto code1 = error_code_t{error_level_t::error, system_domain_t::application, 101, 1, 1001};
-    registry.register_subsystem_module(101, 1, "交易服务", "订单模块");
+    auto code1 = error_code_t{error_level_t::error, system_domain_t::application, subsystem_id_t{101}, module_id_t{1}, error_number_t{1001}};
+    catalog.register_subsystem_module(101, 1, "交易服务", "订单模块");
     registry.register_error(code1, "ERR_ORDER_CREATE_FAILED", "订单创建失败");
 
-    auto code2 = error_code_t{error_level_t::error, system_domain_t::application, 102, 1, 2001};
-    registry.register_subsystem_module(102, 1, "支付服务", "支付网关");
+    auto code2 = error_code_t{error_level_t::error, system_domain_t::application, subsystem_id_t{102}, module_id_t{1}, error_number_t{2001}};
+    catalog.register_subsystem_module(102, 1, "支付服务", "支付网关");
     registry.register_error(code2, "ERR_PAYMENT_FAILED", "支付失败");
 
-    // 不注册子系统/模块名称，使用默认值
-    auto code3 = error_code_t{error_level_t::warn, system_domain_t::application, 999, 99, 9999};
+    auto code3 = error_code_t{error_level_t::warn, system_domain_t::application, subsystem_id_t{999}, module_id_t{99}, error_number_t{9999}};
     registry.register_error(code3, "ERR_UNKNOWN_MODULE", "未知模块错误");
 
     std::cout << "已注册 3 个错误码" << std::endl;
 
-    // 2. 查看元数据
     std::cout << "\n--- 2. 查看元数据 ---" << std::endl;
     if (auto info = registry.get_info(code1); info.has_value()) {
         std::cout << "错误码: " << info->name << std::endl;
         std::cout << "描述: " << info->description << std::endl;
     }
-    const auto sm_info = registry.get_subsystem_module_info(code1.get_subsys(), code1.get_module());
+    const auto sm_info = catalog.get_subsystem_module_info(code1.get_subsys(), code1.get_module());
     std::cout << "子系统: " << sm_info.subsystem_name << std::endl;
     std::cout << "模块: " << sm_info.module_name << std::endl;
 
-    // 3. 文本输出模式（默认开启）
     std::cout << "\n--- 3. 文本输出模式（默认开启） ---" << std::endl;
-    error_context_t ctx1{code1, "订单ID: 1234567890"};
+    error_context_t ctx1{located_code_t{code1}, "订单ID: 1234567890"};
     std::cout << error_context_serializer_t::to_string(ctx1) << std::endl;
 
-    // 4. 关闭文本输出模式（显示原始 ID）
     std::cout << "\n--- 4. 关闭文本输出模式（显示原始 ID） ---" << std::endl;
-    feature_flags_t::set_enable_text_output(false);
-    error_context_t ctx2{code1, "订单ID: 1234567890"};
+    i18n_config_t::set_enable_i18n(false);
+    error_context_t ctx2{located_code_t{code1}, "订单ID: 1234567890"};
     std::cout << error_context_serializer_t::to_string(ctx2) << std::endl;
 
-    // 5. 恢复文本输出，查看默认名称的错误码
     std::cout << "\n--- 5. 默认名称（未指定子系统/模块名称） ---" << std::endl;
-    feature_flags_t::set_enable_text_output(true);
-    error_context_t ctx3{code3, "未知模块测试"};
+    i18n_config_t::set_enable_i18n(true);
+    error_context_t ctx3{located_code_t{code3}, "未知模块测试"};
     std::cout << error_context_serializer_t::to_string(ctx3) << std::endl;
 
-    // 6. get_errors_by_subsystem() 按子系统查询错误码
     std::cout << "\n--- 6. 按子系统查询错误码 ---" << std::endl;
-    // 也注册一个相同子系统不同模块的错误码，演示分组查询
-    auto code1b = error_code_t{error_level_t::error, system_domain_t::application, 101, 2, 1002};
-    registry.register_subsystem_module(101, 2, "交易服务", "结算模块");
+    auto code1b = error_code_t{error_level_t::error, system_domain_t::application, subsystem_id_t{101}, module_id_t{2}, error_number_t{1002}};
+    catalog.register_subsystem_module(101, 2, "交易服务", "结算模块");
     registry.register_error(code1b, "ERR_SETTLE_FAILED", "结算失败");
 
     auto subsystem_errors = registry.get_errors_by_subsystem(101);
     std::cout << "子系统 101 (交易服务) 下共有 " << subsystem_errors.size() << " 个错误码:" << std::endl;
     for (const auto& meta : subsystem_errors) {
-        const auto sm = registry.get_subsystem_module_info(101, meta.module_id);
+        const auto sm = catalog.get_subsystem_module_info(101, meta.module_id);
         std::cout << "  [" << sm.module_name << "] " << meta.name
                   << " (编号: " << meta.error_number << ")" << std::endl;
     }
 
-    // 7. find_by_name() 按名称查询错误码
     std::cout << "\n--- 7. find_by_name() 按名称查找 ---" << std::endl;
 
     auto found = registry.find_by_name("ERR_ORDER_CREATE_FAILED");
@@ -91,58 +83,47 @@ int main() {
         std::cout << "ERR_NON_EXISTENT 未找到" << std::endl;
     }
 
-    // 8. identity_code 在文本输出中的表现
     std::cout << "\n--- 8. identity_code 解析示例 ---" << std::endl;
-    error_context_t ctx8{code1, "测试 identity_code"};
+    error_context_t ctx8{located_code_t{code1}, "测试 identity_code"};
     std::cout << "identity_code: " << code1.get_identity_code() << std::endl;
     std::cout << "JSON 输出: " << error_context_serializer_t::to_json(ctx8) << std::endl;
 
-    // 9. i18n 多语言子系统/模块名称（通过 i18n_config_t 配置输出语言）
     std::cout << "\n--- 9. i18n 多语言子系统/模块名称 ---" << std::endl;
 
-    // 为同一个子系统/模块注册多种语言的名称
     namespace i18n = error_system::i18n;
-    registry.register_subsystem_module(i18n::locale_t::zh_CN, 101, 1, "交易服务", "订单模块");
-    registry.register_subsystem_module(i18n::locale_t::en_US, 101, 1, "Trade Service", "Order Module");
-    registry.register_subsystem_module(i18n::locale_t::ja_JP, 101, 1, "取引サービス", "注文モジュール");
+    catalog.register_subsystem_module(i18n::locale_t::zh_CN, 101, 1, "交易服务", "订单模块");
+    catalog.register_subsystem_module(i18n::locale_t::en_US, 101, 1, "Trade Service", "Order Module");
+    catalog.register_subsystem_module(i18n::locale_t::ja_JP, 101, 1, "取引サービス", "注文モジュール");
 
-    // locale_t 枚举与字符串互转（LOCALE_TABLE 单一数据源）
     std::cout << "locale_t::en_US -> " << i18n::to_string(i18n::locale_t::en_US) << std::endl;
     const auto parsed_locale = i18n::from_string("ja_JP");
     std::cout << "from_string(\"ja_JP\") -> "
               << i18n::to_string(parsed_locale) << std::endl;
 
-    // 通过 i18n_config_t 配置输出 locale（config 层统一入口）
     namespace cfg = error_system::config;
     cfg::i18n_config_t::set_enable_i18n(true);
     cfg::i18n_config_t::set_default_locale(i18n::locale_t::zh_CN);
 
-    // 注册一个使用 (101,1) 子系统/模块的错误码，演示文本输出
     using error_system::domain::system_domain_t;
-    const auto code_i18n = error_code_t(error_level_t::error, system_domain_t::database, 101, 1, 9);
+    const auto code_i18n = error_code_t(error_level_t::error, system_domain_t::database, subsystem_id_t{101}, module_id_t{1}, error_number_t{9});
     registry.register_error(code_i18n, "ERR_I18N_DEMO", "i18n 演示");
 
-    // 默认 locale（zh_CN）输出
     cfg::i18n_config_t::clear_output_locale();
-    error_context_t ctx_zh{code_i18n, "中文输出"};
+    error_context_t ctx_zh{located_code_t{code_i18n}, "中文输出"};
     std::cout << "\n[default=zh_CN] " << error_context_serializer_t::to_string(ctx_zh) << std::endl;
 
-    // 切换输出 locale 为 en_US
     cfg::i18n_config_t::set_output_locale(i18n::locale_t::en_US);
-    error_context_t ctx_en{code_i18n, "English output"};
+    error_context_t ctx_en{located_code_t{code_i18n}, "English output"};
     std::cout << "[output=en_US] " << error_context_serializer_t::to_string(ctx_en) << std::endl;
 
-    // 切换输出 locale 为 ja_JP
     cfg::i18n_config_t::set_output_locale(i18n::locale_t::ja_JP);
-    error_context_t ctx_ja{code_i18n, "日本語出力"};
+    error_context_t ctx_ja{located_code_t{code_i18n}, "日本語出力"};
     std::cout << "[output=ja_JP] " << error_context_serializer_t::to_string(ctx_ja) << std::endl;
 
-    // 禁用 i18n：回退为原始 ID 数字输出
     cfg::i18n_config_t::set_enable_i18n(false);
-    error_context_t ctx_raw{code_i18n, "i18n disabled"};
+    error_context_t ctx_raw{located_code_t{code_i18n}, "i18n disabled"};
     std::cout << "[i18n=false]  " << error_context_serializer_t::to_string(ctx_raw) << std::endl;
 
-    // 恢复配置
     cfg::i18n_config_t::set_enable_i18n(true);
     cfg::i18n_config_t::clear_output_locale();
 
