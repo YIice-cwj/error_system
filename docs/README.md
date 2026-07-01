@@ -63,4 +63,15 @@ cd build && ctest --output-on-failure
 | Migration | 1 | 32 |
 | **总计** | **21** | **469** |
 
-另有 `tests/perf/` 3 个性能基准（`error_context_benchmark.cc` · `error_registry_benchmark.cc` · `plugin_registry_benchmark.cc`）。
+另有 `tests/perf/` 8 个性能基准场景（共享 `perf_common.h`）：
+
+| 场景 | 文件 | 覆盖范围 |
+|---|---|---|
+| 基线（全关） | `scenario_baseline_benchmark.cc` | 构造/序列化(to_string·to_json·to_binary)/拷贝/移动 |
+| 仅栈追踪 | `scenario_stacktrace_benchmark.cc` | 同上 + 栈追踪开销 |
+| 仅插件 | `scenario_plugin_benchmark.cc` | 同上 + 同步通知开销 |
+| 栈追踪+插件 | `scenario_stacktrace_plugin_benchmark.cc` | 两特性叠加 |
+| 全特性 | `scenario_full_benchmark.cc` | 栈追踪+位置+短文件名+插件 |
+| 错误路由插件 | `scenario_router_benchmark.cc` | 按错误码/模块组/系统域命中分发·未命中·注册 |
+| 去重采样器 | `scenario_dedup_benchmark.cc` | 全放行/纯去重/纯采样/叠加/多码轮询 |
+| i18n 翻译模块 | `scenario_i18n_benchmark.cc` | 单条/批量注册·查询命中/回退/未命中·目录注册查询·locale 转换 |

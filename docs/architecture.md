@@ -288,4 +288,4 @@ void bump_epoch_() noexcept {
 
 ## 🧪 测试架构
 
-GoogleTest v1.14.0（`FetchContent`）+ `gtest_discover_tests` 注册到 CTest；`tests/` 镜像 `include/` 结构，每个模块独立 `*_test.cc`，共 **21 个测试文件 / 469 个用例**，链接 `error_system::error_system` + `GTest::gtest_main`，仅应用警告选项不应用 LTO/PGO/Sanitizer。性能基准位于 `tests/perf/*_benchmark.cc`（3 个 benchmark）；Python3 脚本从 `config/errors/*.json` 生成错误码头文件、O(1) 字典与文档。各模块覆盖要点与用例分布详见 [文档索引 · 运行测试](README.md#运行测试)。
+GoogleTest v1.14.0（`FetchContent`）+ `gtest_discover_tests` 注册到 CTest；`tests/` 镜像 `include/` 结构，每个模块独立 `*_test.cc`，共 **21 个测试文件 / 469 个用例**，链接 `error_system::error_system` + `GTest::gtest_main`，仅应用警告选项不应用 LTO/PGO/Sanitizer。性能基准位于 `tests/perf/`（共享 `perf_common.h` + 8 个场景文件：基线/仅栈追踪/仅插件/栈追踪+插件/全特性/错误路由插件/去重采样器/i18n 翻译模块）；Python3 脚本从 `config/errors/*.json` 生成错误码头文件、O(1) 字典与文档。各模块覆盖要点与用例分布详见 [文档索引 · 运行测试](README.md#运行测试)。
