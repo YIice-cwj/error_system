@@ -200,22 +200,20 @@ namespace error_system::utils {
         EXPECT_TRUE(result.empty());
     }
 
-    //
-    // 以下测试覆盖 json_lexer 对 \uXXXX 转义的处理，重点验证：
-    //   1. BMP 范围内的 \uXXXX 正确编码为 UTF-8
-    //   2. UTF-16 代理对（\uD83D\uDE00）正确组合为补充平面码点并编码为 4 字节 UTF-8
-    //   3. 孤立的高 / 低代理被静默丢弃，不影响其余字符解析
+    /** 验证 json_lexer 对 \uXXXX 转义的处理：
+     *  - BMP 范围内的 \uXXXX 正确编码为 UTF-8
+     *  - UTF-16 代理对正确组合为补充平面码点并编码为 4 字节 UTF-8
+     *  - 孤立的高/低代理被静默丢弃，不影响其余字符解析 */
 
     TEST_F(json_dict_test_t, parse_unicode_escape_basic_bmp) {
-        // \u0041 = 'A'，\u4e2d = '中'（BMP 内的 CJK 字符）
+        /** 验证 BMP 内 \u0041 与 \u4e2d 正确编码为 UTF-8 */
         auto result = json_dict_t::parse(R"({"key": "\u0041\u4e2d"})");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(result->get_value("key"), "A中");
     }
 
     TEST_F(json_dict_test_t, parse_unicode_escape_supplementary_plane_surrogate_pair) {
-        // U+1F600 (😀) 的 UTF-16 编码为代理对 0xD83D 0xDE00
-        // 期望解析后得到 4 字节 UTF-8: F0 9F 98 80
+        /** 验证 UTF-16 代理对 \uD83D\uDE00 组合为 U+1F600 并编码为 4 字节 UTF-8 */
         auto result = json_dict_t::parse(R"({"emoji": "\uD83D\uDE00"})");
         ASSERT_TRUE(result.has_value());
         const auto value = result->get_value("emoji");
@@ -228,28 +226,28 @@ namespace error_system::utils {
     }
 
     TEST_F(json_dict_test_t, parse_unicode_escape_isolated_high_surrogate_dropped) {
-        // 孤立的高代理（无后续低代理）应被丢弃，前后字符正常保留
+        /** 孤立的高代理（无后续低代理）应被丢弃，前后字符正常保留 */
         auto result = json_dict_t::parse(R"({"text": "a\uD83Db"})");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(result->get_value("text"), "ab");
     }
 
     TEST_F(json_dict_test_t, parse_unicode_escape_isolated_low_surrogate_dropped) {
-        // 孤立的低代理（无前导高代理）应被丢弃
+        /** 孤立的低代理（无前导高代理）应被丢弃 */
         auto result = json_dict_t::parse(R"({"text": "a\uDC00b"})");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(result->get_value("text"), "ab");
     }
 
     TEST_F(json_dict_test_t, parse_unicode_escape_high_surrogate_without_low_followed_by_plain) {
-        // 高代理后跟普通字符（非 \u 转义）应丢弃高代理，普通字符保留
+        /** 高代理后跟普通字符（非 \u 转义）应丢弃高代理，普通字符保留 */
         auto result = json_dict_t::parse(R"({"text": "\uD83DX"})");
         ASSERT_TRUE(result.has_value());
         EXPECT_EQ(result->get_value("text"), "X");
     }
 
     TEST_F(json_dict_test_t, parse_unicode_escape_invalid_hex_returns_nullopt) {
-        // 非法十六进制应使整个解析失败
+        /** 非法十六进制应使整个解析失败 */
         auto result = json_dict_t::parse(R"({"text": "\uGGGG"})");
         EXPECT_FALSE(result.has_value());
     }

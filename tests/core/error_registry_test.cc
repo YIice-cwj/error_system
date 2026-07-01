@@ -24,7 +24,7 @@ namespace error_system::core {
     };
 
     TEST_F(error_registry_test_t, register_and_retrieve_error) {
-        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
 
         error_registry_t::instance().register_error(code, "ERR_DB_CONN", "Database connection failed");
 
@@ -37,22 +37,22 @@ namespace error_system::core {
     }
 
     TEST_F(error_registry_test_t, register_multiple_errors) {
-        auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         auto code2 =
-            error_code_t(error_level_t::warn, domain::system_domain_t::application, 2, 2, 2);
+            error_code_t(error_level_t::warn, domain::system_domain_t::application, subsystem_id_t{2}, module_id_t{2}, error_number_t{2});
 
         std::vector<error_code_t> codes = {code1, code2};
         std::vector<std::string_view> names = {"ERR_1", "ERR_2"};
         std::vector<std::string_view> descs = {"Desc 1", "Desc 2"};
 
-        error_registry_t::instance().register_errors(codes, names, descs);
+        EXPECT_EQ(error_registry_t::instance().register_errors(codes, names, descs), 2u);
 
         EXPECT_TRUE(error_registry_t::instance().is_registered(code1));
         EXPECT_TRUE(error_registry_t::instance().is_registered(code2));
     }
 
     TEST_F(error_registry_test_t, unregister_error_by_code) {
-        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
 
         error_registry_t::instance().register_error(code, "ERR_TEST", "Test error");
         EXPECT_TRUE(error_registry_t::instance().is_registered(code));
@@ -62,7 +62,7 @@ namespace error_system::core {
     }
 
     TEST_F(error_registry_test_t, unregister_error_by_name) {
-        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
 
         error_registry_t::instance().register_error(code, "ERR_BY_NAME", "Test");
         EXPECT_TRUE(error_registry_t::instance().is_registered(code));
@@ -72,8 +72,8 @@ namespace error_system::core {
     }
 
     TEST_F(error_registry_test_t, unregister_module_group) {
-        auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
-        auto code2 = error_code_t(error_level_t::warn, domain::system_domain_t::database, 1, 1, 2);
+        auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
+        auto code2 = error_code_t(error_level_t::warn, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{2});
 
         error_registry_t::instance().register_error(code1, "ERR_1", "Error 1");
         error_registry_t::instance().register_error(code2, "ERR_2", "Error 2");
@@ -86,38 +86,33 @@ namespace error_system::core {
     }
 
     TEST_F(error_registry_test_t, unregister_module_clears_subsystem_index) {
-        auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
-        auto code2 = error_code_t(error_level_t::warn, domain::system_domain_t::database, 1, 1, 2);
+        auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
+        auto code2 = error_code_t(error_level_t::warn, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{2});
 
         error_registry_t::instance().register_error(code1, "ERR_1", "Error 1");
         error_registry_t::instance().register_error(code2, "ERR_2", "Error 2");
 
-        // 注销前子系统 1 应有 2 个错误码
         auto errors = error_registry_t::instance().get_errors_by_subsystem(1);
         EXPECT_EQ(errors.size(), 2);
 
-        // 注销整个模块组
         error_registry_t::instance().unregister_module(code1.get_module_group_id());
 
-        // 子系统 1 应变为空
         auto errors_after = error_registry_t::instance().get_errors_by_subsystem(1);
         EXPECT_TRUE(errors_after.empty());
     }
 
     TEST_F(error_registry_test_t, get_errors_by_subsystem_after_unregister_error) {
-        auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
-        auto code2 = error_code_t(error_level_t::warn, domain::system_domain_t::database, 1, 1, 2);
+        auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
+        auto code2 = error_code_t(error_level_t::warn, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{2});
 
         error_registry_t::instance().register_error(code1, "ERR_1", "Error 1");
         error_registry_t::instance().register_error(code2, "ERR_2", "Error 2");
 
-        // 只注销一个错误码，子系统索引仍保留
         error_registry_t::instance().unregister_error(code1);
         auto errors = error_registry_t::instance().get_errors_by_subsystem(1);
         EXPECT_EQ(errors.size(), 1);
         EXPECT_EQ(errors[0].name, "ERR_2");
 
-        // 注销最后一个错误码，子系统索引应清空
         error_registry_t::instance().unregister_error(code2);
         auto errors_after = error_registry_t::instance().get_errors_by_subsystem(1);
         EXPECT_TRUE(errors_after.empty());
@@ -125,17 +120,17 @@ namespace error_system::core {
 
     TEST_F(error_registry_test_t, get_info_returns_nullptr_for_unregistered) {
         auto code =
-            error_code_t(error_level_t::error, domain::system_domain_t::database, 99, 99, 99);
+            error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{99}, module_id_t{99}, error_number_t{99});
 
         auto info = error_registry_t::instance().get_info(code);
         EXPECT_FALSE(info.has_value());
     }
 
     TEST_F(error_registry_test_t, get_errors_by_module) {
-        auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
-        auto code2 = error_code_t(error_level_t::warn, domain::system_domain_t::database, 1, 1, 2);
+        auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
+        auto code2 = error_code_t(error_level_t::warn, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{2});
         auto code3 =
-            error_code_t(error_level_t::info, domain::system_domain_t::application, 2, 2, 1);
+            error_code_t(error_level_t::info, domain::system_domain_t::application, subsystem_id_t{2}, module_id_t{2}, error_number_t{1});
 
         error_registry_t::instance().register_error(code1, "ERR_1", "Error 1");
         error_registry_t::instance().register_error(code2, "ERR_2", "Error 2");
@@ -150,16 +145,16 @@ namespace error_system::core {
     }
 
     TEST_F(error_registry_test_t, get_errors_by_subsystem) {
-        auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
-        auto code2 = error_code_t(error_level_t::warn, domain::system_domain_t::database, 1, 2, 1);
+        auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
+        auto code2 = error_code_t(error_level_t::warn, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{2}, error_number_t{1});
         auto code3 =
-            error_code_t(error_level_t::info, domain::system_domain_t::application, 2, 2, 1);
+            error_code_t(error_level_t::info, domain::system_domain_t::application, subsystem_id_t{2}, module_id_t{2}, error_number_t{1});
 
         error_registry_t::instance().register_error(code1, "ERR_1", "Error 1");
         error_registry_t::instance().register_error(code2, "ERR_2", "Error 2");
         error_registry_t::instance().register_error(code3, "ERR_3", "Error 3");
 
-        // 查询子系统 1 的所有错误码（顺序不保证，按名称收集验证）
+        /** 查询子系统 1 的所有错误码（顺序不保证，按名称收集验证） */
         auto errors = error_registry_t::instance().get_errors_by_subsystem(1);
         EXPECT_EQ(errors.size(), 2);
 
@@ -170,25 +165,22 @@ namespace error_system::core {
         EXPECT_TRUE(error_names.count("ERR_1"));
         EXPECT_TRUE(error_names.count("ERR_2"));
 
-        // 查询子系统 2 的所有错误码
         auto errors2 = error_registry_t::instance().get_errors_by_subsystem(2);
         EXPECT_EQ(errors2.size(), 1);
         EXPECT_EQ(errors2[0].name, "ERR_3");
 
-        // 查询不存在的子系统
         auto errors3 = error_registry_t::instance().get_errors_by_subsystem(99);
         EXPECT_TRUE(errors3.empty());
     }
 
     TEST_F(error_registry_test_t, find_by_name) {
-        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         error_registry_t::instance().register_error(code, "ERR_FIND_ME", "Find me");
 
         auto found = error_registry_t::instance().find_by_name("ERR_FIND_ME");
         ASSERT_TRUE(found.has_value());
         EXPECT_EQ(found->get_identity_code(), code.get_identity_code());
 
-        // 查找不存在的名称
         auto not_found = error_registry_t::instance().find_by_name("ERR_NOT_EXIST");
         EXPECT_FALSE(not_found.has_value());
     }
@@ -200,33 +192,31 @@ namespace error_system::core {
     }
 
     TEST_F(error_registry_test_t, register_duplicate_keeps_first_metadata) {
-        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
 
         error_registry_t::instance().register_error(code, "OLD_NAME", "Old description");
         error_registry_t::instance().register_error(code, "NEW_NAME", "New description");
 
         auto info = error_registry_t::instance().get_info(code);
         ASSERT_TRUE(info.has_value());
-        // Duplicate registration should keep the first registered metadata
         EXPECT_EQ(info->name, "OLD_NAME");
         EXPECT_EQ(info->description, "Old description");
     }
 
     TEST_F(error_registry_test_t, duplicate_policy_skip) {
-        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
 
         error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::skip);
         error_registry_t::instance().register_error(code, "FIRST", "First description");
         error_registry_t::instance().register_error(code, "SECOND", "Second description");
 
-        // First registration should be kept
         auto info = error_registry_t::instance().get_info(code);
         ASSERT_TRUE(info.has_value());
         EXPECT_EQ(info->name, "FIRST");
     }
 
     TEST_F(error_registry_test_t, duplicate_policy_overwrite) {
-        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
 
         error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::overwrite);
         error_registry_t::instance().register_error(code, "FIRST", "First description");
@@ -239,7 +229,7 @@ namespace error_system::core {
     }
 
     TEST_F(error_registry_test_t, duplicate_policy_overwrite_updates_name_index) {
-        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
 
         error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::overwrite);
         error_registry_t::instance().register_error(code, "FIRST", "First description");
@@ -264,9 +254,9 @@ namespace error_system::core {
     }
 
     TEST_F(error_registry_test_t, register_errors_returns_count) {
-        auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         auto code2 =
-            error_code_t(error_level_t::warn, domain::system_domain_t::application, 2, 2, 2);
+            error_code_t(error_level_t::warn, domain::system_domain_t::application, subsystem_id_t{2}, module_id_t{2}, error_number_t{2});
 
         std::vector<error_code_t> codes = {code1, code2};
         std::vector<std::string_view> names = {"ERR_1", "ERR_2"};
@@ -277,7 +267,7 @@ namespace error_system::core {
     }
 
     TEST_F(error_registry_test_t, register_errors_returns_zero_for_mismatched_arrays) {
-        auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
 
         std::vector<error_code_t> codes = {code1};
         std::vector<std::string_view> names = {"ERR_1", "ERR_2"};
@@ -288,7 +278,7 @@ namespace error_system::core {
     }
 
     TEST_F(error_registry_test_t, register_errors_with_overwrite_policy) {
-        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
 
         error_registry_t::instance().register_error(code, "ORIGINAL", "Original desc");
 
@@ -307,7 +297,7 @@ namespace error_system::core {
     }
 
     TEST_F(error_registry_test_t, duplicate_policy_warn_triggers_callback) {
-        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
 
         bool callback_called = false;
         code_t captured_code = 0;
@@ -328,35 +318,30 @@ namespace error_system::core {
         EXPECT_EQ(captured_code, code.get_identity_code());
         EXPECT_EQ(captured_name, "FIRST");
 
-        // 恢复默认回调
         error_registry_t::instance().set_duplicate_warn_callback(nullptr);
     }
 
     TEST_F(error_registry_test_t, duplicate_warn_callback_can_be_set_and_get) {
         auto& registry = error_registry_t::instance();
 
-        // 默认无回调（nullptr）
         EXPECT_FALSE(registry.get_duplicate_warn_callback());
 
-        // 设置为 nullptr
         registry.set_duplicate_warn_callback(nullptr);
         EXPECT_FALSE(registry.get_duplicate_warn_callback());
 
-        // 设置自定义回调
         bool called = false;
         registry.set_duplicate_warn_callback([&called](code_t, const error_metadata_t&) { called = true; });
         EXPECT_TRUE(registry.get_duplicate_warn_callback());
     }
 
     TEST_F(error_registry_test_t, duplicate_warn_callback_not_called_on_first_registration) {
-        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
 
         bool callback_called = false;
         error_registry_t::instance().set_duplicate_warn_callback(
             [&callback_called](code_t, const error_metadata_t&) { callback_called = true; });
         error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::warn);
 
-        // 首次注册不应触发回调
         error_registry_t::instance().register_error(code, "FIRST", "First description");
         EXPECT_FALSE(callback_called);
 
@@ -364,7 +349,7 @@ namespace error_system::core {
     }
 
     TEST_F(error_registry_test_t, duplicate_warn_keeps_original_metadata) {
-        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
 
         error_registry_t::instance().set_duplicate_policy(duplicate_policy_t::warn);
         error_registry_t::instance().register_error(code, "ORIGINAL", "Original description");
@@ -377,7 +362,7 @@ namespace error_system::core {
     }
 
     TEST_F(error_registry_test_t, concurrent_register_and_query) {
-        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         error_registry_t::instance().register_error(code, "CONCURRENT", "Concurrent test");
 
         std::vector<std::thread> threads;
@@ -410,9 +395,7 @@ namespace error_system::core {
         for (int i = 0; i < 10; ++i) {
             threads.emplace_back([&success_count, i]() {
                 for (int j = 0; j < 10; ++j) {
-                    auto code = error_code_t(
-                        error_level_t::error, domain::system_domain_t::database,
-                        static_cast<uint16_t>(i), static_cast<uint16_t>(j), static_cast<uint16_t>(j));
+                    auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{static_cast<uint16_t>(i)}, module_id_t{static_cast<uint16_t>(j)}, error_number_t{static_cast<uint16_t>(j)});
                     error_registry_t::instance().register_error(code, "CONCURRENT", "Test");
                     if (error_registry_t::instance().is_registered(code)) {
                         success_count.fetch_add(1);
@@ -430,7 +413,7 @@ namespace error_system::core {
 
 
     TEST_F(error_registry_test_t, get_info_cached_returns_registered_metadata) {
-        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         error_registry_t::instance().register_error(code, "ERR_CACHED", "Cached metadata");
 
         error_registry_t::instance().invalidate_metadata_cache();
@@ -441,7 +424,7 @@ namespace error_system::core {
     }
 
     TEST_F(error_registry_test_t, get_info_cached_returns_nullopt_for_unregistered) {
-        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 9, 9, 9);
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{9}, module_id_t{9}, error_number_t{9});
         error_registry_t::instance().invalidate_metadata_cache();
 
         const auto info = error_registry_t::instance().get_info_cached(code);
@@ -449,15 +432,15 @@ namespace error_system::core {
     }
 
     TEST_F(error_registry_test_t, get_info_cached_caches_unregistered_result) {
-        // 缓存"未注册"结果，避免对未注册码重复加锁查询
-        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 9, 9, 9);
+        /** 缓存"未注册"结果，避免对未注册码重复加锁查询 */
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{9}, module_id_t{9}, error_number_t{9});
         error_registry_t::instance().invalidate_metadata_cache();
 
         EXPECT_FALSE(error_registry_t::instance().get_info_cached(code).has_value());
-        // 第二次查询应命中"未注册"缓存（零锁开销）
+        /** 第二次查询应命中"未注册"缓存（零锁开销） */
         EXPECT_FALSE(error_registry_t::instance().get_info_cached(code).has_value());
 
-        // 注册后纪元 bump，缓存失效，应能查到
+        /** 注册后纪元 bump，缓存失效，应能查到 */
         error_registry_t::instance().register_error(code, "ERR_LATE", "Late registered");
         const auto info = error_registry_t::instance().get_info_cached(code);
         ASSERT_TRUE(info.has_value());
@@ -465,24 +448,21 @@ namespace error_system::core {
     }
 
     TEST_F(error_registry_test_t, cache_invalidated_on_unregister) {
-        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         error_registry_t::instance().register_error(code, "ERR_TO_REMOVE", "To be removed");
 
-        // 填充缓存
         ASSERT_TRUE(error_registry_t::instance().get_info_cached(code).has_value());
 
-        // 注销后缓存应失效
         error_registry_t::instance().unregister_error(code);
         EXPECT_FALSE(error_registry_t::instance().get_info_cached(code).has_value());
     }
 
     TEST_F(error_registry_test_t, cache_invalidated_on_unregister_all) {
-        const auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
-        const auto code2 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 2);
+        const auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
+        const auto code2 = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{2});
         error_registry_t::instance().register_error(code1, "ERR_1", "One");
         error_registry_t::instance().register_error(code2, "ERR_2", "Two");
 
-        // 填充缓存
         ASSERT_TRUE(error_registry_t::instance().get_info_cached(code1).has_value());
         ASSERT_TRUE(error_registry_t::instance().get_info_cached(code2).has_value());
 
@@ -492,7 +472,7 @@ namespace error_system::core {
     }
 
     TEST_F(error_registry_test_t, epoch_monotonically_increases_on_mutations) {
-        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         const uint64_t epoch0 = error_registry_t::instance().get_epoch();
 
         error_registry_t::instance().register_error(code, "ERR_EPOCH", "Epoch test");
@@ -509,20 +489,20 @@ namespace error_system::core {
     }
 
     TEST_F(error_registry_test_t, cache_is_thread_local) {
-        // 每个线程有独立缓存，互不干扰
-        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        /** 每个线程有独立缓存，互不干扰 */
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         error_registry_t::instance().register_error(code, "ERR_TLS", "Thread-local cache");
 
-        // 主线程填充缓存
+        /** 主线程填充缓存 */
         ASSERT_TRUE(error_registry_t::instance().get_info_cached(code).has_value());
 
-        // 在另一线程注销（bump 纪元），主线程缓存因纪元变化失效
+        /** 在另一线程注销（bump 纪元），主线程缓存因纪元变化失效 */
         std::thread t([&code] {
             error_registry_t::instance().unregister_error(code);
         });
         t.join();
 
-        // 主线程下次查询应看到失效并重建
+        /** 主线程下次查询应看到失效并重建 */
         EXPECT_FALSE(error_registry_t::instance().get_info_cached(code).has_value());
     }
 
@@ -543,10 +523,10 @@ namespace error_system::core {
      * @brief 批量注册混合重复和新错误码：重复项按策略处理，新项正常注册
      */
     TEST_F(error_registry_test_t, register_errors_mixed_duplicate_and_new) {
-        auto code_keep = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code_keep = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         error_registry_t::instance().register_error(code_keep, "KEEP_OLD", "Old desc");
 
-        auto code_new = error_code_t(error_level_t::warn, domain::system_domain_t::database, 1, 1, 2);
+        auto code_new = error_code_t(error_level_t::warn, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{2});
 
         std::vector<error_code_t> codes = {code_keep, code_new};
         std::vector<std::string_view> names = {"KEEP_NEW", "NEW_ONE"};
@@ -569,7 +549,7 @@ namespace error_system::core {
      * @brief 同一批次内出现重复 code：skip 策略下首项注册成功，重复项跳过
      */
     TEST_F(error_registry_test_t, register_errors_same_code_twice_in_batch) {
-        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 7);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{7});
 
         std::vector<error_code_t> codes = {code, code};
         std::vector<std::string_view> names = {"FIRST_IN_BATCH", "SECOND_IN_BATCH"};
@@ -589,9 +569,9 @@ namespace error_system::core {
      *        与注册顺序无关
      */
     TEST_F(error_registry_test_t, get_errors_by_subsystem_multiple_module_groups_order_independent) {
-        auto code_a1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 5, 10, 1);
-        auto code_b1 = error_code_t(error_level_t::warn, domain::system_domain_t::database, 5, 20, 1);
-        auto code_b2 = error_code_t(error_level_t::info, domain::system_domain_t::database, 5, 20, 2);
+        auto code_a1 = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{5}, module_id_t{10}, error_number_t{1});
+        auto code_b1 = error_code_t(error_level_t::warn, domain::system_domain_t::database, subsystem_id_t{5}, module_id_t{20}, error_number_t{1});
+        auto code_b2 = error_code_t(error_level_t::info, domain::system_domain_t::database, subsystem_id_t{5}, module_id_t{20}, error_number_t{2});
 
         error_registry_t::instance().register_error(code_b1, "B1", "B1 desc");
         error_registry_t::instance().register_error(code_a1, "A1", "A1 desc");

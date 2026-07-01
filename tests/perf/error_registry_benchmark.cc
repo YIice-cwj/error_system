@@ -12,7 +12,10 @@ namespace {
 using error_system::core::error_builder_t;
 using error_system::core::error_code_t;
 using error_system::core::error_level_t;
+using error_system::core::error_number_t;
 using error_system::core::error_registry_t;
+using error_system::core::module_id_t;
+using error_system::core::subsystem_id_t;
 using error_system::domain::system_domain_t;
 
 constexpr std::size_t BATCH_SIZE = 4096;
@@ -38,8 +41,7 @@ dataset_t build_dataset() {
     data.description_views.reserve(BATCH_SIZE);
 
     for (std::size_t i = 0; i < BATCH_SIZE; ++i) {
-        data.codes.push_back(error_code_t(
-            error_level_t::error, system_domain_t::database, 2, static_cast<uint16_t>((i / 128) + 1), static_cast<uint16_t>(i + 1)));
+        data.codes.push_back(error_code_t(error_level_t::error, system_domain_t::database, subsystem_id_t{2}, module_id_t{static_cast<uint16_t>((i / 128) + 1)}, error_number_t{static_cast<uint16_t>(i + 1)}));
         data.names.push_back("ERR_PERF_REGISTRY_" + std::to_string(i));
         data.descriptions.push_back("registry benchmark item " + std::to_string(i));
     }
@@ -58,7 +60,7 @@ double benchmark_batch_register(const dataset_t& data) {
     const auto start = std::chrono::steady_clock::now();
     for (int round = 0; round < REGISTER_ROUNDS; ++round) {
         registry.unregister_all();
-        registry.register_errors(data.codes, data.name_views, data.description_views);
+        [[maybe_unused]] auto cnt = registry.register_errors(data.codes, data.name_views, data.description_views);
     }
     const auto end = std::chrono::steady_clock::now();
     const auto total_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
@@ -68,7 +70,7 @@ double benchmark_batch_register(const dataset_t& data) {
 double benchmark_lookup(const dataset_t& data, std::size_t& checksum) {
     auto& registry = error_registry_t::instance();
     registry.unregister_all();
-    registry.register_errors(data.codes, data.name_views, data.description_views);
+    [[maybe_unused]] auto cnt2 = registry.register_errors(data.codes, data.name_views, data.description_views);
 
     const auto start = std::chrono::steady_clock::now();
     for (int round = 0; round < LOOKUP_ROUNDS; ++round) {

@@ -24,7 +24,11 @@ namespace error_system::migration {
         error_migration_registry_t* reg_{nullptr};
 
         static error_system::core::error_code_t make_code(uint16_t subsystem, uint16_t module, uint16_t number) noexcept {
-            return error_system::core::error_code_t{error_system::core::error_level_t::error, domain::system_domain_t::database, subsystem, module, number};
+            return error_system::core::error_code_t{error_system::core::error_level_t::error,
+                                                    domain::system_domain_t::database,
+                                                    error_system::core::subsystem_id_t{subsystem},
+                                                    error_system::core::module_id_t{module},
+                                                    error_system::core::error_number_t{number}};
         }
     };
 
@@ -33,7 +37,7 @@ namespace error_system::migration {
         const auto code = make_code(1, 1, 1);
         const auto replacement = make_code(1, 1, 2);
 
-        reg_->mark_deprecated(code, "使用 ERR_NEW 替代", replacement, "2.0.0", "3.0.0");
+        reg_->mark_deprecated(code, {"使用 ERR_NEW 替代", replacement, "2.0.0", "3.0.0"});
 
         auto info = reg_->get_deprecation_info(code);
         ASSERT_TRUE(info.has_value());
@@ -47,7 +51,7 @@ namespace error_system::migration {
 
     TEST_F(error_migration_test_t, mark_deprecated_without_replacement) {
         const auto code = make_code(1, 1, 1);
-        reg_->mark_deprecated(code, "已废弃，无替代");
+        reg_->mark_deprecated(code, {"已废弃，无替代", std::nullopt, "", ""});
 
         auto info = reg_->get_deprecation_info(code);
         ASSERT_TRUE(info.has_value());
@@ -59,8 +63,8 @@ namespace error_system::migration {
 
     TEST_F(error_migration_test_t, mark_deprecated_overwrites_previous) {
         const auto code = make_code(1, 1, 1);
-        reg_->mark_deprecated(code, "原因 v1");
-        reg_->mark_deprecated(code, "原因 v2");
+        reg_->mark_deprecated(code, {"原因 v1", std::nullopt, "", ""});
+        reg_->mark_deprecated(code, {"原因 v2", std::nullopt, "", ""});
 
         auto info = reg_->get_deprecation_info(code);
         ASSERT_TRUE(info.has_value());
@@ -75,7 +79,7 @@ namespace error_system::migration {
 
     TEST_F(error_migration_test_t, is_deprecated_returns_true_for_marked) {
         const auto code = make_code(1, 1, 1);
-        reg_->mark_deprecated(code, "废弃");
+        reg_->mark_deprecated(code, {"废弃", std::nullopt, "", ""});
         EXPECT_TRUE(reg_->is_deprecated(code));
     }
 
@@ -89,7 +93,7 @@ namespace error_system::migration {
         const auto old_code = make_code(1, 1, 1);
         const auto new_code = make_code(1, 1, 2);
 
-        reg_->mark_deprecated(old_code, "迁移", new_code);
+        reg_->mark_deprecated(old_code, {"迁移", new_code, "", ""});
 
         auto migrated = reg_->migrate(old_code);
         ASSERT_TRUE(migrated.has_value());
@@ -98,7 +102,7 @@ namespace error_system::migration {
 
     TEST_F(error_migration_test_t, mark_deprecated_without_replacement_does_not_create_migration) {
         const auto old_code = make_code(1, 1, 1);
-        reg_->mark_deprecated(old_code, "无替代");
+        reg_->mark_deprecated(old_code, {"无替代", std::nullopt, "", ""});
         EXPECT_FALSE(reg_->migrate(old_code).has_value());
     }
 
@@ -127,7 +131,6 @@ namespace error_system::migration {
         reg_->register_migration(a, b);
         reg_->register_migration(b, c);
 
-        // 单次跳转：a → b（不继续到 c）
         auto migrated = reg_->migrate(a);
         ASSERT_TRUE(migrated.has_value());
         EXPECT_EQ(migrated->get_identity_code(), b.get_identity_code());
@@ -155,22 +158,18 @@ namespace error_system::migration {
     }
 
     TEST_F(error_migration_test_t, migrate_recursive_handles_cycle_safely) {
-        // 构造环 a → b → a
         const auto a = make_code(1, 1, 1);
         const auto b = make_code(1, 1, 2);
 
         reg_->register_migration(a, b);
         reg_->register_migration(b, a);
 
-        // 不应死循环；返回环中某一节点
         const auto result = reg_->migrate_recursive(a);
-        // 经过 16 步后停止，结果应是 a 或 b 之一
         const auto rid = result.get_identity_code();
         EXPECT_TRUE(rid == a.get_identity_code() || rid == b.get_identity_code());
     }
 
     TEST_F(error_migration_test_t, migrate_recursive_self_cycle_safely) {
-        // 自环：a → a
         const auto a = make_code(1, 1, 1);
         reg_->register_migration(a, a);
 
@@ -179,7 +178,6 @@ namespace error_system::migration {
     }
 
     TEST_F(error_migration_test_t, migrate_recursive_max_depth_16) {
-        // 构造 20 步线性链，验证 16 步后停止
         std::vector<error_system::core::error_code_t> codes;
         codes.reserve(20);
         for (size_t i = 0; i < 20; ++i) {
@@ -190,14 +188,13 @@ namespace error_system::migration {
         }
 
         const auto result = reg_->migrate_recursive(codes[0]);
-        // 16 步后应停在 codes[16]
         EXPECT_EQ(result.get_identity_code(), codes[16].get_identity_code());
     }
 
 
     TEST_F(error_migration_test_t, unmark_deprecated_removes_entry) {
         const auto code = make_code(1, 1, 1);
-        reg_->mark_deprecated(code, "废弃");
+        reg_->mark_deprecated(code, {"废弃", std::nullopt, "", ""});
 
         EXPECT_TRUE(reg_->unmark_deprecated(code));
         EXPECT_FALSE(reg_->is_deprecated(code));
@@ -228,10 +225,9 @@ namespace error_system::migration {
         const auto old_code = make_code(1, 1, 1);
         const auto new_code = make_code(1, 1, 2);
 
-        reg_->mark_deprecated(old_code, "废弃", new_code);
+        reg_->mark_deprecated(old_code, {"废弃", new_code, "", ""});
         EXPECT_TRUE(reg_->unmark_deprecated(old_code));
 
-        // 迁移映射应保留（废弃与迁移分离存储）
         EXPECT_FALSE(reg_->is_deprecated(old_code));
         auto migrated = reg_->migrate(old_code);
         ASSERT_TRUE(migrated.has_value());
@@ -244,7 +240,7 @@ namespace error_system::migration {
         const auto b = make_code(1, 1, 2);
         const auto c = make_code(1, 1, 3);
 
-        reg_->mark_deprecated(a, "废弃", b);
+        reg_->mark_deprecated(a, {"废弃", b, "", ""});
         reg_->register_migration(c, b);
 
         reg_->clear_all();
@@ -259,12 +255,11 @@ namespace error_system::migration {
     TEST_F(error_migration_test_t, deprecated_count_reflects_state) {
         EXPECT_EQ(reg_->deprecated_count(), 0UL);
 
-        reg_->mark_deprecated(make_code(1, 1, 1), "1");
-        reg_->mark_deprecated(make_code(1, 1, 2), "2");
+        reg_->mark_deprecated(make_code(1, 1, 1), {"1", std::nullopt, "", ""});
+        reg_->mark_deprecated(make_code(1, 1, 2), {"2", std::nullopt, "", ""});
         EXPECT_EQ(reg_->deprecated_count(), 2UL);
 
-        // 覆盖不增加计数
-        reg_->mark_deprecated(make_code(1, 1, 1), "1-new");
+        reg_->mark_deprecated(make_code(1, 1, 1), {"1-new", std::nullopt, "", ""});
         EXPECT_EQ(reg_->deprecated_count(), 2UL);
     }
 
@@ -275,7 +270,6 @@ namespace error_system::migration {
         reg_->register_migration(make_code(1, 1, 3), make_code(1, 1, 4));
         EXPECT_EQ(reg_->migration_count(), 2UL);
 
-        // 覆盖不增加计数
         reg_->register_migration(make_code(1, 1, 1), make_code(1, 1, 9));
         EXPECT_EQ(reg_->migration_count(), 2UL);
     }
@@ -286,14 +280,13 @@ namespace error_system::migration {
         const auto b = make_code(1, 1, 2);
         const auto c = make_code(1, 1, 3);
 
-        reg_->mark_deprecated(a, "a");
-        reg_->mark_deprecated(b, "b");
-        reg_->mark_deprecated(c, "c");
+        reg_->mark_deprecated(a, {"a", std::nullopt, "", ""});
+        reg_->mark_deprecated(b, {"b", std::nullopt, "", ""});
+        reg_->mark_deprecated(c, {"c", std::nullopt, "", ""});
 
         const auto codes = reg_->get_deprecated_codes();
         EXPECT_EQ(codes.size(), 3UL);
 
-        // 验证三个 identity 都在列表中（顺序不保证）
         std::vector<error_system::core::code_t> sorted_codes = codes;
         std::sort(sorted_codes.begin(), sorted_codes.end());
         EXPECT_EQ(sorted_codes[0], a.get_identity_code());
@@ -308,14 +301,12 @@ namespace error_system::migration {
 
 
     TEST_F(error_migration_test_t, deprecation_keyed_by_identity_code) {
-        // 同一 identity 的不同实例（retryable/transient 位不同）应识别为同一码
         const auto code = make_code(1, 1, 1);
         error_system::core::error_code_t code_with_retryable = code;
         code_with_retryable.set_retryable(true);
 
-        reg_->mark_deprecated(code, "废弃");
+        reg_->mark_deprecated(code, {"废弃", std::nullopt, "", ""});
 
-        // 使用 code_with_retryable 查询应同样命中
         EXPECT_TRUE(reg_->is_deprecated(code_with_retryable));
         auto info = reg_->get_deprecation_info(code_with_retryable);
         ASSERT_TRUE(info.has_value());
@@ -327,7 +318,6 @@ namespace error_system::migration {
         const auto new_code = make_code(1, 1, 2);
         reg_->register_migration(old_code, new_code);
 
-        // 不同实例但同一 identity
         error_system::core::error_code_t old_with_transient = old_code;
         old_with_transient.set_transient(true);
 
@@ -356,10 +346,9 @@ namespace error_system::migration {
             threads.emplace_back([&, i]() {
                 for (int j = 0; j < 100; ++j) {
                     if (i % 2 == 0) {
-                        reg_->mark_deprecated(code, "并发废弃", replacement);
+                        reg_->mark_deprecated(code, {"并发废弃", replacement, "", ""});
                         mark_count.fetch_add(1);
                     } else {
-                        // 两个查询接口都被调用，验证并发安全性（不关心返回值）
                         if (reg_->is_deprecated(code) || reg_->get_deprecation_info(code)) {
                             query_count.fetch_add(1);
                         } else {
@@ -380,7 +369,6 @@ namespace error_system::migration {
     }
 
     TEST_F(error_migration_test_t, concurrent_migrate_recursive_is_safe) {
-        // 构造链 a → b → c
         const auto a = make_code(1, 1, 1);
         const auto b = make_code(1, 1, 2);
         const auto c = make_code(1, 1, 3);
@@ -426,7 +414,6 @@ namespace error_system::migration {
             t.join();
         }
 
-        // 最终状态不确定，但不应崩溃
         SUCCEED();
     }
 

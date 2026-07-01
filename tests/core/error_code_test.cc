@@ -8,8 +8,10 @@ namespace error_system::core {
 
     TEST_F(error_code_test_t, default_constructor_creates_success_code) {
         error_code_t code;
-        EXPECT_EQ(code.get_code(), 0x8000000000000000ULL);  // sign=1（成功）的默认成功码原始值
-        EXPECT_EQ(code.get_sign(), 1);  // sign=1 = true = 成功
+        /** sign=1（成功）的默认成功码原始值 */
+        EXPECT_EQ(code.get_code(), 0x8000000000000000ULL);
+        /** sign=1 = true = 成功 */
+        EXPECT_EQ(code.get_sign(), 1);
         EXPECT_EQ(code.get_level(), error_level_t::debug);
         EXPECT_EQ(code.get_system(), domain::system_domain_t::none);
         EXPECT_EQ(code.get_subsys(), 0);
@@ -30,7 +32,7 @@ namespace error_system::core {
     }
 
     TEST_F(error_code_test_t, get_module_group_id_extracts_correct_bits) {
-        auto code = error_code_t(error_level_t::error, domain::system_domain_t::system, 2, 3, 4);
+        auto code = error_code_t(error_level_t::error, domain::system_domain_t::system, subsystem_id_t{2}, module_id_t{3}, error_number_t{4});
         auto group_id = code.get_module_group_id();
         EXPECT_NE(group_id, 0ULL);
         EXPECT_EQ(group_id & 0xFFFFULL, 0ULL);
@@ -57,12 +59,12 @@ namespace error_system::core {
         constexpr error_code_t code(
             error_level_t::error,
             domain::system_domain_t::database,
-            0x0102,  // subsystem
-            0x0304,  // module
-            0x0506   // number
+            subsystem_id_t{0x0102},
+            module_id_t{0x0304},
+            error_number_t{0x0506}
         );
 
-        EXPECT_EQ(code.get_sign(), 0);  // sign=0 = false = 错误
+        EXPECT_EQ(code.get_sign(), 0);
         EXPECT_EQ(code.get_level(), error_level_t::error);
         EXPECT_EQ(code.get_system(), domain::system_domain_t::database);
         EXPECT_EQ(code.get_subsys(), 0x0102);
@@ -73,17 +75,17 @@ namespace error_system::core {
     TEST_F(error_code_test_t, constexpr_five_parameter_constructor) {
         constexpr error_level_t level = error_level_t::warn;
         constexpr domain::system_domain_t system = domain::system_domain_t::application;
-        constexpr uint16_t subsystem = 101;
-        constexpr uint16_t module = 1;
-        constexpr uint16_t number = 1;
+        constexpr subsystem_id_t subsystem{101};
+        constexpr module_id_t module{1};
+        constexpr error_number_t number{1};
 
         constexpr error_code_t code(level, system, subsystem, module, number);
 
         static_assert(code.get_level() == level, "");
         static_assert(code.get_system() == system, "");
-        static_assert(code.get_subsys() == subsystem, "");
-        static_assert(code.get_module() == module, "");
-        static_assert(code.get_number() == number, "");
+        static_assert(code.get_subsys() == subsystem.value, "");
+        static_assert(code.get_module() == module.value, "");
+        static_assert(code.get_number() == number.value, "");
         EXPECT_TRUE(true);
     }
 

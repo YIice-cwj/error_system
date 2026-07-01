@@ -11,9 +11,12 @@
 
 #include <gtest/gtest.h>
 
+#include "error_system/config/feature_flags.h"
 #include "error_system/core/error_context.h"
 
 namespace error_system::plugin {
+
+    using error_system::core::error_code_t;
 
     class mock_plugin_t : public i_error_plugin_t {
         public:
@@ -35,7 +38,6 @@ namespace error_system::plugin {
         protected:
         void SetUp() override {
             plugin_registry_t::instance().clear();
-            // 注册测试用错误码，防止 fill_validation_fields 替换为哨兵值
             error_system::core::error_registry_t::instance().register_error(
                 error_system::core::error_code_t(42), "TEST_CODE_42", "test");
         }
@@ -123,8 +125,7 @@ namespace error_system::plugin {
         mock_plugin_t plugin("test");
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
-        // Create context with code 42 and test message
-        core::error_context_t context(core::error_code_t(42), "test message");
+        core::error_context_t context(core::located_code_t{core::error_code_t(42)}, "test message");
         plugin_registry_t::instance().notify_error(context);
 
         EXPECT_EQ(plugin.last_context->get_code().get_code(), 42ULL);
@@ -140,7 +141,7 @@ namespace error_system::plugin {
         for (int i = 0; i < 10; ++i) {
             threads.emplace_back([&notify_count]() {
                 for (int j = 0; j < 100; ++j) {
-                    core::error_context_t context(core::error_code_t(42), "test");
+                    core::error_context_t context(core::located_code_t{core::error_code_t(42)}, "test");
                     plugin_registry_t::instance().notify_error(context);
                     notify_count.fetch_add(1);
                 }
@@ -190,7 +191,7 @@ namespace error_system::plugin {
         std::thread notifier([&notification_started]() {
             notification_started.store(true);
             for (int i = 0; i < 2000; ++i) {
-                core::error_context_t context(core::error_code_t(42), "stress");
+                core::error_context_t context(core::located_code_t{core::error_code_t(42)}, "stress");
                 plugin_registry_t::instance().notify_error(context);
             }
         });
@@ -235,7 +236,7 @@ namespace error_system::plugin {
 
         std::thread notifier([]() {
             for (int i = 0; i < 30; ++i) {
-                core::error_context_t context(core::error_code_t(42), "test");
+                core::error_context_t context(core::located_code_t{core::error_code_t(42)}, "test");
                 plugin_registry_t::instance().notify_error(context);
             }
         });
@@ -260,18 +261,15 @@ namespace error_system::plugin {
     }
 
     TEST_F(plugin_registry_test_t, register_plugin_ownership_transfer) {
-        // 通过 unique_ptr 注册，注册表接管所有权
         auto plugin = std::make_unique<mock_plugin_t>("owned_plugin");
         plugin_registry_t::instance().register_plugin(std::move(plugin));
         EXPECT_EQ(plugin_registry_t::instance().size(), 1UL);
 
-        // 注销时自动释放
         plugin_registry_t::instance().unregister_plugin("owned_plugin");
         EXPECT_EQ(plugin_registry_t::instance().size(), 0UL);
     }
 
     TEST_F(plugin_registry_test_t, register_plugin_ownership_replace_old) {
-        // 注册 owned 插件，再用同名 plugin 替换，旧插件应自动释放
         auto plugin1 = std::make_unique<mock_plugin_t>("owned_replace");
         plugin_registry_t::instance().register_plugin(std::move(plugin1));
         EXPECT_EQ(plugin_registry_t::instance().size(), 1UL);
@@ -298,50 +296,44 @@ namespace error_system::plugin {
         level_filter_plugin_t plugin;
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
-        // 注册不同等级的错误码，防止 fill_validation_fields_ 替换为哨兵值
         error_system::core::error_registry_t::instance().register_error(
-            core::error_code_t(core::error_level_t::debug, domain::system_domain_t::application, 1, 1, 1),
+            error_code_t(core::error_level_t::debug, domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{1}),
             "TEST_DEBUG_1", "debug test");
         error_system::core::error_registry_t::instance().register_error(
-            core::error_code_t(core::error_level_t::info, domain::system_domain_t::application, 1, 1, 2),
+            error_code_t(core::error_level_t::info, domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{2}),
             "TEST_INFO_1", "info test");
         error_system::core::error_registry_t::instance().register_error(
-            core::error_code_t(core::error_level_t::warn, domain::system_domain_t::application, 1, 1, 3),
+            error_code_t(core::error_level_t::warn, domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{3}),
             "TEST_WARN_1", "warn test");
         error_system::core::error_registry_t::instance().register_error(
-            core::error_code_t(core::error_level_t::error, domain::system_domain_t::application, 1, 1, 4),
+            error_code_t(core::error_level_t::error, domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{4}),
             "TEST_ERROR_1", "error test");
         error_system::core::error_registry_t::instance().register_error(
-            core::error_code_t(core::error_level_t::fatal, domain::system_domain_t::application, 1, 1, 5),
+            error_code_t(core::error_level_t::fatal, domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{5}),
             "TEST_FATAL_1", "fatal test");
 
-        // debug 级别 —— 不应触发（低于 min_level = error）
         core::error_context_t ctx_debug(
-            core::error_code_t(core::error_level_t::debug, domain::system_domain_t::application, 1, 1, 1),
+            core::located_code_t{error_code_t(core::error_level_t::debug, domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{1})},
             "debug message");
         EXPECT_EQ(plugin.call_count.load(), 0);
 
-        // info 级别 —— 不应触发
         core::error_context_t ctx_info(
-            core::error_code_t(core::error_level_t::info, domain::system_domain_t::application, 1, 1, 2),
+            core::located_code_t{error_code_t(core::error_level_t::info, domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{2})},
             "info message");
         EXPECT_EQ(plugin.call_count.load(), 0);
 
-        // warn 级别 —— 不应触发
         core::error_context_t ctx_warn(
-            core::error_code_t(core::error_level_t::warn, domain::system_domain_t::application, 1, 1, 3),
+            core::located_code_t{error_code_t(core::error_level_t::warn, domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{3})},
             "warn message");
         EXPECT_EQ(plugin.call_count.load(), 0);
 
-        // error 级别 —— 应触发（等于 min_level）
         core::error_context_t ctx_error(
-            core::error_code_t(core::error_level_t::error, domain::system_domain_t::application, 1, 1, 4),
+            core::located_code_t{error_code_t(core::error_level_t::error, domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{4})},
             "error message");
         EXPECT_EQ(plugin.call_count.load(), 1);
 
-        // fatal 级别 —— 应触发（高于 min_level）
         core::error_context_t ctx_fatal(
-            core::error_code_t(core::error_level_t::fatal, domain::system_domain_t::application, 1, 1, 5),
+            core::located_code_t{error_code_t(core::error_level_t::fatal, domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{5})},
             "fatal message");
         EXPECT_EQ(plugin.call_count.load(), 2);
     }
@@ -362,12 +354,9 @@ namespace error_system::plugin {
 
         void SetUp() override {
             plugin_registry_t::instance().clear();
-            // 清理线程本地缓冲残留
             plugin_registry_t::instance().clear_deferred_notifications();
             plugin_registry_t::instance().set_deferred_buffer_size(1024);
 
-            // 切换到 sync_deferred 模式：error_context_t 构造时
-            // 通知进入延迟缓冲而非立即调用插件
             original_mode_ = error_system::config::feature_flags_t::get_notify_mode();
             error_system::config::feature_flags_t::set_notify_mode(
                 error_system::config::feature_flags_t::notify_mode_t::sync_deferred);
@@ -375,13 +364,10 @@ namespace error_system::plugin {
             auto& registry = error_system::core::error_registry_t::instance();
             registry.unregister_all();
             registry.set_duplicate_policy(error_system::core::duplicate_policy_t::skip);
-            // 注册测试用错误码，防止 fill_validation_fields 替换为哨兵值
             registry.register_error(
                 error_system::core::error_code_t(42), "TEST_CODE_42", "test");
             registry.register_error(
-                error_system::core::error_code_t(
-                    error_system::core::error_level_t::error,
-                    error_system::domain::system_domain_t::application, 1, 1, 1),
+                error_code_t(error_system::core::error_level_t::error, error_system::domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{1}),
                 "TEST_ERR_1", "test error 1");
         }
 
@@ -394,27 +380,24 @@ namespace error_system::plugin {
     };
 
     TEST_F(deferred_notify_test_t, enqueue_buffers_without_notifying) {
-        // sync_deferred 模式下，构造 error_context_t 自动入队延迟缓冲
-        // 不应立即调用插件
         mock_plugin_t plugin("deferred_plugin");
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
         error_system::core::error_context_t ctx(
-            error_system::core::error_code_t(42), "buffered error");
+            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "buffered error");
 
         EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
-        EXPECT_EQ(plugin.call_count.load(), 0);  // 未 flush，插件不应被调用
+        EXPECT_EQ(plugin.call_count.load(), 0);
     }
 
     TEST_F(deferred_notify_test_t, flush_triggers_notifications) {
         mock_plugin_t plugin("flush_plugin");
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
-        // 构造两个上下文，sync_deferred 模式下自动入队
         error_system::core::error_context_t ctx1(
-            error_system::core::error_code_t(42), "error 1");
+            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "error 1");
         error_system::core::error_context_t ctx2(
-            error_system::core::error_code_t(42), "error 2");
+            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "error 2");
         ASSERT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 2UL);
 
         plugin_registry_t::instance().flush_deferred_notifications();
@@ -436,14 +419,13 @@ namespace error_system::plugin {
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
         error_system::core::error_context_t ctx(
-            error_system::core::error_code_t(42), "to be dropped");
+            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "to be dropped");
         ASSERT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
 
         const size_t dropped = plugin_registry_t::instance().clear_deferred_notifications();
         EXPECT_EQ(dropped, 1UL);
         EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 0UL);
 
-        // flush 应为 no-op
         plugin_registry_t::instance().flush_deferred_notifications();
         EXPECT_EQ(plugin.call_count.load(), 0);
     }
@@ -455,23 +437,19 @@ namespace error_system::plugin {
         plugin_registry_t::instance().set_deferred_buffer_size(3);
         EXPECT_FALSE(plugin_registry_t::instance().deferred_buffer_overflowed());
 
-        // 构造上下文自动入队 1 个
         error_system::core::error_context_t ctx(
-            error_system::core::error_code_t(42), "overflow test");
+            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "overflow test");
         ASSERT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
 
-        // 手动补充至满
         plugin_registry_t::instance().enqueue_deferred_notification(ctx);
         plugin_registry_t::instance().enqueue_deferred_notification(ctx);
         EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 3UL);
         EXPECT_FALSE(plugin_registry_t::instance().deferred_buffer_overflowed());
 
-        // 第 4 个应被丢弃
         plugin_registry_t::instance().enqueue_deferred_notification(ctx);
         EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 3UL);
         EXPECT_TRUE(plugin_registry_t::instance().deferred_buffer_overflowed());
 
-        // flush 后 overflow 标志重置
         plugin_registry_t::instance().flush_deferred_notifications();
         EXPECT_FALSE(plugin_registry_t::instance().deferred_buffer_overflowed());
         EXPECT_EQ(plugin.call_count.load(), 3);
@@ -490,33 +468,23 @@ namespace error_system::plugin {
             std::atomic<int> call_count{0};
         };
 
-        // 注册 info 级别错误码（用于过滤测试）
         error_system::core::error_registry_t::instance().register_error(
-            error_system::core::error_code_t(
-                error_system::core::error_level_t::info,
-                error_system::domain::system_domain_t::application, 1, 1, 9),
+            error_code_t(error_system::core::error_level_t::info, error_system::domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{9}),
             "TEST_INFO_9", "info test");
 
         level_filter_plugin_t plugin;
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
-        // 构造时自动入队（sync_deferred 模式）
-        // info 级别应被过滤
         error_system::core::error_context_t info_ctx(
-            error_system::core::error_code_t(
-                error_system::core::error_level_t::info,
-                error_system::domain::system_domain_t::application, 1, 1, 9),
+            error_system::core::located_code_t{error_code_t(error_system::core::error_level_t::info, error_system::domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{9})},
             "info level");
-        // error 级别应通过
         error_system::core::error_context_t error_ctx(
-            error_system::core::error_code_t(
-                error_system::core::error_level_t::error,
-                error_system::domain::system_domain_t::application, 1, 1, 1),
+            error_system::core::located_code_t{error_code_t(error_system::core::error_level_t::error, error_system::domain::system_domain_t::application, core::subsystem_id_t{1}, core::module_id_t{1}, core::error_number_t{1})},
             "error level");
 
         plugin_registry_t::instance().flush_deferred_notifications();
 
-        EXPECT_EQ(plugin.call_count.load(), 1);  // 只有 error 级别通过
+        EXPECT_EQ(plugin.call_count.load(), 1);
     }
 
     TEST_F(deferred_notify_test_t, set_deferred_buffer_size_zero_unlimited) {
@@ -526,10 +494,8 @@ namespace error_system::plugin {
         mock_plugin_t plugin("unlimited_plugin");
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
-        // 构造 1 个上下文（自动入队 1 个）
         error_system::core::error_context_t ctx(
-            error_system::core::error_code_t(42), "unlimited");
-        // 手动补充至 1100 个，不应丢弃
+            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "unlimited");
         for (int i = 0; i < 1099; ++i) {
             plugin_registry_t::instance().enqueue_deferred_notification(ctx);
         }
@@ -543,26 +509,21 @@ namespace error_system::plugin {
         mock_plugin_t plugin("tls_plugin");
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
-        // 主线程构造上下文 → 自动入队主线程缓冲
         error_system::core::error_context_t ctx(
-            error_system::core::error_code_t(42), "main thread");
+            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "main thread");
         EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
 
-        // 子线程构造上下文 → 入队子线程缓冲，主线程缓冲不受影响
         std::thread t([] {
             error_system::core::error_context_t child_ctx(
-                error_system::core::error_code_t(42), "child thread");
-            // 子线程缓冲独立：应有 1 个待通知
+                error_system::core::located_code_t{error_system::core::error_code_t(42)}, "child thread");
             EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
             plugin_registry_t::instance().flush_deferred_notifications();
             EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 0UL);
         });
         t.join();
 
-        // 主线程缓冲仍为 1
         EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
         plugin_registry_t::instance().flush_deferred_notifications();
-        // 子线程 flush 触发 1 次 + 主线程 flush 触发 1 次 = 2
         EXPECT_EQ(plugin.call_count.load(), 2);
     }
 
@@ -575,9 +536,7 @@ namespace error_system::plugin {
             std::string_view name() const noexcept override { return "reentrant"; }
             void on_error(const core::error_context_t&) noexcept override {
                 call_count.fetch_add(1);
-                // 在 flush 回调中构造新上下文：sync_deferred 模式下会尝试入队，
-                // 但 flushing 标志应阻止入队，避免无限递归
-                core::error_context_t nested(core::error_code_t(42), "nested during flush");
+                core::error_context_t nested(core::located_code_t{core::error_code_t(42)}, "nested during flush");
                 (void)nested;
             }
             std::atomic<int> call_count{0};
@@ -587,13 +546,12 @@ namespace error_system::plugin {
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
         error_system::core::error_context_t ctx(
-            error_system::core::error_code_t(42), "outer error");
+            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "outer error");
         ASSERT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 1UL);
 
         plugin_registry_t::instance().flush_deferred_notifications();
 
         EXPECT_EQ(plugin.call_count.load(), 1);
-        // 嵌套构造的上下文不应入队
         EXPECT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 0UL);
     }
 
@@ -618,9 +576,9 @@ namespace error_system::plugin {
         plugin_registry_t::instance().register_plugin_ref(plugin);
 
         error_system::core::error_context_t ctx1(
-            error_system::core::error_code_t(42), "first message");
+            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "first message");
         error_system::core::error_context_t ctx2(
-            error_system::core::error_code_t(42), "second message");
+            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "second message");
 
         plugin_registry_t::instance().flush_deferred_notifications();
 
@@ -636,9 +594,9 @@ namespace error_system::plugin {
      */
     TEST_F(deferred_notify_test_t, flush_with_no_plugins_is_noop) {
         error_system::core::error_context_t ctx1(
-            error_system::core::error_code_t(42), "no plugin 1");
+            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "no plugin 1");
         error_system::core::error_context_t ctx2(
-            error_system::core::error_code_t(42), "no plugin 2");
+            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "no plugin 2");
         ASSERT_EQ(plugin_registry_t::instance().pending_deferred_notifications(), 2UL);
         ASSERT_EQ(plugin_registry_t::instance().size(), 0UL);
 
@@ -675,7 +633,7 @@ namespace error_system::plugin {
         plugin_registry_t::instance().register_plugin_ref(third);
 
         error_system::core::error_context_t ctx(
-            error_system::core::error_code_t(42), "ordering test");
+            error_system::core::located_code_t{error_system::core::error_code_t(42)}, "ordering test");
 
         plugin_registry_t::instance().flush_deferred_notifications();
 

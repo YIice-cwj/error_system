@@ -22,9 +22,9 @@ class benchmark_plugin_t : public i_error_plugin_t {
 
     std::string_view name() const noexcept override { return name_; }
 
-    void on_error(const error_context_t&) noexcept override { counter_.fetch_add(1, std::memory_order_relaxed); }
+    void on_error(const error_context_t&) noexcept override { counter_.fetch_add(1); }
 
-    std::size_t count() const noexcept { return counter_.load(std::memory_order_relaxed); }
+    std::size_t count() const noexcept { return counter_.load(); }
 
     private:
     const char* name_;

@@ -28,7 +28,7 @@ namespace error_system::core {
     };
 
     TEST_F(i18n_test_t, register_and_query_message) {
-        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         catalog_->register_message(error_system::i18n::locale_t::zh_CN, code, "数据库连接超时");
         catalog_->register_message(error_system::i18n::locale_t::en_US, code, "Database connection timeout");
 
@@ -37,36 +37,31 @@ namespace error_system::core {
     }
 
     TEST_F(i18n_test_t, query_returns_empty_for_unregistered_code) {
-        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 9, 9, 9);
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{9}, module_id_t{9}, error_number_t{9});
         EXPECT_TRUE(catalog_->get_message(error_system::i18n::locale_t::zh_CN, code).empty());
     }
 
     TEST_F(i18n_test_t, query_returns_empty_for_unregistered_locale) {
-        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         catalog_->register_message(error_system::i18n::locale_t::zh_CN, code, "数据库连接超时");
 
-        // fr_FR 未注册，但默认 locale zh_CN 有该消息 → 应回退到默认 locale
         EXPECT_EQ(catalog_->get_message(error_system::i18n::locale_t::fr_FR, code), "数据库连接超时");
     }
 
     TEST_F(i18n_test_t, fallback_to_default_locale_when_code_missing) {
-        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
-        // 只注册默认 locale
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         catalog_->register_message(error_system::i18n::locale_t::zh_CN, code, "默认描述");
 
-        // 查询 en_US（未注册），应回退到 zh_CN
         EXPECT_EQ(catalog_->get_message(error_system::i18n::locale_t::en_US, code), "默认描述");
     }
 
     TEST_F(i18n_test_t, no_fallback_when_locale_equals_default_but_missing) {
-        // 默认 locale 为 zh_CN，查询 zh_CN 未注册的 code → 不应回退到自身
-        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
-        // 不注册任何消息
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         EXPECT_TRUE(catalog_->get_message(error_system::i18n::locale_t::zh_CN, code).empty());
     }
 
     TEST_F(i18n_test_t, active_locale_overrides_default) {
-        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         catalog_->register_message(error_system::i18n::locale_t::zh_CN, code, "中文");
         catalog_->register_message(error_system::i18n::locale_t::en_US, code, "English");
 
@@ -78,7 +73,7 @@ namespace error_system::core {
     }
 
     TEST_F(i18n_test_t, active_locale_none_falls_back_to_default) {
-        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         catalog_->register_message(error_system::i18n::locale_t::zh_CN, code, "默认中文");
 
         catalog_->clear_active_locale();
@@ -96,8 +91,8 @@ namespace error_system::core {
     }
 
     TEST_F(i18n_test_t, batch_register_messages) {
-        const auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
-        const auto code2 = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 2);
+        const auto code1 = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
+        const auto code2 = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{2});
 
         std::vector<std::pair<error_code_t, std::string_view>> entries = {
             {code1, "Error one"},
@@ -111,7 +106,7 @@ namespace error_system::core {
     }
 
     TEST_F(i18n_test_t, clear_locale_removes_messages) {
-        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         catalog_->register_message(error_system::i18n::locale_t::en_US, code, "English");
         ASSERT_EQ(catalog_->message_count(error_system::i18n::locale_t::en_US), 1UL);
 
@@ -125,7 +120,7 @@ namespace error_system::core {
     }
 
     TEST_F(i18n_test_t, clear_all_removes_everything) {
-        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         catalog_->register_message(error_system::i18n::locale_t::zh_CN, code, "中文");
         catalog_->register_message(error_system::i18n::locale_t::en_US, code, "English");
         ASSERT_EQ(catalog_->get_locales().size(), 2UL);
@@ -135,7 +130,7 @@ namespace error_system::core {
     }
 
     TEST_F(i18n_test_t, get_locales_returns_all_registered) {
-        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         catalog_->register_message(error_system::i18n::locale_t::zh_CN, code, "中文");
         catalog_->register_message(error_system::i18n::locale_t::en_US, code, "English");
         catalog_->register_message(error_system::i18n::locale_t::ja_JP, code, "日本語");
@@ -149,8 +144,7 @@ namespace error_system::core {
     }
 
     TEST_F(i18n_test_t, retryable_transient_flags_do_not_affect_lookup) {
-        // identity code 相同（仅 retryable/transient 位不同）应查询到同一消息
-        auto code_base = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        auto code_base = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         auto code_retryable = code_base;
         code_retryable.set_retryable(true);
         auto code_transient = code_base;
@@ -164,7 +158,7 @@ namespace error_system::core {
     }
 
     TEST_F(i18n_test_t, concurrent_register_and_query_is_safe) {
-        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
 
         std::thread writer([&code, this] {
             for (int i = 0; i < 100; ++i) {
@@ -185,17 +179,16 @@ namespace error_system::core {
     }
 
     TEST_F(i18n_test_t, set_default_locale_changes_fallback) {
-        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, 1, 1, 1);
+        const auto code = error_code_t(error_level_t::error, domain::system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
         catalog_->register_message(error_system::i18n::locale_t::en_US, code, "English fallback");
 
         catalog_->set_default_locale(error_system::i18n::locale_t::en_US);
-        // 查询未注册的 fr_FR，应回退到 en_US
         EXPECT_EQ(catalog_->get_message(error_system::i18n::locale_t::fr_FR, code), "English fallback");
 
         EXPECT_EQ(catalog_->get_default_locale(), error_system::i18n::locale_t::en_US);
     }
 
-    // locale_t 枚举转换
+    /** locale_t 枚举转换测试 */
 
     TEST(locale_test, to_string_covers_all_locales) {
         using namespace error_system::i18n;

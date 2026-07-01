@@ -8,7 +8,8 @@ namespace error_system::utils {
 
     TEST(string_utils_test, hash_empty_string) {
         constexpr auto result = string_utils_t::hash("");
-        EXPECT_EQ(result, 14695981039346656037ULL);  // FNV-1a offset basis for empty string
+        /** FNV-1a offset basis for empty string */
+        EXPECT_EQ(result, 14695981039346656037ULL);
     }
 
     TEST(string_utils_test, hash_single_char) {

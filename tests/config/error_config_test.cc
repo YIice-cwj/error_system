@@ -114,7 +114,6 @@ namespace error_system::config {
         feature_flags_t::set_notify_mode(feature_flags_t::notify_mode_t::async_queue);
         EXPECT_EQ(feature_flags_t::get_notify_mode(), feature_flags_t::notify_mode_t::async_queue);
 
-        // 恢复默认
         feature_flags_t::set_notify_mode(feature_flags_t::notify_mode_t::sync);
     }
 
@@ -122,11 +121,9 @@ namespace error_system::config {
         uint64_t id1 = 0x123450000000001ULL;
         uint64_t id2 = 0x543210000000001ULL;
 
-        // 设置 per-code 等级
         stacktrace_config_t::set_per_code_stacktrace_level(id1, core::error_level_t::warn);
         stacktrace_config_t::set_per_code_stacktrace_level(id2, core::error_level_t::fatal);
 
-        // 获取已设置的
         auto level1 = stacktrace_config_t::get_per_code_stacktrace_level(id1);
         ASSERT_TRUE(level1.has_value());
         EXPECT_EQ(level1.value(), core::error_level_t::warn);
@@ -135,7 +132,6 @@ namespace error_system::config {
         ASSERT_TRUE(level2.has_value());
         EXPECT_EQ(level2.value(), core::error_level_t::fatal);
 
-        // 获取未设置的值
         auto level3 = stacktrace_config_t::get_per_code_stacktrace_level(0xDEAD);
         EXPECT_FALSE(level3.has_value());
     }
@@ -158,7 +154,7 @@ namespace error_system::config {
 
         auto level = stacktrace_config_t::get_per_code_stacktrace_level(id);
         ASSERT_TRUE(level.has_value());
-        EXPECT_EQ(level.value(), core::error_level_t::fatal);  // 后设覆盖前设
+        EXPECT_EQ(level.value(), core::error_level_t::fatal);
 
         stacktrace_config_t::remove_per_code_stacktrace_level(id);
     }

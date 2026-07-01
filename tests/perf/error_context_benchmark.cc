@@ -6,6 +6,7 @@
 #include "error_system/core/error_context.h"
 #include "error_system/core/error_registry.h"
 #include "error_system/domain/system_domain.h"
+#include "error_system/i18n/subsystem_module_catalog.h"
 #include "error_system/plugin/plugin_registry.h"
 
 namespace {
@@ -14,8 +15,13 @@ using error_system::core::error_builder_t;
 using error_system::core::error_code_t;
 using error_system::core::error_context_t;
 using error_system::core::error_level_t;
+using error_system::core::error_number_t;
 using error_system::core::error_registry_t;
+using error_system::core::located_code_t;
+using error_system::core::module_id_t;
+using error_system::core::subsystem_id_t;
 using error_system::domain::system_domain_t;
+using error_system::i18n::subsystem_module_catalog_t;
 using error_system::plugin::plugin_registry_t;
 
 constexpr int WARMUP_ITERATIONS = 10000;
@@ -23,7 +29,7 @@ constexpr int MEASURE_ITERATIONS = 200000;
 constexpr double TASK2_BASELINE_NS_PER_OP = 4591.1;
 
 error_code_t make_benchmark_code() noexcept {
-    return error_code_t(error_level_t::error, system_domain_t::database, 1, 1, 1);
+    return error_code_t(error_level_t::error, system_domain_t::database, subsystem_id_t{1}, module_id_t{1}, error_number_t{1});
 }
 
 void prepare_registry() noexcept {
@@ -31,8 +37,11 @@ void prepare_registry() noexcept {
     registry.unregister_all();
     registry.set_duplicate_warn_callback(nullptr);
 
+    auto& catalog = subsystem_module_catalog_t::instance();
+    catalog.clear();
+
     const auto code = make_benchmark_code();
-    registry.register_subsystem_module(code.get_subsys(), code.get_module(), "perf", "error_context");
+    catalog.register_subsystem_module(code.get_subsys(), code.get_module(), "perf", "error_context");
     registry.register_error(code, "ERR_PERF_CONTEXT", "performance benchmark context");
 }
 
@@ -40,7 +49,7 @@ std::size_t run_loop(int iterations) noexcept {
     const auto code = make_benchmark_code();
     std::size_t checksum = 0;
     for (int i = 0; i < iterations; ++i) {
-        error_context_t context({code}, "benchmark {}", i);
+        error_context_t context(located_code_t{code}, "benchmark {}", i);
         checksum += context.message.size();
         checksum += static_cast<std::size_t>(context.get_code().get_number());
     }
