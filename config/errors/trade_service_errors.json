@@ -1,16 +1,31 @@
 {
     "namespace": "biz::trade_errors",
     "service_name": "交易服务",
+    "service_i18n": {
+        "zh_CN": "交易服务",
+        "en_US": "Trade Service",
+        "ja_JP": "取引サービス"
+    },
     "domain": "application",
     "subsystem_id": 101,
     "modules": {
         "order": {
             "id": 1,
-            "desc": "订单模块"
+            "desc": "订单模块",
+            "i18n": {
+                "zh_CN": "订单模块",
+                "en_US": "Order Module",
+                "ja_JP": "注文モジュール"
+            }
         },
         "cart": {
             "id": 2,
-            "desc": "购物车模块"
+            "desc": "购物车模块",
+            "i18n": {
+                "zh_CN": "购物车模块",
+                "en_US": "Cart Module",
+                "ja_JP": "カートモジュール"
+            }
         }
     },
     "errors": [

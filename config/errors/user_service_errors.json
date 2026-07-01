@@ -1,16 +1,31 @@
 {
     "namespace": "biz::user_errors",
     "service_name": "用户服务",
+    "service_i18n": {
+        "zh_CN": "用户服务",
+        "en_US": "User Service",
+        "ja_JP": "ユーザーサービス"
+    },
     "domain": "application",
     "subsystem_id": 102,
     "modules": {
-        "auth": { 
-            "id": 1, 
-            "desc": "鉴权模块" 
+        "auth": {
+            "id": 1,
+            "desc": "鉴权模块",
+            "i18n": {
+                "zh_CN": "鉴权模块",
+                "en_US": "Authentication Module",
+                "ja_JP": "認証モジュール"
+            }
         },
-        "profile": { 
-            "id": 2, 
-            "desc": "资料模块" 
+        "profile": {
+            "id": 2,
+            "desc": "资料模块",
+            "i18n": {
+                "zh_CN": "资料模块",
+                "en_US": "Profile Module",
+                "ja_JP": "プロフィールモジュール"
+            }
         }
     },
     "errors": [
@@ -19,21 +34,33 @@
             "module": "auth",
             "level": "warn",
             "number": 1,
-            "desc": "用户密码输入错误"
+            "desc": "用户密码输入错误",
+            "i18n": {
+                "zh_CN": "用户密码输入错误",
+                "en_US": "User password is incorrect"
+            }
         },
         {
             "name": "ERR_TOKEN_EXPIRED",
             "module": "auth",
             "level": "info",
             "number": 2,
-            "desc": "登录态 Token 已过期，需要重新登录"
+            "desc": "登录态 Token 已过期，需要重新登录",
+            "i18n": {
+                "zh_CN": "登录态 Token 已过期，需要重新登录",
+                "en_US": "Login token has expired, please log in again"
+            }
         },
         {
             "name": "ERR_USER_BANNED",
             "module": "profile",
             "level": "error",
             "number": 1,
-            "desc": "用户账号已被封禁"
+            "desc": "用户账号已被封禁",
+            "i18n": {
+                "zh_CN": "用户账号已被封禁",
+                "en_US": "User account has been banned"
+            }
         }
     ]
 }

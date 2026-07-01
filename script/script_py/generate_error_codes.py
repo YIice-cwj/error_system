@@ -1,15 +1,29 @@
 #!/usr/bin/env python3
 """错误码 JSON → C++ 头文件生成器
 
-输入 JSON 格式（i18n 字段可选，缺失时默认用 desc 注册为 zh_CN）：
+输入 JSON 格式（i18n 字段可选，缺失时用 fallback 注册为 default_locale）：
 
     {
         "namespace": "biz::trade_errors",
         "service_name": "交易服务",
+        "service_i18n": {
+            "zh_CN": "交易服务",
+            "en_US": "Trade Service",
+            "ja_JP": "取引サービス"
+        },
+        "default_locale": "zh_CN",
         "domain": "application",
         "subsystem_id": 101,
         "modules": {
-            "order": { "id": 1, "desc": "订单模块" }
+            "order": {
+                "id": 1,
+                "desc": "订单模块",
+                "i18n": {
+                    "zh_CN": "订单模块",
+                    "en_US": "Order Module",
+                    "ja_JP": "注文モジュール"
+                }
+            }
         },
         "errors": [
             {
@@ -19,17 +33,28 @@
                 "number": 1,
                 "desc": "订单不存在或已删除",
                 "i18n": {
-                    "en_US": "Order not found or has been deleted",
-                    "zh_CN": "订单不存在或已删除"
+                    "zh_CN": "订单不存在或已删除",
+                    "en_US": "Order not found or has been deleted"
                 }
             }
         ]
     }
 
+字段说明：
+  - default_locale: 默认 locale（可选，默认 zh_CN）。当 i18n 字段缺失时，
+    用 desc/service_name 注册到此 locale。合法值：zh_CN / en_US / ja_JP 等
+  - service_name: 子系统名称（作为 fallback）
+  - service_i18n: 子系统名称多语言（可选，无则用 service_name 注册为 default_locale）
+  - modules.<key>.desc: 模块名称（作为 fallback）
+  - modules.<key>.i18n: 模块名称多语言（可选，无则用 desc 注册为 default_locale）
+  - errors[].desc: 错误描述（作为 fallback）
+  - errors[].i18n: 错误消息多语言（可选，无则用 desc 注册为 default_locale）
+
 生成内容：
   1. constexpr error_code_t 常量
-  2. error_registrar_t 静态注册（注册错误码元数据 + 子系统/模块名，向后兼容）
-  3. i18n 静态注册（注册错误码消息到 i18n_t，按 locale 分组）
+  2. error_registrar_t 静态注册（注册错误码元数据，子系统/模块名向后兼容）
+  3. subsystem_module_catalog 静态注册（子系统/模块名称按多语言注册）
+  4. i18n 静态注册（注册错误码消息到 i18n_t，按 locale 分组）
 """
 import json
 import os
@@ -52,27 +77,36 @@ def _escape_cpp_string(text):
     return text.replace('\\', '\\\\').replace('"', '\\"')
 
 
-def _normalize_i18n_entries(err):
+def _normalize_i18n_entries(err, default_locale='zh_CN'):
     """从 error 条目解析 i18n 翻译表，返回 [(locale_str, message), ...]
 
     规则：
       - 若存在 i18n 字段，使用其中的 locale → message 映射
-      - 否则用 desc 注册为 zh_CN（默认中文）
-      - zh_CN 缺失时也用 desc 补齐，保证回退 locale 始终有值
+      - 否则用 desc 注册为 default_locale（默认中文）
+      - default_locale 缺失时也用 desc 补齐，保证回退 locale 始终有值
     """
     desc = err.get('desc', '')
     raw_i18n = err.get('i18n')
+    return _normalize_i18n_dict(raw_i18n, desc, default_locale)
 
+
+def _normalize_i18n_dict(raw_i18n, fallback_text, default_locale='zh_CN'):
+    """通用 i18n 规范化：从 dict 解析翻译表，fallback_text 作为 default_locale 兜底
+
+    规则：
+      - 若 raw_i18n 是非空 dict，使用其中的 locale → message 映射
+      - 否则用 fallback_text 注册为 default_locale（默认中文）
+      - default_locale 缺失时也用 fallback_text 补齐，保证回退 locale 始终有值
+    """
     entries = []
     if isinstance(raw_i18n, dict) and raw_i18n:
         for locale, message in raw_i18n.items():
             entries.append((locale, message))
-        # 保证 zh_CN 存在（回退目标）
-        if 'zh_CN' not in raw_i18n:
-            entries.append(('zh_CN', desc))
+        # 保证 default_locale 存在（回退目标）
+        if default_locale not in raw_i18n:
+            entries.append((default_locale, fallback_text))
     else:
-        entries.append(('zh_CN', desc))
-
+        entries.append((default_locale, fallback_text))
     return entries
 
 
@@ -89,6 +123,9 @@ def generate_header(json_file, out_dir):
     domain = data.get('domain', 'application')
     subsystem_id = data.get('subsystem_id', 0)
     namespace = data.get('namespace', 'errors')
+    # 默认 locale：当 i18n 字段缺失时，用 desc/service_name 注册到此 locale
+    # 合法值：zh_CN / en_US / ja_JP 等（见 locale_t 枚举）
+    default_locale = data.get('default_locale', 'zh_CN')
 
     base_name = os.path.splitext(os.path.basename(json_file))[0]
     out_file = os.path.join(out_dir, f"{base_name}.h")
@@ -100,15 +137,17 @@ def generate_header(json_file, out_dir):
         f" * @file {base_name}.h",
         " * @brief 自动生成的错误码定义与 i18n 注册，请勿手动修改！",
         f" * @note Service: {service_name}, Subsystem ID: {subsystem_id}",
-        " * @details 包含三部分：",
+        " * @details 包含四部分：",
         " *          1. constexpr error_code_t 常量定义",
-        " *          2. error_registrar_t 静态注册（错误码元数据 + 子系统/模块名称，注册为 zh_CN）",
-        " *          3. i18n 静态注册（错误码消息按 locale 注册到 i18n_t）",
+        " *          2. error_registrar_t 静态注册（错误码元数据，子系统/模块名向后兼容）",
+        " *          3. subsystem_module_catalog 静态注册（子系统/模块名称注册到多语言目录）",
+        " *          4. i18n 静态注册（错误码消息按 locale 注册到 i18n_t）",
         " */",
         "",
         '#include "error_system/core/error_registry.h"',
         '#include "error_system/domain/system_domain.h"',
         '#include "error_system/i18n/i18n.h"',
+        '#include "error_system/i18n/subsystem_module_catalog.h"',
         "",
         f"namespace {namespace} {{",
         ""
@@ -151,8 +190,59 @@ def generate_header(json_file, out_dir):
         lines.append("")
 
         # 收集 i18n 翻译条目
-        i18n_entries = _normalize_i18n_entries(err)
+        i18n_entries = _normalize_i18n_entries(err, default_locale)
         i18n_registrations.append((err_name, i18n_entries))
+
+    # 生成 subsystem_module_catalog 静态注册块（子系统/模块名称按多语言注册）
+    # 解析子系统/模块名称的 i18n 翻译：
+    #   - service_i18n: 子系统名称多语言（无则用 service_name 注册为 default_locale）
+    #   - modules.<key>.i18n: 模块名称多语言（无则用 desc 注册为 default_locale）
+    service_i18n_entries = _normalize_i18n_dict(data.get('service_i18n'), service_name, default_locale)
+
+    modules_map = data.get('modules', {})
+    seen_module_ids = set()
+    catalog_entries = []  # (subsys_id, mod_id, [(locale, svc_name), ...], [(locale, mod_name), ...])
+    for mod_key, mod_info in modules_map.items():
+        mod_id = mod_info.get('id', 0)
+        if mod_id in seen_module_ids:
+            continue
+        seen_module_ids.add(mod_id)
+        mod_i18n_entries = _normalize_i18n_dict(mod_info.get('i18n'), mod_info.get('desc', ''), default_locale)
+        catalog_entries.append((subsystem_id, mod_id, service_i18n_entries, mod_i18n_entries))
+
+    if catalog_entries:
+        lines.append("    // ===== subsystem_module_catalog 静态注册（子系统/模块名称多语言） =====")
+        lines.append("    namespace catalog_registration_detail_ {")
+        lines.append("")
+        lines.append("        /// @brief 注册子系统/模块名称到多语言目录")
+        lines.append("        struct catalog_registrar_ {")
+        lines.append(f"            catalog_registrar_() noexcept {{")
+        lines.append(f"                auto& catalog = ::error_system::i18n::subsystem_module_catalog_t::instance();")
+        for subsys_id, mod_id, svc_entries, mod_entries in catalog_entries:
+            # 合并子系统与模块的 locale 集合（保留顺序）
+            seen_locales = set()
+            all_locales = []
+            for locale, _ in svc_entries + mod_entries:
+                if locale not in seen_locales:
+                    seen_locales.add(locale)
+                    all_locales.append(locale)
+            # 按 locale 注册：缺失时用自己的 default_locale 兜底，互不干扰
+            svc_map = dict(svc_entries)
+            mod_map = dict(mod_entries)
+            for locale in all_locales:
+                svc_name = svc_map.get(locale, svc_map.get(default_locale, service_name))
+                mod_name = mod_map.get(locale, mod_map.get(default_locale, ''))
+                escaped_svc = _escape_cpp_string(svc_name)
+                escaped_mod = _escape_cpp_string(mod_name)
+                lines.append(f"                catalog.register_subsystem_module(")
+                lines.append(f"                    ::error_system::i18n::locale_t::{locale}, {subsys_id}, {mod_id},")
+                lines.append(f"                    \"{escaped_svc}\", \"{escaped_mod}\");")
+        lines.append(f"            }}")
+        lines.append(f"        }};")
+        lines.append(f"        inline const catalog_registrar_ catalog_instance_{{}};")
+        lines.append("")
+        lines.append("    }  // namespace catalog_registration_detail_")
+        lines.append("")
 
     # 生成 i18n 静态注册块（每个错误码一个 registrar，避免单个巨型结构体）
     if i18n_registrations:
