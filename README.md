@@ -4,21 +4,21 @@
 [![CMake](https://img.shields.io/badge/CMake-3.15%2B-green.svg)](https://cmake.org)
 [![GoogleTest](https://img.shields.io/badge/Tests-469%20passing-brightgreen.svg)](https://github.com/google/googletest)
 
-> 🚀 高性能 C++17 错误码管理系统 — 将完整错误上下文封装在一个 64 位整数中，零开销构建与解析。
+> 高性能 C++17 错误码管理系统 — 将完整错误上下文封装在一个 64 位整数中，零开销构建与解析。
 
 ---
 
-## 📑 目录
+## 目录
 
-- [✨ 核心特性](#核心特性)
-- [🧩 错误码位域](#错误码位域)
-- [⚡ 快速上手](#快速上手)
-- [📦 安装教程](#安装教程)
-- [🏛️ 架构总览](#架构总览)
-- [🌲 目录结构](#目录结构)
-- [🎯 示例索引](#示例索引)
-- [🤖 错误码自动生成](#错误码自动生成)
-- [📚 文档索引](#文档索引)
+- [核心特性](#核心特性)
+- [错误码位域](#错误码位域)
+- [快速上手](#快速上手)
+- [安装教程](#安装教程)
+- [架构总览](#架构总览)
+- [目录结构](#目录结构)
+- [示例索引](#示例索引)
+- [错误码自动生成](#错误码自动生成)
+- [文档索引](#文档索引)
 
 ---
 
@@ -26,27 +26,27 @@
 
 | 特性 | 说明 |
 |:---|------|
-| 🧠 `constexpr` 全链路 | 编译期构建，进入只读数据段 |
-| ⚙️ 位移 + 掩码 | 64 位字段拆解，规避位域 UB |
-| 📦 结构化负载 | `with()` / `with_batch()`，SSO 栈上零堆分配 |
-| 🧵 Per-Code 堆栈 | 全局阈值 + 按错误码粒度覆盖 |
-| 📍 源位置追踪 | 自动捕获文件/函数/行号，支持短名 |
-| 🔌 插件系统 | 同步/异步通知、级别过滤、RCU 零拷贝 |
-| 🦀 `result_t<T>` | 类 Rust Result，map/and_then/match 链式 |
-| 🔗 因果链 | `wrap()` 多层因果链，递归序列化 |
-| 🛠️ 代码生成 | JSON 配置一键生成 C++ 头文件 + 字典 + 文档 |
-| 🛡️ 安全性 | 全 `noexcept`，`std::get_if` + 哨兵值 |
+| `constexpr` 全链路 | 编译期构建，进入只读数据段 |
+| 位移 + 掩码 | 64 位字段拆解，规避位域 UB |
+| 结构化负载 | `with()` / `with_batch()`，SSO 栈上零堆分配 |
+| Per-Code 堆栈 | 全局阈值 + 按错误码粒度覆盖 |
+| 源位置追踪 | 自动捕获文件/函数/行号，支持短名 |
+| 插件系统 | 同步/异步通知、级别过滤、RCU 零拷贝 |
+| `result_t<T>` | 类 Rust Result，map/and_then/match 链式 |
+| 因果链 | `wrap()` 多层因果链，递归序列化 |
+| 代码生成 | JSON 配置一键生成 C++ 头文件 + 字典 + 文档 |
+| 安全性 | 全 `noexcept`，`std::get_if` + 哨兵值 |
 
 ---
 
 ## 🧩 错误码位域
 
-> 💡 一个 `uint64_t` 承载完整路由信息
+> 一个 `uint64_t` 承载完整路由信息
 
 | 位区间 | 长度 | 字段 | 说明 |
 |:---|:---:|:---|:---|
 | `63` | 1 | **Sign** | `0` = 错误 &nbsp; `1` = 成功 |
-| `60-62` | 3 | Reserved | 预留 |
+| `60-62` | 3 | Reserved | bit0=`retryable` · bit1=`transient` · bit2 预留 |
 | `56-59` | 4 | **Level** | debug · info · warn · error · fatal |
 | `48-55` | 8 | **System** | 6 大系统域 |
 | `32-47` | 16 | Subsystem | 最大 65535 |
@@ -57,7 +57,7 @@
 
 ## ⚡ 快速上手
 
-### 1️⃣ 构建错误码
+### 1. 构建错误码
 
 ```cpp
 #include "error_system.h"
@@ -70,7 +70,7 @@ db_err.get_level();   // fatal
 db_err.get_system();  // database
 ```
 
-### 2️⃣ 使用错误上下文
+### 2. 使用错误上下文
 
 ```cpp
 error_context_t ctx(db_err, "数据库连接失败: {}", "timeout");
@@ -81,7 +81,7 @@ error_context_serializer_t::to_json(ctx);     // JSON
 error_context_serializer_t::to_binary(ctx);   // 紧凑二进制
 ```
 
-### 3️⃣ Result 错误传递
+### 3. Result 错误传递
 
 ```cpp
 result_t<int> divide(int a, int b) {
@@ -100,7 +100,7 @@ r.match([](int v) { return "ok"; },              // 强制处理两条路径
         [](const error_context_t& e) { return "fail"; });
 ```
 
-### 4️⃣ 注册插件
+### 4. 注册插件
 
 ```cpp
 class log_plugin_t : public plugin::i_error_plugin_t {
@@ -115,7 +115,7 @@ log_plugin_t logger;
 plugin::plugin_registry_t::instance().register_plugin_ref(logger);  // 构造时自动通知
 ```
 
-### 5️⃣ 因果链（Cause Chain）
+### 5. 因果链（Cause Chain）
 
 ```cpp
 error_context_t root{infra::redis_errors::ERR_KEY_NOT_FOUND, "Redis 键缺失"};
@@ -127,18 +127,18 @@ auto chained = wrapper.wrap(root);  // to_string() 递归输出 "Caused by:"
 
 ## 📦 安装教程
 
-### 📋 环境要求
+### 环境要求
 
 | 依赖 | 最低版本 | 说明 |
 |------|:---:|------|
 | C++ 编译器 | C++17 | GCC 9+ / Clang 10+ / MSVC 19.20+ |
 | CMake | 3.15 | 构建系统 |
 | Python | 3.6 | 错误码自动生成（可选，缺失时跳过） |
-| GoogleTest | - | 测试框架（构建系统自动拉取） |
+| GoogleTest | — | 测试框架（构建系统自动拉取） |
 
-> ⚠️ macOS 堆栈追踪依赖系统库；Linux 需 `libdl`（自动链接）；Windows 需 `dbghelp`（自动链接）。
+> macOS 堆栈追踪依赖系统库；Linux 需 `libdl`（自动链接）；Windows 需 `dbghelp`（自动链接）。
 
-### 🛠️ 方式一：源码构建（推荐）
+### 方式一：源码构建（推荐）
 
 ```bash
 git clone https://github.com/YIice-cwj/error_system.git && cd error_system
@@ -150,7 +150,7 @@ cmake --install build                       # 可选：安装到 /usr/local
 
 **安装产物**：`include/error_system/`（头文件）、`lib/liberror_system.a`/`.so`（静态/动态库）、`lib/cmake/error_system/`（CMake 配置）、`share/error_system/scripts/`（Python 脚本）。
 
-### 📥 方式二：FetchContent 引入
+### 方式二：FetchContent 引入
 
 ```cmake
 include(FetchContent)
@@ -164,40 +164,25 @@ target_link_libraries(my_app PRIVATE error_system::error_system)
 error_system_generate_codes(TARGET my_app JSON_DIR ${CMAKE_CURRENT_SOURCE_DIR}/config/errors)
 ```
 
-### 📂 方式三：子目录引入
+### 方式三：子目录引入
 
 ```cmake
 add_subdirectory(third_party/error_system)
 target_link_libraries(my_app PRIVATE error_system::error_system)
 ```
 
-### ⚙️ 编译选项
+### 编译选项
 
-| CMake 选项 | 默认 | 说明 |
-|------|:---:|------|
-| `ERROR_SYSTEM_ENABLE_STACKTRACE` | ON | 堆栈追踪 + per-code API |
-| `ERROR_SYSTEM_ENABLE_VALIDATION` | ON | 错误码注册校验 |
-| `ERROR_SYSTEM_ENABLE_LOCATION` | ON | 源位置追踪 |
-| `ERROR_SYSTEM_ENABLE_LTO` | OFF | LTO 优化 |
-| `ERROR_SYSTEM_ENABLE_ASAN` | OFF | AddressSanitizer |
-| `ERROR_SYSTEM_ENABLE_UBSAN` | OFF | UBSan |
-| `ERROR_SYSTEM_WARNINGS_AS_ERRORS` | ON | 警告视为错误 |
-| `BUILD_SHARED_LIBS` | OFF | 构建动态库 |
-| `ERROR_SYSTEM_BUILD_TESTS` | ON | 构建单元测试 |
-| `ERROR_SYSTEM_BUILD_EXAMPLES` | ON | 构建示例 |
-| `ERROR_SYSTEM_BUILD_PERF_TESTS` | ON | 构建性能测试 |
-
-**示例：定制构建**
-
-> 📝 三种典型配置按需选用：最小化（嵌入式，关闭堆栈/位置/验证）、调试（带 ASan/UBSan）、性能基线（带 LTO）。示例（最小化构建）：
+完整编译选项见 [架构设计](docs/architecture.md#编译配置)。常用配置：
 
 ```bash
+# 最小化构建（嵌入式）
 cmake -S . -B build-min -DCMAKE_BUILD_TYPE=MinSizeRel \
     -DERROR_SYSTEM_ENABLE_STACKTRACE=OFF -DERROR_SYSTEM_ENABLE_LOCATION=OFF \
     -DERROR_SYSTEM_ENABLE_VALIDATION=OFF -DERROR_SYSTEM_BUILD_TESTS=OFF -DERROR_SYSTEM_BUILD_EXAMPLES=OFF
 ```
 
-### 🚀 在你的项目中使用
+### 在你的项目中使用
 
 ```cpp
 #include "error_system.h"
@@ -217,7 +202,7 @@ g++ -std=c++17 my_app.cc -o my_app \
     -L<path>/build -lerror_system
 ```
 
-### 🧹 卸载
+### 卸载
 
 ```bash
 cmake --build build --target uninstall
@@ -280,14 +265,14 @@ error_system/
 
 | 示例 | 文件 | 演示内容 |
 |------|------|------|
-| 🚀 Demo 1 | [examples/demo01.cc](examples/demo01.cc) | 基础用法：错误码构建、上下文、payload |
-| 🔗 Demo 2 | [examples/demo02.cc](examples/demo02.cc) | Result 链式操作、错误传递 |
-| 🔔 Demo 3 | [examples/demo03.cc](examples/demo03.cc) | 插件系统、同步/异步通知 |
-| 📦 Demo 4 | [examples/demo04.cc](examples/demo04.cc) | JSON/二进制序列化、跨进程传递 |
-| 🤖 Demo 5 | [examples/demo05.cc](examples/demo05.cc) | 自动生成错误码、注册表查询 |
-| 🎓 Demo 6 | [examples/demo06.cc](examples/demo06.cc) | 高级用法：match / 因果链 / 自定义格式化器 / 重复策略 / 端到端综合场景 |
+| Demo 1 | [examples/demo01.cc](examples/demo01.cc) | 基础用法：错误码构建、上下文、payload |
+| Demo 2 | [examples/demo02.cc](examples/demo02.cc) | Result 链式操作、错误传递 |
+| Demo 3 | [examples/demo03.cc](examples/demo03.cc) | 插件系统、同步/异步通知 |
+| Demo 4 | [examples/demo04.cc](examples/demo04.cc) | JSON/二进制序列化、跨进程传递 |
+| Demo 5 | [examples/demo05.cc](examples/demo05.cc) | 自动生成错误码、注册表查询 |
+| Demo 6 | [examples/demo06.cc](examples/demo06.cc) | 高级用法：match / 因果链 / 自定义格式化器 / 重复策略 / 端到端综合场景 |
 
-> 💡 运行：`cmake --build build --target demo06 && ./build/examples/demo06`
+> 运行：`cmake --build build --target demo06 && ./build/examples/demo06`
 
 ---
 
@@ -308,13 +293,15 @@ error_system/
 
 ## 📚 文档索引
 
+完整文档导航见 [docs/README.md](docs/README.md)。快速链接：
+
 | 文档 | 内容 |
 |------|------|
-| 🧱 [Core 层 API](docs/api/core.md) | `error_code_t` `error_context_t` `result_t` `error_registry_t` `error_context_serializer_t` `error_builder_t` |
-| 🌐 [i18n 层 API](docs/api/i18n.md) | `locale_t` `subsystem_module_catalog_t` `i18n_t` 多语言消息回退 |
-| 🔁 [Migration 层 API](docs/api/migration.md) | `error_migration_registry_t` 废弃标记、单跳/递归迁移 |
-| 🔗 [Mapping 层 API](docs/api/mapping.md) | `http_status_t` `grpc_status_t` `status_mapper_t` HTTP/gRPC 映射 |
-| ⚙️ [Config 层 API](docs/api/config.md) | `feature_flags_t` `stacktrace_config_t` `formatter_config_t` `i18n_config_t` 三种通知模式 |
-| 🔌 [Plugin 层 API](docs/api/plugin.md) | 插件接口、注册表、路由分发、异步通知通道、延迟通知 |
-| 🛠️ [Utils 层 API](docs/api/utils.md) | 字符串工具、JSON 解析、文件操作、异步队列、堆栈跟踪 |
-| 🏛️ [架构设计](docs/architecture.md) | 模块划分、依赖关系、21 项关键设计决策 |
+| [Core 层 API](docs/api/core.md) | `error_code_t` `error_context_t` `result_t` `error_registry_t` `error_context_serializer_t` |
+| [i18n 层 API](docs/api/i18n.md) | `locale_t` `subsystem_module_catalog_t` `i18n_t` 多语言消息回退 |
+| [Migration 层 API](docs/api/migration.md) | `error_migration_registry_t` 废弃标记、单跳/递归迁移 |
+| [Mapping 层 API](docs/api/mapping.md) | `http_status_t` `grpc_status_t` `status_mapper_t` HTTP/gRPC 映射 |
+| [Config 层 API](docs/api/config.md) | `feature_flags_t` `stacktrace_config_t` `formatter_config_t` `i18n_config_t` |
+| [Plugin 层 API](docs/api/plugin.md) | 插件接口、注册表、路由分发、异步通知通道 |
+| [Utils 层 API](docs/api/utils.md) | 字符串工具、JSON 解析、文件操作、异步队列、堆栈跟踪 |
+| [架构设计](docs/architecture.md) | 模块划分、依赖关系、21 项关键设计决策 |

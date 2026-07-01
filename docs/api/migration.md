@@ -22,11 +22,24 @@ struct deprecation_info_t {
 
 ---
 
+## 📝 deprecation_meta_t
+
+废弃元数据 — `mark_deprecated` 的参数封装。与 `deprecation_info_t` 的区别是不含 `deprecated` 布尔字段（标记时隐含为 true），符合函数参数超过 4 个时封装为结构体的设计原则。
+
+```cpp
+struct deprecation_meta_t {
+    std::string reason;                            // 废弃原因
+    std::optional<error_code_t> replacement{};     // 替代错误码（可选）
+    std::string since_version;                     // 起始废弃版本
+    std::string removal_version;                   // 计划移除版本
+};
+```
+
+---
+
 ## 🔄 error_migration_registry_t
 
-错误码废弃与迁移注册器单例。
-
-> 💡 废弃状态与迁移映射**分离存储**：废弃不一定有替代码，迁移也不一定意味着源码已废弃（可能是别名）。
+错误码废弃与迁移注册器单例。废弃状态与迁移映射**分离存储**：废弃不一定有替代码，迁移也不一定意味着源码已废弃（可能是别名）。
 
 ### API
 
@@ -92,6 +105,4 @@ auto migrated = reg.migrate(ERR_OLD_DB_POOL);           // 单跳到 ERR_DB_POOL
 auto terminal = reg.migrate_recursive(ERR_OLD_DB_POOL); // 递归到终点
 ```
 
-> 📝 `unmark_deprecated()` 不会清除迁移映射，便于先停止废弃警告再逐步下线。
-
-> 🔗 废弃/迁移决策树详见 [决策树 · 3](../decision_tree.md#3-错误码废弃与迁移决策)。
+`unmark_deprecated()` 不会清除迁移映射，便于先停止废弃警告再逐步下线。废弃/迁移决策树详见 [决策树 · 3](../decision_tree.md#3-错误码废弃与迁移决策)。

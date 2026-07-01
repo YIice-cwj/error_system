@@ -4,13 +4,11 @@
 
 ---
 
-## 📬 async_queue_t\<T, Processor\>
+## ⚡ async_queue_t\<T, Processor\>
 
-异步工作队列 — 单生产者-单消费者模式。
+异步工作队列 — 单生产者-单消费者模式。首次 `enqueue()` 启动工作线程，析构自动 `join()`。`T` 必须可移动构造；`Processor` 必须可调用 `void(T&)` 且 `noexcept`。不可拷贝、不可移动。
 
-> 📝 **说明**：首次 `enqueue()` 启动工作线程，析构自动 `join()`。`T` 必须可移动构造；`Processor` 必须可调用 `void(T&)` 且 `noexcept`。不可拷贝、不可移动。
-
-### 🛠️ API
+### API
 
 ```cpp
 template <typename T, typename Processor>
@@ -30,7 +28,16 @@ public:
 };
 ```
 
-### ⚙️ 特性
+使用示例：
+
+```cpp
+async_queue_t<int, decltype([](int& v) noexcept { process(v); })> queue(
+    [](int& v) noexcept { process(v); });
+queue.enqueue(42);
+queue.set_max_size(1000);
+```
+
+### 特性
 
 | 特性 | 说明 |
 |------|------|
@@ -40,24 +47,13 @@ public:
 | 背压控制 | 队列满拒绝入队 |
 | 零 `std::function` | `Processor` 模版参数，编译期确定调用 |
 
-### 💡 使用示例
-
-```cpp
-async_queue_t<int, decltype([](int& v) noexcept { process(v); })> queue(
-    [](int& v) noexcept { process(v); });
-queue.enqueue(42);
-queue.set_max_size(1000);
-```
-
 ---
 
-## ✂️ string_utils_t
+## 🔤 string_utils_t
 
-字符串处理工具类（不可实例化，全部为静态方法）。
+字符串处理工具类（不可实例化，全部为静态方法）。格式化功能已迁移至 `string_format_t`；JSON 转义功能已迁移至 `json_serializer_t`。
 
-> 📝 **说明**：格式化功能已迁移至 `string_format_t`；JSON 转义功能已迁移至 `json_serializer_t`。
-
-### 🛠️ API
+### API
 
 ```cpp
 class string_utils_t {
@@ -71,7 +67,7 @@ public:
     template <typename T>
     [[nodiscard]] static std::optional<T> parse_number(std::string_view string) noexcept;
 
-    static std::string replace_all(std::string string, std::string_view from, std::string_view to) noexcept;
+    [[nodiscard]] static std::string replace_all(std::string string, std::string_view from, std::string_view to) noexcept;
     [[nodiscard]] static std::vector<std::string_view> split(std::string_view string,
                                                               std::string_view delimiter) noexcept;
     [[nodiscard]] static std::string join(const std::vector<std::string_view>& tokens,
@@ -82,7 +78,7 @@ public:
 };
 ```
 
-### 📋 速查
+速查：
 
 ```cpp
 string_utils_t::hash("hello");                            // constexpr FNV-1a
@@ -95,13 +91,15 @@ string_utils_t::parse_number<int>("42");                  // std::optional{42}
 
 ---
 
-## 🧩 json_dict_t
+## 📦 json_dict_t
 
 JSON 解析与点路径访问。默认可拷贝、可移动。
 
-> ⚠️ **警告**：简化的 JSON 解析器，**仅支持扁平 / 嵌套的字符串键值对**，不支持数字、布尔、数组等非字符串值。生产环境如需完整 JSON 解析请使用 nlohmann/json 等第三方库。
+> 头文件：`error_system/utils/json_utils.h`
 
-### 🛠️ API
+> ⚠️ **注意**：简化的 JSON 解析器，**仅支持扁平 / 嵌套的字符串键值对**，不支持数字、布尔、数组等非字符串值。生产环境如需完整 JSON 解析请使用 nlohmann/json 等第三方库。
+
+### API
 
 ```cpp
 class json_dict_t {
@@ -121,7 +119,7 @@ public:
 };
 ```
 
-### 💡 使用示例
+使用示例：
 
 ```cpp
 auto dict = json_dict_t::parse(R"({"user":{"name":"Alice"}})");
@@ -136,34 +134,29 @@ deep->get_value("a.b.c");                           // "value"
 
 ---
 
-## 🧬 json_serializer_t
+## 🔧 json_serializer_t
 
 JSON 序列化辅助工具（不可实例化）。
 
-### 🛠️ API
+> 头文件：`error_system/utils/json_utils.h`
+
+### API
 
 ```cpp
 class json_serializer_t {
 public:
+    // 转义 JSON 字符串。例：escape_json(R"(a"b\c)") → "a\"b\\c"
     [[nodiscard]] static std::string escape_json(std::string_view value) noexcept;
 };
-```
-
-### 💡 使用示例
-
-```cpp
-json_serializer_t::escape_json(R"(a"b\c)");   // "a\"b\\c"
 ```
 
 ---
 
 ## 🔍 json_lexer_t
 
-JSON 词法分析器，`json_dict_t` 的实现基础，位于 `error_system::utils::detail` 命名空间。默认可拷贝、可移动。
+`json_dict_t` 的词法分析基础，位于 `error_system::utils::detail` 命名空间。支持 RFC 8259 的 UTF-16 代理对解析（`\uD83D\uDE00` → 4 字节 UTF-8），孤立代理区码点静默丢弃。默认可拷贝、可移动。
 
-> 📝 **说明**：支持 RFC 8259 规范的 UTF-16 代理对解析（`\uD83D\uDE00` → 4 字节 UTF-8 编码），孤立代理区码点会被静默丢弃。
-
-### 🛠️ API
+### API
 
 ```cpp
 namespace error_system::utils::detail {
@@ -171,7 +164,19 @@ namespace error_system::utils::detail {
 class json_lexer_t {
 public:
     enum class token_type_t {
-        string, colon, comma, left_brace, right_brace, eof, invalid
+        string,        // 字符串 (键或值)
+        number,        // 数字字面量
+        true_literal,  // true
+        false_literal, // false
+        null_literal,  // null
+        colon,         // 冒号 :
+        comma,         // 逗号 ,
+        left_brace,    // 左大括号 {
+        right_brace,   // 右大括号 }
+        left_bracket,  // 左中括号 [
+        right_bracket, // 右中括号 ]
+        eof,           // 文件结束标识
+        invalid        // 无效字符或错误
     };
 
     struct token_t {
@@ -180,7 +185,6 @@ public:
     };
 
     explicit json_lexer_t(std::string_view json_text) noexcept;
-
     [[nodiscard]] token_t next() noexcept;
 };
 
@@ -193,9 +197,9 @@ public:
 
 跨平台文件操作工具（不可实例化）。
 
-> ⚠️ **警告**：`read_file()` 内置文件大小上限保护（`MAX_READ_FILE_SIZE = 64 MB`），防止 OOM 攻击，超过阈值返回 `std::nullopt`。
+> 💡 **提示**：`read_file()` 内置文件大小上限保护（`MAX_READ_FILE_SIZE = 64 MB`），防止 OOM 攻击，超过阈值返回 `std::nullopt`。
 
-### 🛠️ API
+### API
 
 ```cpp
 class file_utils_t {
@@ -212,7 +216,7 @@ public:
 };
 ```
 
-### 💡 使用示例
+使用示例：
 
 ```cpp
 auto content = file_utils_t::read_file("config.json");
@@ -226,7 +230,7 @@ file_utils_t::dir_exists("config/");    // true/false
 
 跨平台堆栈跟踪工具（不可实例化）。
 
-### 🛠️ API
+### API
 
 ```cpp
 class stack_trace_utils_t {
@@ -236,7 +240,7 @@ public:
 };
 ```
 
-### 🖥️ 平台实现
+### 平台实现
 
 | 平台 | 实现 |
 |------|------|
@@ -244,7 +248,7 @@ public:
 | macOS | `backtrace()` / `backtrace_symbols()` + cxxabi |
 | Windows | `StackWalk64()` + `SymFromAddr` |
 
-### 💡 使用示例
+使用示例：
 
 ```cpp
 auto frames = stack_trace_utils_t::generate(2, 8);
@@ -255,16 +259,16 @@ for (const auto& f : frames) std::cout << f << "\n";
 
 ## 📍 source_location_t
 
-源位置封装，`error_context_t` 构造时通过 `located_code_t` 隐式转换自动捕获调用者位置。默认可拷贝、可移动。
+源位置封装，`error_context_t` 构造时通过 `located_code_t` 隐式转换自动捕获调用者位置。默认可拷贝、可移动。通过默认参数在调用点展开 `__builtin_FILE()`，捕获的是调用者位置而非库内部位置。
 
-### 🛠️ 相关函数
+### 相关函数
 
 ```cpp
 // 提取路径中的文件名部分（去掉目录）
 [[nodiscard]] constexpr const char* extract_short_filename(const char* path) noexcept;
 ```
 
-### 🛠️ API
+### API
 
 ```cpp
 class source_location_t {
@@ -283,46 +287,39 @@ public:
 };
 ```
 
-> 💡 **提示**：通过默认参数在调用点展开 `__builtin_FILE()`，捕获的是调用者位置而非库内部位置。
-
 ---
 
-## 🎨 string_format_t
+## ✨ string_format_t
 
-`{}` 占位符格式化工具，`error_context_t` 消息格式化使用。
+`{}` 占位符格式化工具，`error_context_t` 消息格式化使用。支持算术类型、指针、`bool`、`char`，以及含 `to_string()` 成员或全局函数的自定义类型。`{{` / `}}` 转义为字面 `{` / `}`。
 
-> 💡 **提示**：支持算术类型、指针、`bool`、`char`，以及含 `to_string()` 成员或全局函数的自定义类型。`{{` / `}}` 转义为字面 `{` / `}`。
-
-### 🛠️ API
+### API
 
 ```cpp
 class string_format_t {
 public:
     template <typename... Args>
-    [[nodiscard]] static inline std::string format(std::string_view format_str,
-                                                    Args&&... args) noexcept;
+    [[nodiscard]] static std::string format(std::string_view format_str,
+                                            Args&&... args) noexcept;
 };
 ```
 
-### 💡 使用示例
+使用示例：
 
 ```cpp
-auto msg = string_format_t::format("用户 {} 登录失败，重试 {} 次", "alice", 3);
+string_format_t::format("用户 {} 登录失败，重试 {} 次", "alice", 3);
 // "用户 alice 登录失败，重试 3 次"
-
 string_format_t::format("code: {}, msg: {}", 404, "NF");
 // "code: 404, msg: NF"
 ```
 
 ---
 
-## 🖨️ error_formatter
+## 🎨 error_formatter
 
-`error_context_t` 的 `operator<<` 输出流支持。
+`error_context_t` 的 `operator<<` 输出流支持。位于 `error_system::core` 命名空间（非 `utils`）。
 
-> 📝 **说明**：位于 `error_system::core` 命名空间（非 `utils`）。
-
-### 🛠️ API
+### API
 
 ```cpp
 namespace error_system::core {
@@ -333,7 +330,7 @@ namespace error_system::core {
 }  // namespace error_system::core
 ```
 
-### 📤 示例输出
+### 示例输出
 
 ```
 [Location: main.cc:42 @ main]
