@@ -244,23 +244,6 @@ namespace error_system::core {
                                              std::move(value())))>;
 
         /**
-         * @brief 对成功值进行映射转换（std::expected 兼容别名）
-         * @details transform 是 map 的别名，命名与 C++23 std::expected 保持一致，便于后续迁移。
-         */
-        template <typename Function>
-        [[nodiscard]] auto transform(Function&& function) const& noexcept
-            -> result_t<decltype(std::invoke(std::forward<Function>(function),
-                                             std::declval<const value_type_t&>()))>;
-
-        /**
-         * @brief 对成功值进行映射转换（移动语义，std::expected 兼容别名）
-         */
-        template <typename Function>
-        [[nodiscard]] auto transform(Function&& function) && noexcept
-            -> result_t<decltype(std::invoke(std::forward<Function>(function),
-                                             std::move(value())))>;
-
-        /**
          * @brief 对错误上下文进行映射转换
          * @tparam Function 映射函数
          * @param function 映射函数，接受 error_context_t 返回新的 error_context_t
@@ -274,19 +257,6 @@ namespace error_system::core {
          */
         template <typename Function>
         [[nodiscard]] result_t<value_type_t> map_error(Function&& function) && noexcept;
-
-        /**
-         * @brief 对错误上下文进行映射转换（std::expected 兼容别名）
-         * @details transform_error 是 map_error 的别名，命名与 C++23 std::expected 保持一致。
-         */
-        template <typename Function>
-        [[nodiscard]] result_t<value_type_t> transform_error(Function&& function) const& noexcept;
-
-        /**
-         * @brief 对错误上下文进行映射转换（移动语义，std::expected 兼容别名）
-         */
-        template <typename Function>
-        [[nodiscard]] result_t<value_type_t> transform_error(Function&& function) && noexcept;
 
         /**
          * @brief 对结果进行链式操作（右值引用版本）
@@ -344,7 +314,8 @@ namespace error_system::core {
         /**
          * @brief 模式匹配处理成功和错误两种路径
          * @details 若结果为成功，调用 success_fn；否则调用 error_fn。两个函数必须返回相同类型。
-         *          该函数调用用户提供的回调，回调可能抛出异常，因此不标记 noexcept —— 异常会传播给调用方。
+         *          noexcept 性跟随用户回调：仅当两个回调均为 noexcept 时，本方法才 noexcept；
+         *          否则用户回调抛出的异常会传播给调用方。
          *          要求返回类型可默认构造（用于理论上的哨兵路径，正常路径不会触发）。
          * @param success_fn 成功时的处理函数
          * @param error_fn 错误时的处理函数
@@ -352,12 +323,38 @@ namespace error_system::core {
          */
         template <typename SuccessFn, typename ErrorFn>
         [[nodiscard]] auto match(SuccessFn&& success_fn, ErrorFn&& error_fn) const
+            noexcept(std::is_nothrow_invocable_v<SuccessFn&, const value_type_t&>
+                     && std::is_nothrow_invocable_v<ErrorFn&, const error_context_t&>)
             -> decltype(success_fn(std::declval<const value_type_t&>()));
+
+        /**
+         * @brief 传播时附加 payload 上下文（左值版本）
+         * @details 错误时对内部 error_context 调用 with(key, value) 追加负载，成功时无操作。
+         *          完美转发到 error_context_t::with() 的 7 个重载，避免 API 表面积膨胀。
+         *          典型用法：`return inner_call().context("host", host_);`
+         * @tparam K 键类型（支持 string/string_view/const char*）
+         * @tparam V 值类型（支持 string 及任意可转 string 的类型）
+         * @param key 负载键
+         * @param value 负载值
+         * @return result_t& 自身引用（错误时已附加 payload，成功时保持原样）
+         */
+        template <typename K, typename V>
+        result_t& context(K&& key, V&& value) & noexcept;
+
+        /**
+         * @brief 传播时附加 payload 上下文（右值版本）
+         * @details 与左值版本语义一致，返回移动后的新对象，适用于链式调用末尾
+         * @return result_t 移动后的结果对象
+         */
+        template <typename K, typename V>
+        [[nodiscard]] result_t context(K&& key, V&& value) && noexcept;
     };
 
     /**
      * @brief 模板特化：当 T 为 void 时，特化为不包含值的 result_t
-     * @details 特化 result_t 类模板，当 T 为 void 时，不存储值，仅存储错误上下文
+     * @details 特化 result_t 类模板，当 T 为 void 时，不存储值。
+     *          成功路径持有 std::monostate（零 error_context_t 构造开销），
+     *          失败路径持有完整 error_context_t
      */
     template <>
     class result_t<void> {
@@ -365,7 +362,7 @@ namespace error_system::core {
         using value_type_t = void;
 
     private:
-        error_context_t error_context_;
+        std::variant<std::monostate, error_context_t> storage_;
 
     public:
         /**
@@ -499,6 +496,22 @@ namespace error_system::core {
          */
         template <typename Function>
         [[nodiscard]] result_t<void> or_else(Function&& function) & noexcept;
+
+        /**
+         * @brief 传播时附加 payload 上下文（左值版本）
+         * @details 错误时对内部 error_context 调用 with(key, value) 追加负载，成功时无操作。
+         *          完美转发到 error_context_t::with() 的 7 个重载。
+         * @return result_t<void>& 自身引用
+         */
+        template <typename K, typename V>
+        result_t<void>& context(K&& key, V&& value) & noexcept;
+
+        /**
+         * @brief 传播时附加 payload 上下文（右值版本）
+         * @return result_t<void> 移动后的结果对象
+         */
+        template <typename K, typename V>
+        [[nodiscard]] result_t<void> context(K&& key, V&& value) && noexcept;
     };
 
 }  // namespace error_system::core

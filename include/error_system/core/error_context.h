@@ -95,13 +95,6 @@ namespace error_system::core {
         std::unique_ptr<std::unordered_map<std::string, std::string>> payload_overflow_{};
 
         /**
-         * @brief payload 写入错误标志
-         * @details with()/with_batch() 内部分配失败时置位，调用方可通过 has_payload_error() 查询，
-         *          避免 bad_alloc 被静默吞掉而无信号（O10 修复）。
-         */
-        bool payload_error_{false};
-
-        /**
          * @brief 反序列化位置字符串存储
          * @details 仅由 error_context_serializer_t::from_binary / from_json 填充，
          *          用于持有从二进制/JSON 还原的文件名与函数名字符串，
@@ -153,7 +146,7 @@ namespace error_system::core {
 
         /**
          * @brief 拷贝基本字段
-         * @details 深拷贝 metadata_、payload_error_、loc_file_storage_、loc_func_storage_ 和 message
+         * @details 深拷贝 metadata_、loc_file_storage_、loc_func_storage_ 和 message
          * @param other 源对象
          */
         void copy_basic_fields_(const error_context_t& other);
@@ -438,14 +431,6 @@ namespace error_system::core {
         [[nodiscard]] bool is_payload_empty() const noexcept { return payload_count_ == 0 && !payload_overflow_; }
 
         /**
-         * @brief 查询 payload 写入是否发生过分配失败
-         * @details with()/with_batch() 内部 bad_alloc 时置位，置位后不会自动清除。
-         *          调用方可在关键路径后查询本标志以决定降级策略。
-         * @return bool 是否发生过 payload 写入错误
-         */
-        [[nodiscard]] bool has_payload_error() const noexcept { return payload_error_; }
-
-        /**
          * @brief 仅按错误码比较（忽略 message/payload/cause/stack）
          * @details 适用于错误归类、去重等场景，O(1) 复杂度
          * @param other 另一个错误上下文
@@ -482,7 +467,74 @@ namespace error_system::core {
          * @return const char* 错误消息的 C 字符串
          */
         [[nodiscard]] const char* what() const noexcept { return message.c_str(); }
+
+        /**
+         * @brief 是否为 fatal 级别错误
+         * @details 等价于 get_code().get_level() == error_level_t::fatal，
+         *          提供常见错误级别的快捷判断
+         * @return bool 是否为 fatal 级别
+         */
+        [[nodiscard]] bool is_fatal() const noexcept { return code_.get_level() == error_level_t::fatal; }
+
+        /**
+         * @brief 是否为可重试错误
+         * @details 委托给 error_code_t::is_retryable()，查询错误码 Reserved 字段的 retryable 位。
+         *          用于决定是否在失败后重试操作
+         * @return bool 是否可重试
+         */
+        [[nodiscard]] bool is_retryable() const noexcept { return code_.is_retryable(); }
+
+        /**
+         * @brief 是否为瞬态错误
+         * @details 委托给 error_code_t::is_transient()，瞬态错误通常由临时故障引起
+         *          （如网络抖动、资源临时不可用），与 retryable 独立
+         * @return bool 是否为瞬态
+         */
+        [[nodiscard]] bool is_transient() const noexcept { return code_.is_transient(); }
+
+        /**
+         * @brief 渲染为可读文本
+         * @details 便捷方法，委托给 error_context_serializer_t::to_string()。
+         *          包含源位置、错误等级、系统域、子系统/模块、错误编号、消息、描述、
+         *          payload、堆栈和因果链
+         * @return std::string 格式化的错误上下文字符串
+         */
+        [[nodiscard]] std::string to_string() const noexcept;
+
+        /**
+         * @brief 序列化为 JSON 字符串
+         * @details 便捷方法，委托给 error_context_serializer_t::to_json()。
+         *          生成包含 code、message、payload、stack_frames、cause 等字段的 JSON
+         * @return std::string 错误上下文的 JSON 表示
+         */
+        [[nodiscard]] std::string to_json() const noexcept;
+
+        /**
+         * @brief 序列化为紧凑二进制字符串
+         * @details 便捷方法，委托给 error_context_serializer_t::to_binary()。
+         *          使用小端序编码，适合高性能 RPC 或持久化存储
+         * @return std::string 错误上下文的二进制表示
+         */
+        [[nodiscard]] std::string to_binary() const noexcept;
     };
+
+    /**
+     * @brief 聚合多个错误上下文为一个
+     * @details 批量校验场景（如配置校验、批量数据处理）可累积多个错误后一次返回，
+     *          避免调用方反复重试。聚合策略：主错误取第一个，其余以
+     *          `joined_error_N` 为键作为 payload 附加，value 为被聚合错误的 message。
+     *          空列表返回默认成功上下文；单元素直接返回，零开销。
+     * @param errors 待聚合的错误上下文列表（右值引用，内部移动消费）
+     * @return error_context_t 聚合后的错误上下文
+     *
+     * @example
+     * std::vector<error_context_t> errs;
+     * if (!validate_a()) errs.push_back(err_a);
+     * if (!validate_b()) errs.push_back(err_b);
+     * return join_errors(std::move(errs));
+     */
+    [[nodiscard]] error_context_t join_errors(std::vector<error_context_t>&& errors) noexcept;
+
 }  // namespace error_system::core
 
 #include "error_system/core/details/error_context.inl"

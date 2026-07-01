@@ -166,9 +166,18 @@ struct error_context_t {
     std::optional<std::string> get_payload_value(const std::string& key) const noexcept;
     size_t payload_size() const noexcept;
     bool is_payload_empty() const noexcept;
-    bool has_payload_error() const noexcept;  // payload 写入是否发生过 bad_alloc
     template <typename Visitor>
     void for_each_payload(Visitor&& visitor) const noexcept;
+
+    // 谓词（委托 error_code_t 对应位）
+    bool is_fatal() const noexcept;      // level == fatal
+    bool is_retryable() const noexcept;  // error_code_t Reserved.bit0
+    bool is_transient() const noexcept;  // error_code_t Reserved.bit1
+
+    // 序列化便捷方法（委托 error_context_serializer_t，免 include serializer 头文件）
+    [[nodiscard]] std::string to_string() const noexcept;  // 可读文本
+    [[nodiscard]] std::string to_json() const noexcept;    // JSON
+    [[nodiscard]] std::string to_binary() const noexcept;  // 紧凑二进制
 
     // 因果链（返回包含 cause 的新对象）
     error_context_t wrap(const error_context_t& underlying) const noexcept;
@@ -178,6 +187,10 @@ struct error_context_t {
     bool equals_strict(const error_context_t&) const noexcept;   // 含 cause 链 + stack_frames
     // 另有 operator==/!=（按 code/message/payload 比较，详见头文件）
 };
+
+// 错误聚合
+// 批量校验场景累积多个错误后一次返回，主错误取首个，其余以 joined_error_N 为键附加
+[[nodiscard]] error_context_t join_errors(std::vector<error_context_t> errors) noexcept;
 ```
 
 > 📝 所有方法均为 `noexcept`。`std::bad_alloc` 等异常在内部 `try-catch` 捕获并记录到 `stderr`，对象保持可安全析构状态。
@@ -188,8 +201,15 @@ ctx.with("host", "192.168.1.1").with("port", 3306).with("latency_ms", 150.5);
 auto chained = biz_error.wrap(db_error);     // 因果链
 auto uid = ctx.get_payload_value("host");    // std::optional
 ctx.for_each_payload([](const auto& k, const auto& v) { std::cout << k << "=" << v; });
-if (ctx.has_payload_error()) { /* 降级处理 */ }
 if (a.equals_by_code(b))     { /* 错误归类 */ }
+if (ctx.is_retryable())     { /* 重试逻辑 */ }
+if (ctx.is_fatal())         { /* 告警/熔断 */ }
+std::cout << ctx.to_string();  // 免 include serializer
+// 批量校验聚合
+std::vector<error_context_t> errs;
+if (!validate_a()) errs.push_back(err_a);
+if (!validate_b()) errs.push_back(err_b);
+return join_errors(std::move(errs));
 ```
 
 ---
@@ -343,10 +363,12 @@ public:
     explicit operator bool() const noexcept;
 
     // 值访问（零异常，失败返回哨兵）
-    // value() 含 static_assert 要求 T 可默认构造，否则使用 value_pointer()
+    // value() 含 static_assert 要求 T 可默认构造，否则使用 value_pointer() / operator->
     const T& value() const noexcept;            // 失败返回 thread_local T{} 哨兵（另有无 const 重载）
     const T* value_pointer() const noexcept;    // 失败返回 nullptr（另有无 const 重载）
     const T& value_or(const T& default_value) const noexcept;
+    const T& operator*() const noexcept;        // 等价 value()（另有无 const 重载）
+    const T* operator->() const noexcept;       // 等价 value_pointer()（另有无 const 重载）
 
     // 错误访问（含 mutable 重载 error() noexcept）
     const error_context_t& error() const noexcept;
@@ -358,7 +380,12 @@ public:
     template <typename Function> auto map(Function&& fn) const& noexcept;
     template <typename Function> result_t map_error(Function&& fn) const& noexcept;
 
-    // 模式匹配（不标记 noexcept：用户回调异常会传播给调用方）
+    // 传播时附加上下文（完美转发到 with()）
+    // 错误时追加 payload，成功时无操作；& 返回自身引用，&& 返回移动后对象
+    template <typename K, typename V> result_t& context(K&& key, V&& value) & noexcept;
+    template <typename K, typename V> result_t   context(K&& key, V&& value) && noexcept;
+
+    // 模式匹配（条件 noexcept：仅当两个回调均 noexcept 时才 noexcept）
     template <typename SuccessFn, typename ErrorFn>
     auto match(SuccessFn&&, ErrorFn&&) const;
 };
@@ -374,9 +401,11 @@ int v = r.value_or(0);
 auto msg = r.match(  // 强制同时处理两条路径
     [](const std::string& s) { return "ok: " + s; },
     [](const error_context_t& e) { return "fail: " + std::string(e.message); });
+// 传播时附加 payload
+return inner_call().context("host", host_).context("port", port_);
 ```
 
-> ⚠️ `value()` 含 `static_assert` 要求 T 可默认构造，否则编译失败 — 此时改用 `value_pointer()`。
+> ⚠️ `value()` 含 `static_assert` 要求 T 可默认构造，否则编译失败 — 此时改用 `value_pointer()` 或 `operator->`。
 
 ### `result_t<void>` 特化
 
@@ -388,18 +417,27 @@ class result_t<void> {
 public:
     using value_type_t = void;
 
-    result_t() noexcept;                      // 成功（无 value 构造，对应主模板的 result_t(T)）
+    result_t() noexcept;                      // 成功（持有 monostate，零 error_context_t 构造）
     explicit result_t(const error_context_t&) noexcept;
 
     static result_t make_success() noexcept;  // 无参（主模板接受 T value）
 
-    // 无 value/value_or/value_pointer、无 mutable error() 重载、无 map()、无 match()
+    // 无 value/value_or/value_pointer/operator*/operator->、无 mutable error() 重载、无 map()、无 match()
 
     // and_then 仅 & / && 两个重载（无 const&，因 void 无值可读）
     template <typename Function> auto and_then(Function&&) & noexcept;
     template <typename Function> auto and_then(Function&&) && noexcept;
+
+    // 传播时附加上下文（同主模板）
+    template <typename K, typename V> result_t<void>& context(K&&, V&&) & noexcept;
+    template <typename K, typename V> result_t<void>   context(K&&, V&&) && noexcept;
 };
 ```
+
+> 💡 **惰性上下文设计**：`result_t<void>` 内部用 `std::variant<std::monostate, error_context_t>` 存储。
+> 成功路径只持有 `monostate`（trivial 构造），不构造 `error_context_t` 的任何成员，
+> 避免成功时无谓地构造 13 个空 `std::string`（payload_small_ + metadata + message 等）。
+> 失败路径才构造完整 `error_context_t`。对象 sizeof 与 `error_context_t` 基本持平（424 vs 416）。
 
 ```cpp
 result_t<void> ok;

@@ -291,7 +291,7 @@ namespace error_system::core {
          * @param context 错误上下文
          * @return std::string 错误上下文的 JSON 表示
          */
-        static std::string to_json(const error_context_t& context) noexcept;
+        [[nodiscard]] static std::string to_json(const error_context_t& context) noexcept;
 
         /**
          * @brief 转换为紧凑二进制字符串

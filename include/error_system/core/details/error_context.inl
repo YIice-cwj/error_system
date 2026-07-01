@@ -47,7 +47,6 @@ namespace error_system::core {
             payload_count_ = 0;
         } catch (const std::bad_alloc&) {
             std::fprintf(stderr, "[error_context] insert_or_update_payload_: std::bad_alloc\n");
-            payload_error_ = true;
         }
         return *this;
     }

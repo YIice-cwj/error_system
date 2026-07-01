@@ -294,26 +294,6 @@ namespace error_system::core {
         EXPECT_EQ(result.operator->(), nullptr);
     }
 
-    TEST_F(result_test_t, transform_alias_matches_map) {
-        auto result = result_t<int>(21);
-        auto transformed = result.transform([](int value) noexcept { return value * 2; });
-        EXPECT_TRUE(transformed.is_success());
-        EXPECT_EQ(transformed.value_or(0), 42);
-    }
-
-    TEST_F(result_test_t, transform_error_alias_matches_map_error) {
-        auto code = error_code_t{error_level_t::error, domain::system_domain_t::none, subsystem_id_t{0x0001}, module_id_t{0x0001}, error_number_t{1}};
-        error_registry_t::instance().register_error(code, "ERR_TE1", "transform_error 1");
-        auto result = result_t<int>::make_error(code, "original");
-        auto transformed = result.transform_error([](const error_context_t&) noexcept {
-            auto new_code = error_code_t{error_level_t::fatal, domain::system_domain_t::none, subsystem_id_t{0x0001}, module_id_t{0x0001}, error_number_t{99}};
-            error_registry_t::instance().register_error(new_code, "ERR_TE99", "transform_error 99");
-            return error_context_t{located_code_t{new_code}, "transformed"};
-        });
-        EXPECT_TRUE(transformed.is_error());
-        EXPECT_EQ(transformed.error().get_code().get_level(), error_level_t::fatal);
-    }
-
     namespace {
         result_t<int> try_helper_success() {
             ERROR_SYSTEM_TRY(r, result_t<int>(21));
@@ -362,6 +342,95 @@ namespace error_system::core {
         auto result = try_discard_error_helper();
         EXPECT_TRUE(result.is_error());
         EXPECT_EQ(result.error().message, "discarded failure");
+    }
+
+    // ===== context() 传播时附加上下文测试 =====
+
+    TEST_F(result_test_t, context_on_error_attaches_payload) {
+        auto code = error_code_t{error_level_t::error, domain::system_domain_t::none, subsystem_id_t{0x0001}, module_id_t{0x0001}, error_number_t{1}};
+        error_registry_t::instance().register_error(code, "ERR_CTX1", "context error 1");
+        auto result = result_t<int>::make_error(code, "inner").context("host", "192.168.1.1");
+        EXPECT_TRUE(result.is_error());
+        EXPECT_EQ(result.error().message, "inner");
+        EXPECT_EQ(result.error().payload_size(), 1u);
+        auto host = result.error().get_payload_value("host");
+        ASSERT_TRUE(host.has_value());
+        EXPECT_EQ(*host, "192.168.1.1");
+    }
+
+    TEST_F(result_test_t, context_on_success_is_noop) {
+        result_t<int> result(42);
+        auto& ref = result.context("key", "value");
+        EXPECT_TRUE(result.is_success());
+        EXPECT_EQ(result.value(), 42);
+        EXPECT_EQ(&ref, &result);
+    }
+
+    TEST_F(result_test_t, context_rvalue_returns_moved_result) {
+        auto code = error_code_t{error_level_t::error, domain::system_domain_t::none, subsystem_id_t{0x0001}, module_id_t{0x0001}, error_number_t{1}};
+        error_registry_t::instance().register_error(code, "ERR_CTX2", "context error 2");
+        auto result = result_t<int>::make_error(code, "rvalue").context("port", 3306);
+        EXPECT_TRUE(result.is_error());
+        EXPECT_EQ(result.error().message, "rvalue");
+        EXPECT_EQ(result.error().payload_size(), 1u);
+        auto port = result.error().get_payload_value("port");
+        ASSERT_TRUE(port.has_value());
+        EXPECT_EQ(*port, "3306");
+    }
+
+    TEST_F(result_test_t, context_chains_multiple_payloads) {
+        auto code = error_code_t{error_level_t::error, domain::system_domain_t::none, subsystem_id_t{0x0001}, module_id_t{0x0001}, error_number_t{1}};
+        error_registry_t::instance().register_error(code, "ERR_CTX3", "context error 3");
+        auto result = result_t<int>::make_error(code, "chain")
+                          .context("a", "1")
+                          .context("b", "2")
+                          .context("c", "3");
+        EXPECT_EQ(result.error().payload_size(), 3u);
+    }
+
+    TEST_F(result_test_t, void_context_on_error_attaches_payload) {
+        auto code = error_code_t{error_level_t::error, domain::system_domain_t::none, subsystem_id_t{0x0001}, module_id_t{0x0001}, error_number_t{1}};
+        error_registry_t::instance().register_error(code, "ERR_VCTX", "void context error");
+        auto result = result_t<void>::make_error(code, "void inner").context("host", "127.0.0.1");
+        EXPECT_TRUE(result.is_error());
+        EXPECT_EQ(result.error().message, "void inner");
+        EXPECT_EQ(result.error().payload_size(), 1u);
+    }
+
+    TEST_F(result_test_t, void_context_on_success_is_noop) {
+        result_t<void> result;
+        auto& ref = result.context("key", "value");
+        EXPECT_TRUE(result.is_success());
+        EXPECT_EQ(&ref, &result);
+    }
+
+    // ===== match() noexcept 谓词测试 =====
+
+    namespace {
+        struct nothrow_success_fn_t {
+            int operator()(const int&) const noexcept { return 1; }
+        };
+        struct nothrow_error_fn_t {
+            int operator()(const error_context_t&) const noexcept { return 2; }
+        };
+        struct throwing_success_fn_t {
+            int operator()(const int&) const { return 1; }
+        };
+    }  // namespace
+
+    TEST_F(result_test_t, match_noexcept_when_callbacks_nothrow) {
+        result_t<int> result(42);
+        static_assert(noexcept(std::declval<const result_t<int>&>().match(
+            nothrow_success_fn_t{}, nothrow_error_fn_t{})),
+            "match should be noexcept when both callbacks are noexcept");
+        EXPECT_EQ(result.match(nothrow_success_fn_t{}, nothrow_error_fn_t{}), 1);
+    }
+
+    TEST_F(result_test_t, match_not_nothrow_when_callback_may_throw) {
+        result_t<int> result(42);
+        static_assert(!noexcept(std::declval<const result_t<int>&>().match(
+            throwing_success_fn_t{}, nothrow_error_fn_t{})),
+            "match should not be noexcept when a callback may throw");
     }
 
 }  // namespace error_system::core

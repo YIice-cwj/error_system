@@ -682,4 +682,96 @@ namespace error_system::core {
 #endif
     }
 
+    // ===== 便捷方法 & 谓词 & join_errors 测试 =====
+
+    TEST_F(error_context_test_t, to_string_member_delegates_to_serializer) {
+        error_context_t context(located_code_t{registered_code_}, "member to_string");
+        EXPECT_EQ(context.to_string(), error_context_serializer_t::to_string(context));
+    }
+
+    TEST_F(error_context_test_t, to_json_member_delegates_to_serializer) {
+        error_context_t context(located_code_t{registered_code_}, "member to_json");
+        EXPECT_EQ(context.to_json(), error_context_serializer_t::to_json(context));
+    }
+
+    TEST_F(error_context_test_t, to_binary_member_delegates_to_serializer) {
+        error_context_t context(located_code_t{registered_code_}, "member to_binary");
+        EXPECT_EQ(context.to_binary(), error_context_serializer_t::to_binary(context));
+    }
+
+    TEST_F(error_context_test_t, is_fatal_returns_true_for_fatal_level) {
+        error_code_t fatal_code(error_level_t::fatal, domain::system_domain_t::database,
+                                subsystem_id_t{9}, module_id_t{9}, error_number_t{200});
+        error_registry_t::instance().register_error(fatal_code, "ERR_FATAL", "fatal error");
+        error_context_t context(located_code_t{fatal_code}, "fatal");
+        EXPECT_TRUE(context.is_fatal());
+    }
+
+    TEST_F(error_context_test_t, is_fatal_returns_false_for_non_fatal_level) {
+        error_context_t context(located_code_t{registered_code_}, "not fatal");
+        EXPECT_FALSE(context.is_fatal());
+    }
+
+    TEST_F(error_context_test_t, is_retryable_reflects_code_retryable_bit) {
+        error_code_t code = make_code(50);
+        code.set_retryable(true);
+        error_registry_t::instance().register_error(code, "ERR_RT50", "retryable 50");
+        error_context_t context(located_code_t{code}, "retryable");
+        EXPECT_TRUE(context.is_retryable());
+
+        error_code_t code2 = make_code(51);
+        code2.set_retryable(false);
+        error_registry_t::instance().register_error(code2, "ERR_RT51", "not retryable 51");
+        error_context_t context2(located_code_t{code2}, "not retryable");
+        EXPECT_FALSE(context2.is_retryable());
+    }
+
+    TEST_F(error_context_test_t, is_transient_reflects_code_transient_bit) {
+        error_code_t code = make_code(60);
+        code.set_transient(true);
+        error_registry_t::instance().register_error(code, "ERR_TR60", "transient 60");
+        error_context_t context(located_code_t{code}, "transient");
+        EXPECT_TRUE(context.is_transient());
+
+        error_code_t code2 = make_code(61);
+        code2.set_transient(false);
+        error_registry_t::instance().register_error(code2, "ERR_TR61", "not transient 61");
+        error_context_t context2(located_code_t{code2}, "not transient");
+        EXPECT_FALSE(context2.is_transient());
+    }
+
+    TEST_F(error_context_test_t, join_errors_empty_returns_success_context) {
+        std::vector<error_context_t> empty;
+        auto joined = join_errors(std::move(empty));
+        EXPECT_TRUE(joined.is_success());
+        EXPECT_TRUE(joined.is_payload_empty());
+    }
+
+    TEST_F(error_context_test_t, join_errors_single_returns_directly) {
+        error_context_t single(located_code_t{registered_code_}, "only one");
+        auto joined = join_errors({single});
+        EXPECT_EQ(joined.get_code().get_code(), registered_code_.get_code());
+        EXPECT_EQ(joined.message, "only one");
+        EXPECT_TRUE(joined.is_payload_empty());
+    }
+
+    TEST_F(error_context_test_t, join_errors_multiple_attaches_as_payload) {
+        error_code_t code2 = make_code(2);
+        error_code_t code3 = make_code(3);
+        error_registry_t::instance().register_error(code2, "ERR_JOIN2", "second");
+        error_registry_t::instance().register_error(code3, "ERR_JOIN3", "third");
+
+        std::vector<error_context_t> errors;
+        errors.emplace_back(located_code_t{registered_code_}, "primary error");
+        errors.emplace_back(located_code_t{code2}, "second error");
+        errors.emplace_back(located_code_t{code3}, "third error");
+
+        auto joined = join_errors(std::move(errors));
+        EXPECT_EQ(joined.get_code().get_code(), registered_code_.get_code());
+        EXPECT_EQ(joined.message, "primary error");
+        EXPECT_EQ(joined.payload_size(), 2u);
+        EXPECT_EQ(find_payload_value(joined, "joined_error_1"), "second error");
+        EXPECT_EQ(find_payload_value(joined, "joined_error_2"), "third error");
+    }
+
 }  // namespace error_system::core

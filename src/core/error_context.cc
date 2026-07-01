@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "error_system/config/feature_flags.h"
+#include "error_system/core/error_context_serializer.h"
 #include "error_system/utils/source_location.h"
 
 /**
@@ -67,13 +68,11 @@ namespace error_system::core {
             if constexpr (error_system::config::feature_flags_t::STACKTRACE_ENABLED) {
                 stack_frames = std::move(other.stack_frames);
             }
-            payload_error_ = other.payload_error_;
             loc_file_storage_ = std::move(other.loc_file_storage_);
             loc_func_storage_ = std::move(other.loc_func_storage_);
             repair_source_location_pointers_();
             other.payload_count_ = 0;
             other.file_name = nullptr;
-            other.payload_error_ = false;
             other.source_location = utils::source_location_t{};
         }
         return *this;
@@ -89,7 +88,6 @@ namespace error_system::core {
         payload_count_(other.payload_count_),
         payload_small_(std::move(other.payload_small_)),
         payload_overflow_(std::move(other.payload_overflow_)),
-        payload_error_(other.payload_error_),
         loc_file_storage_(std::move(other.loc_file_storage_)),
         loc_func_storage_(std::move(other.loc_func_storage_)),
         message(std::move(other.message)),
@@ -98,7 +96,6 @@ namespace error_system::core {
         stack_frames(std::move(other.stack_frames)) {
         other.payload_count_ = 0;
         other.file_name = nullptr;
-        other.payload_error_ = false;
         repair_source_location_pointers_();
         other.source_location = utils::source_location_t{};
     }
@@ -108,7 +105,6 @@ namespace error_system::core {
      */
     void error_context_t::copy_basic_fields_(const error_context_t& other) {
         metadata_ = other.metadata_;
-        payload_error_ = other.payload_error_;
         loc_file_storage_ = other.loc_file_storage_;
         loc_func_storage_ = other.loc_func_storage_;
         message = other.message;
@@ -296,6 +292,53 @@ namespace error_system::core {
             return cause->equals_strict(*other.cause);
         }
         return !cause && !other.cause;
+    }
+
+    /**
+     * @brief 渲染为可读文本（便捷方法）
+     * @details 委托给 error_context_serializer_t::to_string()，避免调用方再 include serializer 头文件
+     */
+    std::string error_context_t::to_string() const noexcept {
+        return error_context_serializer_t::to_string(*this);
+    }
+
+    /**
+     * @brief 序列化为 JSON 字符串（便捷方法）
+     */
+    std::string error_context_t::to_json() const noexcept {
+        return error_context_serializer_t::to_json(*this);
+    }
+
+    /**
+     * @brief 序列化为紧凑二进制字符串（便捷方法）
+     */
+    std::string error_context_t::to_binary() const noexcept {
+        return error_context_serializer_t::to_binary(*this);
+    }
+
+    /**
+     * @brief 聚合多个错误上下文为一个
+     * @details 主错误取第一个，其余以 joined_error_N 为键作为 payload 附加。
+     *          std::to_string 与 string 拼接可能抛 bad_alloc，用 try-catch 包裹，
+     *          失败时停止追加后续错误（已追加的保留），符合规范 14。
+     */
+    error_context_t join_errors(std::vector<error_context_t>&& errors) noexcept {
+        if (errors.empty()) {
+            return error_context_t{};
+        }
+        if (errors.size() == 1) {
+            return std::move(errors[0]);
+        }
+        error_context_t primary = std::move(errors[0]);
+        try {
+            for (size_t i = 1; i < errors.size(); ++i) {
+                std::string key = "joined_error_" + std::to_string(i);
+                primary.with(std::move(key), errors[i].message);
+            }
+        } catch (const std::bad_alloc&) {
+            std::fprintf(stderr, "[join_errors] std::bad_alloc\n");
+        }
+        return primary;
     }
 
 }  // namespace error_system::core
