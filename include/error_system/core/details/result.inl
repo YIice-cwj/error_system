@@ -11,9 +11,9 @@
  */
 namespace error_system::core {
 
-    // ============================================================
-    // result_t<T> 主模板实现
-    // ============================================================
+    /**
+     * @brief result_t<T> 主模板实现
+     */
 
     template <typename T>
     result_t<T> result_t<T>::make_error(error_code_t code, const std::string& message,
@@ -123,6 +123,26 @@ namespace error_system::core {
     }
 
     template <typename T>
+    const T& result_t<T>::operator*() const noexcept {
+        return value();
+    }
+
+    template <typename T>
+    T& result_t<T>::operator*() noexcept {
+        return value();
+    }
+
+    template <typename T>
+    const T* result_t<T>::operator->() const noexcept {
+        return value_pointer();
+    }
+
+    template <typename T>
+    T* result_t<T>::operator->() noexcept {
+        return value_pointer();
+    }
+
+    template <typename T>
     result_t<T>::operator bool() const noexcept {
         return is_success();
     }
@@ -187,6 +207,34 @@ namespace error_system::core {
             }
         }
         return std::move(*this);
+    }
+
+    template <typename T>
+    template <typename Function>
+    auto result_t<T>::transform(Function&& function) const& noexcept
+        -> result_t<decltype(std::invoke(std::forward<Function>(function),
+                                         std::declval<const value_type_t&>()))> {
+        return map(std::forward<Function>(function));
+    }
+
+    template <typename T>
+    template <typename Function>
+    auto result_t<T>::transform(Function&& function) && noexcept
+        -> result_t<decltype(std::invoke(std::forward<Function>(function),
+                                         std::move(value())))> {
+        return std::move(*this).map(std::forward<Function>(function));
+    }
+
+    template <typename T>
+    template <typename Function>
+    result_t<T> result_t<T>::transform_error(Function&& function) const& noexcept {
+        return map_error(std::forward<Function>(function));
+    }
+
+    template <typename T>
+    template <typename Function>
+    result_t<T> result_t<T>::transform_error(Function&& function) && noexcept {
+        return std::move(*this).map_error(std::forward<Function>(function));
     }
 
     template <typename T>
@@ -283,9 +331,9 @@ namespace error_system::core {
         return {};
     }
 
-    // ============================================================
-    // result_t<void> 特化实现
-    // ============================================================
+    /**
+     * @brief result_t<void> 特化实现
+     */
 
     inline result_t<void>::result_t() noexcept : error_context_{} {}
 

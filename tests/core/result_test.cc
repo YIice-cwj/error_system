@@ -271,4 +271,97 @@ namespace error_system::core {
         EXPECT_EQ(mapped.error().get_code().get_level(), error_level_t::fatal);
     }
 
+    TEST_F(result_test_t, dereference_operator_returns_value_on_success) {
+        auto result = result_t<int>(42);
+        EXPECT_EQ(*result, 42);
+    }
+
+    TEST_F(result_test_t, dereference_operator_returns_mutable_value) {
+        auto result = result_t<int>(42);
+        *result = 100;
+        EXPECT_EQ(result.value(), 100);
+    }
+
+    TEST_F(result_test_t, arrow_operator_accesses_members) {
+        auto result = result_t<std::string>("hello");
+        EXPECT_EQ(result->size(), 5);
+    }
+
+    TEST_F(result_test_t, arrow_operator_returns_null_on_error) {
+        auto code = error_code_t{error_level_t::error, domain::system_domain_t::none, subsystem_id_t{0x0001}, module_id_t{0x0001}, error_number_t{1}};
+        error_registry_t::instance().register_error(code, "ERR_ARROW", "arrow error");
+        auto result = result_t<std::string>::make_error(code, "fail");
+        EXPECT_EQ(result.operator->(), nullptr);
+    }
+
+    TEST_F(result_test_t, transform_alias_matches_map) {
+        auto result = result_t<int>(21);
+        auto transformed = result.transform([](int value) noexcept { return value * 2; });
+        EXPECT_TRUE(transformed.is_success());
+        EXPECT_EQ(transformed.value_or(0), 42);
+    }
+
+    TEST_F(result_test_t, transform_error_alias_matches_map_error) {
+        auto code = error_code_t{error_level_t::error, domain::system_domain_t::none, subsystem_id_t{0x0001}, module_id_t{0x0001}, error_number_t{1}};
+        error_registry_t::instance().register_error(code, "ERR_TE1", "transform_error 1");
+        auto result = result_t<int>::make_error(code, "original");
+        auto transformed = result.transform_error([](const error_context_t&) noexcept {
+            auto new_code = error_code_t{error_level_t::fatal, domain::system_domain_t::none, subsystem_id_t{0x0001}, module_id_t{0x0001}, error_number_t{99}};
+            error_registry_t::instance().register_error(new_code, "ERR_TE99", "transform_error 99");
+            return error_context_t{located_code_t{new_code}, "transformed"};
+        });
+        EXPECT_TRUE(transformed.is_error());
+        EXPECT_EQ(transformed.error().get_code().get_level(), error_level_t::fatal);
+    }
+
+    namespace {
+        result_t<int> try_helper_success() {
+            ERROR_SYSTEM_TRY(r, result_t<int>(21));
+            return result_t<int>((*r) * 2);
+        }
+
+        result_t<int> try_helper_error() {
+            auto code = error_code_t{error_level_t::error, domain::system_domain_t::none, subsystem_id_t{0x0001}, module_id_t{0x0001}, error_number_t{1}};
+            error_registry_t::instance().register_error(code, "ERR_TRY1", "try error 1");
+            ERROR_SYSTEM_TRY(r, result_t<int>::make_error(code, "inner failure"));
+            return result_t<int>((*r) * 2);
+        }
+
+        result_t<int> try_discard_helper() {
+            ERROR_SYSTEM_TRY_DISCARD(result_t<int>(7));
+            return result_t<int>(14);
+        }
+
+        result_t<int> try_discard_error_helper() {
+            auto code = error_code_t{error_level_t::error, domain::system_domain_t::none, subsystem_id_t{0x0001}, module_id_t{0x0001}, error_number_t{2}};
+            error_registry_t::instance().register_error(code, "ERR_TRY2", "try error 2");
+            ERROR_SYSTEM_TRY_DISCARD(result_t<int>::make_error(code, "discarded failure"));
+            return result_t<int>(14);
+        }
+    }  // namespace
+
+    TEST_F(result_test_t, try_macro_returns_value_when_success) {
+        auto result = try_helper_success();
+        EXPECT_TRUE(result.is_success());
+        EXPECT_EQ(result.value(), 42);
+    }
+
+    TEST_F(result_test_t, try_macro_returns_error_when_inner_fails) {
+        auto result = try_helper_error();
+        EXPECT_TRUE(result.is_error());
+        EXPECT_EQ(result.error().message, "inner failure");
+    }
+
+    TEST_F(result_test_t, try_discard_macro_returns_value_when_success) {
+        auto result = try_discard_helper();
+        EXPECT_TRUE(result.is_success());
+        EXPECT_EQ(result.value(), 14);
+    }
+
+    TEST_F(result_test_t, try_discard_macro_returns_error_when_inner_fails) {
+        auto result = try_discard_error_helper();
+        EXPECT_TRUE(result.is_error());
+        EXPECT_EQ(result.error().message, "discarded failure");
+    }
+
 }  // namespace error_system::core

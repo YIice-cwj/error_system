@@ -191,6 +191,34 @@ namespace error_system::core {
         [[nodiscard]] const value_type_t& value_or(const value_type_t& default_value) const noexcept;
 
         /**
+         * @brief 解引用访问成功值
+         * @details 与 std::expected::operator* 语义一致。错误时返回线程局部哨兵值引用，
+         *          调用方应先通过 operator bool / is_success() 检查。
+         * @return const value_type_t& 成功值引用
+         */
+        [[nodiscard]] const value_type_t& operator*() const noexcept;
+
+        /**
+         * @brief 解引用访问成功值（可变引用）
+         * @return value_type_t& 成功值可变引用
+         */
+        [[nodiscard]] value_type_t& operator*() noexcept;
+
+        /**
+         * @brief 箭头访问成功值成员
+         * @details 与 std::expected::operator-> 语义一致。错误时返回线程局部哨兵地址，
+         *          调用方应先通过 operator bool / is_success() 检查。
+         * @return const value_type_t* 成功值地址
+         */
+        [[nodiscard]] const value_type_t* operator->() const noexcept;
+
+        /**
+         * @brief 箭头访问成功值成员（可变指针）
+         * @return value_type_t* 成功值地址
+         */
+        [[nodiscard]] value_type_t* operator->() noexcept;
+
+        /**
          * @brief 布尔转换运算符
          * @return bool 如果结果为成功则返回 true
          */
@@ -216,6 +244,23 @@ namespace error_system::core {
                                              std::move(value())))>;
 
         /**
+         * @brief 对成功值进行映射转换（std::expected 兼容别名）
+         * @details transform 是 map 的别名，命名与 C++23 std::expected 保持一致，便于后续迁移。
+         */
+        template <typename Function>
+        [[nodiscard]] auto transform(Function&& function) const& noexcept
+            -> result_t<decltype(std::invoke(std::forward<Function>(function),
+                                             std::declval<const value_type_t&>()))>;
+
+        /**
+         * @brief 对成功值进行映射转换（移动语义，std::expected 兼容别名）
+         */
+        template <typename Function>
+        [[nodiscard]] auto transform(Function&& function) && noexcept
+            -> result_t<decltype(std::invoke(std::forward<Function>(function),
+                                             std::move(value())))>;
+
+        /**
          * @brief 对错误上下文进行映射转换
          * @tparam Function 映射函数
          * @param function 映射函数，接受 error_context_t 返回新的 error_context_t
@@ -229,6 +274,19 @@ namespace error_system::core {
          */
         template <typename Function>
         [[nodiscard]] result_t<value_type_t> map_error(Function&& function) && noexcept;
+
+        /**
+         * @brief 对错误上下文进行映射转换（std::expected 兼容别名）
+         * @details transform_error 是 map_error 的别名，命名与 C++23 std::expected 保持一致。
+         */
+        template <typename Function>
+        [[nodiscard]] result_t<value_type_t> transform_error(Function&& function) const& noexcept;
+
+        /**
+         * @brief 对错误上下文进行映射转换（移动语义，std::expected 兼容别名）
+         */
+        template <typename Function>
+        [[nodiscard]] result_t<value_type_t> transform_error(Function&& function) && noexcept;
 
         /**
          * @brief 对结果进行链式操作（右值引用版本）
@@ -444,5 +502,37 @@ namespace error_system::core {
     };
 
 }  // namespace error_system::core
+
+/**
+ * @brief 早返回宏：当 expr 为错误时，从当前函数返回同类型错误结果
+ * @details 声明变量 var 并赋值为 expr；若 var 为错误，则通过 result_t<value_type_t>::make_error()
+ *          构造与 var 相同 value 类型的错误结果并返回。外层函数返回类型必须与 expr 的 value 类型一致。
+ *          适用于需要保留成功值供后续使用的场景。
+ * @param var 变量名（在调用点可见）
+ * @param expr 返回 result_t 的表达式
+ * @note 该宏展开为多语句，必须作为独立语句使用。
+ */
+#ifndef ERROR_SYSTEM_TRY
+#define ERROR_SYSTEM_TRY(var, expr) \
+    auto var = (expr); \
+    if ((var).is_error()) { \
+        return ::error_system::core::result_t<typename std::decay_t<decltype(var)>::value_type_t>::make_error((var).error()); \
+    }
+#endif
+
+/**
+ * @brief 早返回宏（丢弃值版本）：当 expr 为错误时，从当前函数返回同类型错误结果
+ * @details 不保留成功值，仅检查错误并早返回。外层函数返回类型必须与 expr 的 value 类型一致。
+ * @param expr 返回 result_t 的表达式
+ */
+#ifndef ERROR_SYSTEM_TRY_DISCARD
+#define ERROR_SYSTEM_TRY_DISCARD(expr) \
+    do { \
+        auto&& _error_system_tmp = (expr); \
+        if (_error_system_tmp.is_error()) { \
+            return ::error_system::core::result_t<typename std::decay_t<decltype(_error_system_tmp)>::value_type_t>::make_error(_error_system_tmp.error()); \
+        } \
+    } while (0)
+#endif
 
 #include "details/result.inl"
