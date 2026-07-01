@@ -80,9 +80,9 @@ reg.invalidate_metadata_cache();        // 显式刷新（测试场景）
 │       ├─ 是 → register_migration()      ← 仅建立映射，不标记废弃
 │       └─ 否 → 无需操作
 └─ 是 → 是否有直接替代码？
-        ├─ 是 → mark_deprecated(code, reason, replacement, ...)
+        ├─ 是 → mark_deprecated(code, {reason, replacement, ...})
         │       └─ 同时自动建立 migration 映射
-        └─ 否 → mark_deprecated(code, reason)   ← 仅标记废弃，无替代
+        └─ 否 → mark_deprecated(code, {reason})   ← 仅标记废弃，无替代
 ```
 
 **单跳 vs 递归迁移**
@@ -96,8 +96,8 @@ reg.invalidate_metadata_cache();        // 显式刷新（测试场景）
 
 ```cpp
 auto& reg = migration::error_migration_registry_t::instance();
-reg.mark_deprecated(ERR_OLD_DB_POOL, "v2.0 起改用 V2", ERR_DB_POOL_V2, "2.0.0", "3.0.0");
-reg.mark_deprecated(ERR_LEGACY_AUTH, "鉴权流程已重构，下版本移除");   // 仅标记
+reg.mark_deprecated(ERR_OLD_DB_POOL, {"v2.0 起改用 V2", ERR_DB_POOL_V2, "2.0.0", "3.0.0"});
+reg.mark_deprecated(ERR_LEGACY_AUTH, {"鉴权流程已重构，下版本移除"});   // 仅标记
 reg.register_migration(ERR_USER_NOT_FOUND_V1, ERR_USER_NOT_FOUND_V2); // 别名映射
 auto migrated = reg.migrate(ERR_OLD_DB_POOL);          // 单跳
 auto terminal = reg.migrate_recursive(ERR_OLD_DB_POOL); // 递归到终点
@@ -234,7 +234,7 @@ result_t<user_t> fetch_user(id_t id) noexcept {
     if (id == 0) return result_t<user_t>::make_error(ERR_INVALID_ID, "id 不能为 0");
     return result_t<user_t>::make_success(user_t{id});
 }
-auto name = fetch_user(42).map([](const user_t& u) { return u.name; }).unwrap_or("unknown");
+auto name = fetch_user(42).map([](const user_t& u) { return u.name; }).value_or("unknown");
 
 auto r = fetch_user(id);
 if (r.is_error()) throw error_exception_t(r.error());  // 跨异常边界
@@ -275,7 +275,7 @@ if (r.is_error()) throw error_exception_t(r.error());  // 跨异常边界
 using namespace error_system::mapping;
 http_status_t http = status_mapper_t::to_http_status(ERR_DB_TIMEOUT);   // 503 Service Unavailable
 grpc_status_t grpc = status_mapper_t::to_grpc_status(ERR_DB_TIMEOUT);  // UNAVAILABLE
-http.to_string();  // "Service Unavailable"
+http.c_str();      // "Service Unavailable"
 http.to_int();     // 503
 http_status_t::is_valid(404);  // true
 // 如需特殊映射：调用方自行判断

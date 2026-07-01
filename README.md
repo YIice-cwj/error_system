@@ -87,14 +87,14 @@ error_context_serializer_t::to_binary(ctx);   // 紧凑二进制
 result_t<int> divide(int a, int b) {
     if (b == 0)
         return result_t<int>::make_error(
-            error_code_t(error_level_t::error, system_domain_t::application, 0, 0, 1),
+            error_code_t(error_level_t::error, system_domain_t::application, subsystem_id_t{0}, module_id_t{0}, error_number_t{1}),
             "除数不能为零");
     return a / b;
 }
 
 auto r = divide(10, 0);
 if (!r) { std::cerr << error_context_serializer_t::to_string(r.error()); }
-r.unwrap_or(0);                                  // 失败返回默认值
+r.value_or(0);                                   // 失败返回默认值
 r.map([](int v) { return std::to_string(v); });  // 链式转换
 r.match([](int v) { return "ok"; },              // 强制处理两条路径
         [](const error_context_t& e) { return "fail"; });

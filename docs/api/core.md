@@ -343,13 +343,10 @@ public:
     explicit operator bool() const noexcept;
 
     // 值访问（零异常，失败返回哨兵）
-    // value()/expect() 含 static_assert 要求 T 可默认构造，否则使用 value_pointer()
+    // value() 含 static_assert 要求 T 可默认构造，否则使用 value_pointer()
     const T& value() const noexcept;            // 失败返回 thread_local T{} 哨兵（另有无 const 重载）
     const T* value_pointer() const noexcept;    // 失败返回 nullptr（另有无 const 重载）
     const T& value_or(const T& default_value) const noexcept;
-    const T& expect() const noexcept;           // Debug 断言，Release 哨兵
-    T unwrap() const noexcept;                  // 失败返回 T{}
-    T unwrap_or(T default_value) const noexcept;
 
     // 错误访问（含 mutable 重载 error() noexcept）
     const error_context_t& error() const noexcept;
@@ -373,13 +370,13 @@ auto r = fetch()
     .map_error([](const auto& e) { return recover(e); });
 if (r) { auto v = r.value(); }
 if (auto* p = r.value_pointer()) { /* 安全使用 */ }
-int v = r.unwrap_or(0);
+int v = r.value_or(0);
 auto msg = r.match(  // 强制同时处理两条路径
     [](const std::string& s) { return "ok: " + s; },
     [](const error_context_t& e) { return "fail: " + std::string(e.message); });
 ```
 
-> ⚠️ `value()` / `expect()` 含 `static_assert` 要求 T 可默认构造，否则编译失败 — 此时改用 `value_pointer()`。
+> ⚠️ `value()` 含 `static_assert` 要求 T 可默认构造，否则编译失败 — 此时改用 `value_pointer()`。
 
 ### `result_t<void>` 特化
 
@@ -396,8 +393,7 @@ public:
 
     static result_t make_success() noexcept;  // 无参（主模板接受 T value）
 
-    void expect() const noexcept;             // 返回 void（主模板返回 const T&）
-    // 无 value/value_or/value_pointer/unwrap/unwrap_or、无 mutable error() 重载、无 map()、无 match()
+    // 无 value/value_or/value_pointer、无 mutable error() 重载、无 map()、无 match()
 
     // and_then 仅 & / && 两个重载（无 const&，因 void 无值可读）
     template <typename Function> auto and_then(Function&&) & noexcept;

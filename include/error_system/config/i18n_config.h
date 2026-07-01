@@ -33,9 +33,10 @@ namespace error_system::config {
      * @brief i18n 配置类
      * @details 管理 i18n 启用开关与输出 locale 配置。类仅包含静态成员，禁止实例化。
      *
-     * @note 与 i18n_t::set_active_locale / set_default_locale 的关系：
-     *       本类是 config 层的唯一 locale 配置入口。i18n_t 仍保留其接口用于消息目录查询，
-     *       但序列化器应优先从本类读取 locale 配置，保证 config 层单一职责。
+     * @note 与 i18n_t 的关系：
+     *       本类是 locale 配置的唯一入口。i18n_t 的 set_default_locale / set_active_locale 等
+     *       接口保留以兼容现有调用方，但内部已委托给本类，避免双源配置不同步。
+     *       序列化器应从本类读取 locale 配置，保证 config 层单一职责。
      */
     class i18n_config_t {
     private:
@@ -94,12 +95,12 @@ namespace error_system::config {
 
         /**
          * @brief 启用/禁用 i18n 功能
-         * @details false 时序列化输出回退为原始 ID 数字（与 set_enable_text_output(false) 等效），
+         * @details false 时序列化输出回退为原始 ID 数字，
          *          true 时按 output_locale / default_locale 查询本地化文本。
          * @param enable 是否启用
          */
         static void set_enable_i18n(bool enable) noexcept {
-            get_flag_i18n_enabled_().store(enable, std::memory_order_relaxed);
+            get_flag_i18n_enabled_().store(enable);
         }
 
         /**
@@ -107,7 +108,7 @@ namespace error_system::config {
          * @return bool 是否启用
          */
         [[nodiscard]] static bool is_i18n_enabled() noexcept {
-            return get_flag_i18n_enabled_().load(std::memory_order_relaxed);
+            return get_flag_i18n_enabled_().load();
         }
 
         /**
@@ -115,7 +116,7 @@ namespace error_system::config {
          * @param locale 默认语言区域
          */
         static void set_default_locale(locale_t locale) noexcept {
-            get_default_locale_storage_().store(static_cast<uint8_t>(locale), std::memory_order_relaxed);
+            get_default_locale_storage_().store(static_cast<uint8_t>(locale));
         }
 
         /**
@@ -123,7 +124,7 @@ namespace error_system::config {
          * @return locale_t 默认语言区域
          */
         [[nodiscard]] static locale_t get_default_locale() noexcept {
-            return static_cast<locale_t>(get_default_locale_storage_().load(std::memory_order_relaxed));
+            return static_cast<locale_t>(get_default_locale_storage_().load());
         }
 
         /**
@@ -132,15 +133,15 @@ namespace error_system::config {
          * @param locale 输出语言区域
          */
         static void set_output_locale(locale_t locale) noexcept {
-            get_output_locale_storage_().store(static_cast<uint8_t>(locale), std::memory_order_relaxed);
-            get_output_locale_set_().store(true, std::memory_order_relaxed);
+            get_output_locale_storage_().store(static_cast<uint8_t>(locale));
+            get_output_locale_set_().store(true);
         }
 
         /**
          * @brief 清除输出 locale，回退到默认 locale
          */
         static void clear_output_locale() noexcept {
-            get_output_locale_set_().store(false, std::memory_order_relaxed);
+            get_output_locale_set_().store(false);
         }
 
         /**
@@ -148,8 +149,8 @@ namespace error_system::config {
          * @return std::optional<locale_t> 已设置则返回 locale，未设置返回 nullopt
          */
         [[nodiscard]] static std::optional<locale_t> get_output_locale() noexcept {
-            if (get_output_locale_set_().load(std::memory_order_relaxed)) {
-                return static_cast<locale_t>(get_output_locale_storage_().load(std::memory_order_relaxed));
+            if (get_output_locale_set_().load()) {
+                return static_cast<locale_t>(get_output_locale_storage_().load());
             }
             return std::nullopt;
         }
@@ -160,10 +161,10 @@ namespace error_system::config {
          * @return locale_t 最终输出语言区域
          */
         [[nodiscard]] static locale_t resolve_output_locale() noexcept {
-            if (get_output_locale_set_().load(std::memory_order_relaxed)) {
-                return static_cast<locale_t>(get_output_locale_storage_().load(std::memory_order_relaxed));
+            if (get_output_locale_set_().load()) {
+                return static_cast<locale_t>(get_output_locale_storage_().load());
             }
-            return static_cast<locale_t>(get_default_locale_storage_().load(std::memory_order_relaxed));
+            return static_cast<locale_t>(get_default_locale_storage_().load());
         }
     };
 

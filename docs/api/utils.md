@@ -110,8 +110,8 @@ public:
 
     [[nodiscard]] std::optional<std::string> operator[](const std::string& key) const noexcept;
     [[nodiscard]] std::optional<std::string> get_value(const std::string& key) const noexcept;
-    [[nodiscard]] std::optional<std::string> get_value_or(const std::string& key,
-                                                           const std::string& default_value) const noexcept;
+    [[nodiscard]] std::string get_value_or(const std::string& key,
+                                           const std::string& default_value) const noexcept;
     [[nodiscard]] bool   contains(const std::string& key) const noexcept;
     [[nodiscard]] bool   empty() const noexcept;
     [[nodiscard]] size_t size()  const noexcept;

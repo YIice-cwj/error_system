@@ -53,15 +53,13 @@ public:
     static void set_enable_short_filename(bool enable) noexcept;
     [[nodiscard]] static bool is_short_filename_enabled() noexcept;
 
-    // 文本输出（true=子系统/模块名称，false=原始 ID）
-    static void set_enable_text_output(bool enable) noexcept;
-    [[nodiscard]] static bool is_text_output_enabled() noexcept;
-
     // 通知模式
     static void set_notify_mode(notify_mode_t mode) noexcept;
     [[nodiscard]] static notify_mode_t get_notify_mode() noexcept;
 };
 ```
+
+> 💡 文本/i18n 输出开关已统一迁移到 `i18n_config_t::set_enable_i18n`，`feature_flags_t` 不再保留 `set_enable_text_output`。
 
 > 💡 若编译期未启用对应特性，相关 `set_*` 调用无实际操作，`is_*_enabled()` 始终返回 `false`，编译器死代码消除未启用分支。
 
@@ -249,7 +247,7 @@ if (plugin::plugin_registry_t::instance().deferred_buffer_overflowed()) {
 ```cpp
 feature_flags_t::set_enable_stacktrace(false);
 feature_flags_t::set_enable_source_location(false);
-feature_flags_t::set_enable_text_output(false);  // 数字 ID 输出
+i18n_config_t::set_enable_i18n(false);  // 数字 ID 输出
 ```
 
 **差异化堆栈**

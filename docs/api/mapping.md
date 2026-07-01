@@ -58,7 +58,7 @@ public:
 ```cpp
 http_status_t s{http_status_t::service_unavailable};
 s.to_int();       // → 503
-s.to_string();    // → "Service Unavailable"
+s.c_str();        // → "Service Unavailable"
 http_status_t::from_int(503);  // → http_status_t::service_unavailable
 s.is_server_error();           // → true
 ```
@@ -109,7 +109,7 @@ public:
 
 ```cpp
 grpc_status_t s{grpc_status_t::internal};
-s.to_string();              // → "INTERNAL"
+s.c_str();                  // → "INTERNAL"
 grpc_status_t::from_int(13); // → grpc_status_t::internal
 grpc_status_t::is_valid(13); // → true
 ```

@@ -81,6 +81,7 @@ else()
     file(WRITE "${ERROR_GENERATED_DIR}/error_dict.h"
         "#pragma once\n"
         "#include \"error_system/core/error_registry.h\"\n"
+        "#include \"error_system/i18n/subsystem_module_catalog.h\"\n"
         "\n"
         "namespace error_system::core {\n"
         "    struct subsystem_module_registrar_t {\n"

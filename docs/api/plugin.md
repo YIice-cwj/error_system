@@ -171,7 +171,7 @@ public:
     error_dedup_sampler_t() noexcept = default; ~error_dedup_sampler_t() noexcept = default;  // 不可拷贝、不可移动
     void set_dedup_window_ms(uint64_t milliseconds) noexcept;           // 去重窗口(ms)，0 = 关闭（默认）
     void set_sample_rate(double rate) noexcept;                         // 采样率 [0.0, 1.0]
-    [[nodiscard]] bool should_forward(const core::error_context_t& context) noexcept;  // 先采样再去重，两关通过才放行
+    [[nodiscard]] bool should_be_forwarded(const core::error_context_t& context) noexcept;  // 先采样再去重，两关通过才放行
     [[nodiscard]] uint64_t deduped_count() const noexcept;              // 被去重抑制
     [[nodiscard]] uint64_t sampled_count() const noexcept;              // 被采样抑制
     [[nodiscard]] uint64_t forwarded_count() const noexcept;            // 放行数
@@ -186,11 +186,11 @@ public:
 plugin::error_dedup_sampler_t sampler;
 sampler.set_dedup_window_ms(1000);   // 同一 identity code 1s 内只放行一次
 sampler.set_sample_rate(0.1);        // 放行 10%
-if (sampler.should_forward(ctx)) { registry.enqueue_notification(ctx); }
+if (sampler.should_be_forwarded(ctx)) { registry.enqueue_notification(ctx); }
 // 查看抑制效果：deduped_count() / sampled_count() / forwarded_count()
 ```
 
-> ⚠️ `should_forward()` 非 `const`（内部更新计数与去重表）；`reset_stats()` 并发调用可能与 `should_forward()` 竞争，仅建议无并发/测试场景。
+> ⚠️ `should_be_forwarded()` 非 `const`（内部更新计数与去重表）；`reset_stats()` 并发调用可能与 `should_be_forwarded()` 竞争，仅建议无并发/测试场景。
 
 ---
 

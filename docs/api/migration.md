@@ -35,11 +35,8 @@ class error_migration_registry_t {
 public:
     static error_migration_registry_t& instance() noexcept;
 
-    // 标记废弃（若提供 replacement，同时建立 migration 映射）
-    void mark_deprecated(error_code_t code, std::string_view reason,
-                         std::optional<error_code_t> replacement = std::nullopt,
-                         std::string_view since_version = "",
-                         std::string_view removal_version = "") noexcept;
+    // 标记废弃（若 meta.replacement 有值，同时建立 migration 映射）
+    void mark_deprecated(error_code_t code, const deprecation_meta_t& meta) noexcept;
 
     // 仅建立迁移映射（不标记废弃，适用于别名场景）
     void register_migration(error_code_t old_code, error_code_t new_code) noexcept;
@@ -79,11 +76,10 @@ auto& reg = error_migration_registry_t::instance();
 
 // 场景 1：版本演进，下线旧码（同时建立迁移）
 reg.mark_deprecated(ERR_OLD_DB_POOL,
-                    "v2.0 起改用 ERR_DB_POOL_V2",
-                    ERR_DB_POOL_V2, "2.0.0", "3.0.0");
+                    {"v2.0 起改用 ERR_DB_POOL_V2", ERR_DB_POOL_V2, "2.0.0", "3.0.0"});
 
 // 场景 2：仅标记废弃，无替代
-reg.mark_deprecated(ERR_LEGACY_AUTH, "鉴权流程已重构，下版本移除");
+reg.mark_deprecated(ERR_LEGACY_AUTH, {"鉴权流程已重构，下版本移除"});
 
 // 场景 3：别名映射（不标记废弃）
 reg.register_migration(ERR_USER_V1, ERR_USER_V2);

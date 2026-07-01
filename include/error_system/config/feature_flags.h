@@ -8,7 +8,8 @@
  * @file feature_flags.h
  * @brief 特性开关配置类
  * @details 从 error_config_t 拆分而来，单一职责：管理错误系统的编译期特性开关与
- *          运行时布尔标志位（堆栈追踪、验证、源位置、文件名缩写、文本输出、通知模式）。
+ *          运行时布尔标志位（堆栈追踪、验证、源位置、文件名缩写、通知模式）。
+ *          文本/i18n 输出开关已统一迁移到 i18n_config_t::set_enable_i18n。
  *          编译期常量通过 if constexpr 消除运行时开销，由编译器死代码消除未启用分支。
  * @author yiice
  * @version 2.3.0
@@ -93,14 +94,6 @@ namespace error_system::config {
          * @return std::atomic<bool>& 是否启用缩短源文件名标志位引用
          */
         static std::atomic<bool>& get_flag_short_filename_() noexcept {
-            static std::atomic<bool> enabled{true};
-            return enabled;
-        }
-
-        /**
-         * @brief 是否启用文本输出模式（子系统和模块名称）
-         */
-        static std::atomic<bool>& get_flag_text_output_() noexcept {
             static std::atomic<bool> enabled{true};
             return enabled;
         }
@@ -219,23 +212,6 @@ namespace error_system::config {
             } else {
                 return false;
             }
-        }
-
-        /**
-         * @brief 设置文本输出模式
-         * @details true 时输出子系统和模块名称，false 时输出原始 ID 数字
-         * @param enable 是否开启文本输出
-         */
-        static void set_enable_text_output(bool enable) noexcept {
-            get_flag_text_output_().store(enable);
-        }
-
-        /**
-         * @brief 检查文本输出模式是否开启
-         * @return bool 是否开启文本输出
-         */
-        [[nodiscard]] static bool is_text_output_enabled() noexcept {
-            return get_flag_text_output_().load();
         }
 
         /**

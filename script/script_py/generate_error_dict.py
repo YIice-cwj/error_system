@@ -84,21 +84,22 @@ def generate_dict(json_dir, out_file):
     lines = [
         "#pragma once",
         "#include \"error_system/core/error_registry.h\"",
+        "#include \"error_system/i18n/subsystem_module_catalog.h\"",
         "",
         "// 自动生成的子系统/模块名称注册宏，请勿手动修改",
-        "// 通过 DEFINE_ERROR_CODE 宏自动注册到 error_registry_t 的映射表中",
+        "// 通过 i18n::subsystem_module_catalog_t 单例注册子系统/模块名称",
         "namespace error_system::core {",
         "",
-        "    /** @brief 静态注册所有子系统和模块名称到 error_registry_t */",
+        "    /** @brief 静态注册所有子系统和模块名称到 subsystem_module_catalog_t */",
         "    struct subsystem_module_registrar_t {",
         "        subsystem_module_registrar_t() {",
-        "            auto& registry = error_registry_t::instance();",
+        "            auto& catalog = ::error_system::i18n::subsystem_module_catalog_t::instance();",
     ]
 
     # 填充子系统/模块注册
     for (sid, mid), mod_name in modules.items():
         subsys_name = subsystems.get(sid, "未知子系统")
-        lines.append(f'            registry.register_subsystem_module({sid}, {mid}, "{subsys_name}", "{mod_name}");')
+        lines.append(f'            catalog.register_subsystem_module({sid}, {mid}, "{subsys_name}", "{mod_name}");')
 
     lines.append("        }")
     lines.append("    };")
