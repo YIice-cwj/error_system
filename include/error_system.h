@@ -28,12 +28,15 @@
 #include "error_system/config/error_config.h"
 #include "error_system/config/feature_flags.h"
 #include "error_system/config/formatter_config.h"
+#include "error_system/config/i18n_config.h"
 #include "error_system/config/stacktrace_config.h"
 
 #include "error_system/domain/system_domain.h"
 
 #include "error_system/i18n/i18n.h"
+#include "error_system/i18n/i_subsystem_module_resolver.h"
 #include "error_system/i18n/locale.h"
+#include "error_system/i18n/subsystem_module_catalog.h"
 
 #include "error_system/mapping/grpc_status.h"
 #include "error_system/mapping/http_status.h"
@@ -42,11 +45,13 @@
 #include "error_system/migration/error_migration.h"
 
 #include "error_system/plugin/async_notification_channel.h"
+#include "error_system/plugin/error_dedup_sampler.h"
 #include "error_system/plugin/error_router_plugin.h"
 #include "error_system/plugin/i_error_plugin.h"
 #include "error_system/plugin/plugin_registry.h"
 
 #include "error_system/utils/async_queue.h"
+#include "error_system/utils/file_utils.h"
 #include "error_system/utils/json_utils.h"
 #include "error_system/utils/stack_trace_utils.h"
 #include "error_system/utils/source_location.h"
