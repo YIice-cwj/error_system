@@ -47,7 +47,7 @@ int main() {
     section("1.1 构造：error_exception_t(error_context_t)");
     try {
         process_order(-1);
-    } catch (const error_exception_t& e) {
+    } catch (const error_exception_t&) {
         std::cout << "  捕获异常" << std::endl;
     }
 

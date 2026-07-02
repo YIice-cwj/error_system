@@ -195,8 +195,8 @@ namespace error_system::plugin {
         sampler_.set_sample_rate(0.5);
         sampler_.set_dedup_window_ms(100);
 
-        constexpr int THREAD_COUNT = 4;
-        constexpr int ITERATIONS = 100;
+        static constexpr int THREAD_COUNT = 4;
+        static constexpr int ITERATIONS = 100;
         std::thread threads[THREAD_COUNT];
         for (auto& t : threads) {
             t = std::thread([this]() {

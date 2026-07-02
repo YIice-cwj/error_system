@@ -21,7 +21,7 @@ namespace error_system::utils {
             temp_dir_ = std::filesystem::temp_directory_path()
                         / ("error_system_file_test_" + std::to_string(dis(gen)));
             std::filesystem::create_directories(temp_dir_);
-            chmod(temp_dir_.c_str(), 0700);
+            std::filesystem::permissions(temp_dir_, std::filesystem::perms::owner_all);
         }
 
         void TearDown() override { std::filesystem::remove_all(temp_dir_); }
