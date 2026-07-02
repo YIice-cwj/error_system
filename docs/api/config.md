@@ -116,7 +116,7 @@ public:
 
 ## i18n_config_t
 
-i18n 配置类 — 管理 i18n 启用开关与输出 locale 配置，从 `error_config_t` 拆分而来，单一职责。类仅含静态成员，禁止实例化，使用 `std::atomic` 无锁读写（`atomic<locale_t>` 部分平台不支持，改用 `uint8_t` 存储）。本类**仅持有配置状态**，不直接调用 `i18n_t` / `error_registry_t` — 序列化器从本类读取 locale 后显式传给 registry / i18n_t 查询本地化文本。
+i18n 配置类 — 管理 i18n 启用开关与输出 locale 配置。类仅含静态成员，禁止实例化，使用 `std::atomic` 无锁读写。本类**仅持有配置状态**，不直接调用 `i18n_t` / `error_registry_t` — 序列化器从本类读取 locale 后显式传给 registry / i18n_t 查询本地化文本。
 
 ```cpp
 class i18n_config_t {
@@ -210,18 +210,11 @@ plugin::plugin_registry_t::instance().set_max_queue_size(10000);
 **请求处理批处理（sync_deferred）**
 
 ```cpp
-// 在请求/事务边界累积通知，避免在错误处理中触发 I/O
 feature_flags_t::set_notify_mode(feature_flags_t::notify_mode_t::sync_deferred);
 plugin::plugin_registry_t::instance().set_deferred_buffer_size(1024);
-
 // ... 请求处理（构造 error_context_t 自动入线程本地缓冲）...
-
-// 请求结束前显式 flush，触发插件 on_error()
-plugin::plugin_registry_t::instance().flush_deferred_notifications();
-
-if (plugin::plugin_registry_t::instance().deferred_buffer_overflowed()) {
-    // 缓冲满，部分通知被丢弃
-}
+plugin::plugin_registry_t::instance().flush_deferred_notifications();  // 请求结束前 flush
+if (plugin::plugin_registry_t::instance().deferred_buffer_overflowed()) { /* 缓冲满，部分通知被丢弃 */ }
 ```
 
 **高性能场景**
@@ -251,17 +244,12 @@ stacktrace_config_t::set_per_code_stacktrace_level(
 ```cpp
 formatter_config_t::set_custom_formatter(
     [](const core::error_context_t& e) -> std::string {
-        std::string out = "level=";
-        out += core::to_string(e.get_code().get_level());
+        std::string out = "level=" + core::to_string(e.get_code().get_level());
         out += " msg=\"" + e.message + "\"";
-        e.for_each_payload([&](const std::string& k, const std::string& v) {
-            out += " " + k + "=" + v;
-        });
+        e.for_each_payload([&](const std::string& k, const std::string& v) { out += " " + k + "=" + v; });
         return out;
     });
-
-// 清除自定义格式化器，恢复默认
-formatter_config_t::set_custom_formatter(nullptr);
+formatter_config_t::set_custom_formatter(nullptr);  // 清除，恢复默认
 ```
 
 ---

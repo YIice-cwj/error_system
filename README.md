@@ -2,7 +2,7 @@
 
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://isocpp.org/std/the-standard)
 [![CMake](https://img.shields.io/badge/CMake-3.15%2B-green.svg)](https://cmake.org)
-[![GoogleTest](https://img.shields.io/badge/Tests-469%20passing-brightgreen.svg)](https://github.com/google/googletest)
+[![GoogleTest](https://img.shields.io/badge/Tests-481%20passing-brightgreen.svg)](https://github.com/google/googletest)
 
 > 高性能 C++17 错误码管理系统 — 将完整错误上下文封装在一个 64 位整数中，零开销构建与解析。
 
@@ -86,19 +86,17 @@ error_context_serializer_t::to_binary(ctx);   // 紧凑二进制
 ```cpp
 result_t<int> divide(int a, int b) {
     if (b == 0)
-        return result_t<int>::make_error(
-            error_code_t(error_level_t::error, system_domain_t::application, subsystem_id_t{0}, module_id_t{0}, error_number_t{1}),
-            "除数不能为零");
+        return result_t<int>::make_error(ERR_DIVIDE_BY_ZERO, "除数不能为零");
     return a / b;
 }
 
 auto r = divide(10, 0);
 if (!r) { std::cerr << error_context_serializer_t::to_string(r.error()); }
-r.value_or(0);                                   // 失败返回默认值
+r.value_or(0);                  // 失败返回默认值
 r.map([](int v) { return std::to_string(v); });  // 链式转换
-r.match([](int v) { return "ok"; },              // 强制处理两条路径
-        [](const error_context_t& e) { return "fail"; });
 ```
+
+> 链式 `map`/`and_then`/`or_else`/`match` 完整用法见 [Core 层 API](docs/api/core.md#result_tt)。
 
 ### 4. 注册插件
 
@@ -190,8 +188,7 @@ cmake -S . -B build-min -DCMAKE_BUILD_TYPE=MinSizeRel \
 
 result_t<void> create_order(int user_id) {
     if (user_id <= 0)
-        return result_t<void>::make_error(
-            biz::trade_errors::ERR_ORDER_NOT_FOUND, "无效的用户 ID: {}", user_id);
+        return result_t<void>::make_error(biz::trade_errors::ERR_ORDER_NOT_FOUND, "无效的用户 ID: {}", user_id);
     return result_t<void>::make_success();
 }
 ```
@@ -252,7 +249,7 @@ error_system/
 │   ├── plugin/             #   插件接口、注册表、路由、异步通知通道
 │   └── utils/              #   字符串、JSON、文件、堆栈、异步队列
 ├── src/                    # 核心实现
-├── tests/                  # GoogleTest (21 文件 · 469 用例 + 3 benchmark)
+├── tests/                  # GoogleTest (21 文件 · 481 用例 + 3 benchmark)
 ├── config/errors/          # JSON 错误码配置
 ├── script/script_py/       # Python 代码生成工具
 ├── examples/               # 示例代码 (6 个 demo)
@@ -278,15 +275,14 @@ error_system/
 
 ## 🤖 错误码自动生成
 
-详细文档见 [错误码自动生成指南](docs/error_code_generation.md)。
+JSON 配置一键生成 C++ 头文件 + 全局字典 + Markdown 文档，详见 [错误码自动生成指南](docs/error_code_generation.md)。
 
 ```bash
-# 1. 在 config/errors/ 下编写 JSON 配置（参考 trade_service_errors.json）
-# 2. CMake 构建时自动触发：cmake --build build
-# 3. 或手动运行：python script/script_py/generate_all.py
-# 4. 产物位于 build/generated_errors/
-#    ├── include/{trade,payment}_service_errors.h  # C++ 错误码定义 + error_dict.h
-#    └── error_dictionary.md                       # Markdown 错误码字典
+# config/errors/*.json → build/generated_errors/
+#   ├── include/*_service_errors.h   # C++ 错误码定义 + error_dict.h
+#   └── error_dictionary.md          # Markdown 错误码字典
+cmake --build build                  # 构建时自动触发
+python script/script_py/generate_all.py  # 或手动运行
 ```
 
 ---

@@ -123,13 +123,9 @@ public:
 
 ```cpp
 auto dict = json_dict_t::parse(R"({"user":{"name":"Alice"}})");
-auto name = dict->get_value("user.name");           // "Alice"
-auto code = dict->get_value_or("code", "0");        // std::optional{"0"}（默认）
-dict->contains("user.name");                        // true
-
-// 嵌套路径访问（支持多层）
-auto deep = json_dict_t::parse(R"({"a":{"b":{"c":"value"}}})");
-deep->get_value("a.b.c");                           // "value"
+dict->get_value("user.name");        // "Alice"（支持多层点路径）
+dict->get_value_or("code", "0");     // "0"（默认值）
+dict->contains("user.name");         // true
 ```
 
 ---
@@ -309,8 +305,6 @@ public:
 ```cpp
 string_format_t::format("用户 {} 登录失败，重试 {} 次", "alice", 3);
 // "用户 alice 登录失败，重试 3 次"
-string_format_t::format("code: {}, msg: {}", 404, "NF");
-// "code: 404, msg: NF"
 ```
 
 ---
@@ -333,11 +327,8 @@ namespace error_system::core {
 ### 示例输出
 
 ```
-[Location: main.cc:42 @ main]
-[Sign: Error Level: error, System: database, 数据库服务 / 连接管理]
+[Location: main.cc:42 @ main] [Sign: Error Level: error, System: database, 数据库服务 / 连接管理]
 Code: 1 (ERR_DB_TIMEOUT) - 数据库连接超时
-  [Stacktrace]:
-    0: main (main.cc:42)
-    1: process_request (handler.cc:128)
-↳ Caused by: [Location: ...] ... 连接超时
+  [Stacktrace]: 0: main (main.cc:42)  1: process_request (handler.cc:128)
+↳ Caused by: ... 连接超时
 ```

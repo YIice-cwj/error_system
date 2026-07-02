@@ -132,52 +132,13 @@ error_system/
 
 所有 `i18n` 字段均为**可选**，完全向后兼容。三种典型场景：
 
-**场景 1：中文项目（最简，不指定任何 i18n 字段）**
+| 场景 | 配置方式 | 注册行为 |
+|------|------|------|
+| 中文项目 | 不指定 `i18n` / `default_locale` | `desc`/`service_name` 自动注册为 `zh_CN` |
+| 英文项目 | `desc` 为英文，设 `default_locale=en_US` | `desc`/`service_name` 注册为 `en_US` |
+| 多语言项目 | 显式指定 `i18n` + `service_i18n` | 按 `i18n` 注册多语言，`desc` 仅作兜底 |
 
-```json
-{
-    "service_name": "交易服务",
-    "modules": { "order": { "id": 1, "desc": "订单模块" } },
-    "errors": [{ "name": "ERR_X", "desc": "订单不存在", ... }]
-}
-```
-→ 自动用 `desc`/`service_name` 注册为 `zh_CN`（默认 `default_locale`）
-
-**场景 2：英文项目（desc 是英文，指定 `default_locale`）**
-
-```json
-{
-    "service_name": "Trade Service",
-    "default_locale": "en_US",
-    "modules": { "order": { "id": 1, "desc": "Order Module" } },
-    "errors": [{ "name": "ERR_X", "desc": "Order not found", ... }]
-}
-```
-→ 自动用 `desc`/`service_name` 注册为 `en_US`
-
-**场景 3：多语言项目（显式指定 i18n）**
-
-```json
-{
-    "service_name": "交易服务",
-    "service_i18n": { "zh_CN": "交易服务", "en_US": "Trade Service" },
-    "modules": {
-        "order": {
-            "id": 1, "desc": "订单模块",
-            "i18n": { "zh_CN": "订单模块", "en_US": "Order Module" }
-        }
-    },
-    "errors": [{
-        "name": "ERR_X", "desc": "订单不存在",
-        "i18n": { "zh_CN": "订单不存在", "en_US": "Order not found" }
-    }]
-}
-```
-→ 按 `i18n` 字段注册多语言，`desc` 仅作为 `default_locale` 缺失时的兜底
-
-**兜底规则**：提供了 `i18n` 但未含 `default_locale` 时，自动用 `desc`/`service_name` 补齐 `default_locale`，保证回退目标始终有值。
-
-运行时通过 `i18n_config_t::set_output_locale()` 切换语言，序列化器会根据当前 locale 输出对应的子系统/模块名称和错误消息。支持的 locale 见 `error_system::i18n::locale_t` 枚举。
+**兜底规则**：提供了 `i18n` 但未含 `default_locale` 时，自动用 `desc`/`service_name` 补齐 `default_locale`，保证回退目标始终有值。运行时通过 `i18n_config_t::set_output_locale()` 切换语言。
 
 ### 系统域取值（`domain` 字段）
 
@@ -204,27 +165,9 @@ error_system/
 
 ## 📦 生成产物
 
-1. **业务错误码头文件（`<service>_errors.h`）** — 每个 JSON 配置生成一个 C++ 头文件，用 `DEFINE_ERROR_CODE` 宏定义错误码常量并自动注册到全局注册表：
+1. **业务错误码头文件（`<service>_errors.h`）** — 用 `DEFINE_ERROR_CODE` 宏定义错误码常量，利用 C++ 静态初始化在 `main()` 之前自动注册到全局注册表。i18n 消息通过独立 registrar 按 locale 注册到 `i18n_t`。
 
-   ```cpp
-   DEFINE_ERROR_CODE(
-       ERR_ORDER_NOT_FOUND,
-       error_system::core::error_level_t::error,
-       error_system::domain::system_domain_t::application,
-       101, 1, 1,
-       "订单不存在或已删除", "交易服务", "订单模块");
-   ```
-
-   注册利用 C++ 静态初始化在 `main()` 之前完成，无需手动调用。i18n 消息通过 `i18n_registration_detail_` 命名空间内的独立 registrar 按 locale 注册到 `i18n_t`。
-
-2. **全局字典（`error_dict.h`）** — 汇总所有 JSON 配置生成子系统/模块名称注册表，`error_context_serializer_t::to_string()` 通过此注册表将 ID 转换为可读名称。每个头文件内含独立的 `catalog_registrar_`，按 JSON 中指定的 locale 多语言注册到 `subsystem_module_catalog_t`：
-
-   ```cpp
-   // 按 locale 多语言注册（zh_CN/en_US/ja_JP 等）
-   catalog.register_subsystem_module(locale_t::zh_CN, 101, 1, "交易服务", "订单模块");
-   catalog.register_subsystem_module(locale_t::en_US, 101, 1, "Trade Service", "Order Module");
-   catalog.register_subsystem_module(locale_t::ja_JP, 101, 1, "取引サービス", "注文モジュール");
-   ```
+2. **全局字典（`error_dict.h`）** — 汇总所有 JSON 配置生成子系统/模块名称注册表，`to_string()` 通过此注册表将 ID 转换为可读名称。每个头文件内含独立的 `catalog_registrar_`，按 locale 多语言注册到 `subsystem_module_catalog_t`。
 
 3. **Markdown 字典文档（`error_dictionary.md`）** — 人类可读的错误码字典，每个服务一张表格，含错误宏名、级别、所属模块和业务描述。
 
@@ -320,24 +263,14 @@ error_system_generate_codes(
 `generate_error_dict.py` 在生成全局字典前扫描所有 JSON 文件，检测 `(subsystem_id, module_id, number)` 三元组是否全局唯一。冲突示例：
 
 ```
-======================================================================
-  [错误] 检测到错误码 ID 冲突！
-  (subsystem_id, module_id, number) 三元组必须在所有配置中唯一
-======================================================================
-
+[错误] 检测到错误码 ID 冲突！
   冲突: subsystem_id=103, module_id=2, number=0x0001
-    - file='payment_service_errors.json', service='支付服务',
-      module='内部钱包' (id=2),
-      error='ERR_INSUFFICIENT_BALANCE' (number=0x0001)
-    - file='xxx_errors.json', service='...',
-      module='...' (id=2),
-      error='ERR_XXX' (number=0x0001)
-
+    - payment_service_errors.json: ERR_INSUFFICIENT_BALANCE
+    - xxx_errors.json: ERR_XXX
   请修改冲突的错误码 number，确保全局唯一
-======================================================================
 ```
 
-> **注意**：冲突时构建会失败，避免错误码路由错误进入生产环境。
+> 冲突时构建失败，避免错误码路由错误进入生产环境。
 
 ---
 
@@ -378,9 +311,6 @@ cmake --build build
 #include "error_system.h"
 #include "inventory_service_errors.h"  // 自动生成的头文件
 
-using namespace error_system::core;
-using namespace error_system::domain;
-
 result_t<void> deduct_stock(int product_id, int qty) {
     if (qty > get_available_stock(product_id)) {
         return result_t<void>::make_error(
@@ -389,8 +319,7 @@ result_t<void> deduct_stock(int product_id, int qty) {
     }
     return result_t<void>::make_success();
 }
-// 在 main() 之前，ERR_STOCK_INSUFFICIENT 已自动注册到 error_registry_t
-// error_context_serializer_t::to_string() 会输出 "库存服务 / 库存管理" 而非原始 ID
+// main() 前 ERR_STOCK_INSUFFICIENT 已自动注册，to_string() 输出 "库存服务 / 库存管理" 而非原始 ID
 ```
 
 ### 步骤 4：查看生成的字典文档
@@ -401,30 +330,23 @@ result_t<void> deduct_stock(int product_id, int qty) {
 
 ## ❓ 常见问题
 
-### Q1：生成的头文件应该提交到版本控制吗？
+**Q1：生成的头文件应该提交到版本控制吗？**
+不应该。生成产物位于 `build/generated_errors/`（`.gitignore` 已排除），JSON 配置文件才是数据源，必须提交。
 
-**不应该**。生成产物位于 `build/generated_errors/`，CMake 构建时自动生成，`.gitignore` 已排除。JSON 配置文件（`config/errors/*.json`）才是数据源，必须提交。
+**Q2：Python 没有安装怎么办？**
+CMake 检测缺失时跳过代码生成并输出提示，生成空 `error_dict.h` 占位，编译不报错但无法使用业务错误码。建议安装 Python 3.6+。
 
-### Q2：Python 没有安装怎么办？
+**Q3：如何修改已生成的错误码描述？**
+只修改 JSON 配置，下次构建自动重新生成。不要手动修改 `build/generated_errors/` 下的文件。
 
-CMake 检测 Python3 缺失时跳过代码生成并输出 `Python3 未找到，跳过错误码/字典/文档代码生成`，生成空 `error_dict.h` 占位，编译不报错但无法使用业务错误码。建议安装 Python 3.6+。
+**Q4：删除 JSON 文件后，对应的头文件会自动删除吗？**
+不会。CMake `DEPENDS` 配置后下次构建不再重新生成该头文件，建议手动删除后重新构建。
 
-### Q3：如何修改已生成的错误码描述？
+**Q5：如何为多个微服务统一管理错误码？**
+将所有服务的 JSON 配置放在同一个 `config/errors/` 目录下，每个服务一个文件，生成脚本自动汇总并检测跨服务 ID 冲突。
 
-**只修改 JSON 配置**，下次构建自动重新生成头文件。不要手动修改 `build/generated_errors/` 下的任何文件（文件头部有 `请勿手动修改` 标记）。
+**Q6：错误码 `number` 字段可以重复吗？**
+可以，只要 `(subsystem_id, module_id, number)` 三元组不同即可。
 
-### Q4：删除 JSON 文件后，对应的头文件会自动删除吗？
-
-不会自动删除。但 CMake 的 `DEPENDS` 配置后，JSON 文件被删除后下次构建不会再重新生成该头文件。建议手动删除 `build/generated_errors/include/<service>_errors.h` 后重新构建。
-
-### Q5：如何为多个微服务统一管理错误码？
-
-将所有服务的 JSON 配置放在同一个 `config/errors/` 目录下，每个服务一个文件。生成脚本会自动汇总所有文件，生成统一的全局字典和文档，并检测跨服务的 ID 冲突。
-
-### Q6：错误码 `number` 字段可以重复吗？
-
-可以 —— **只要 `(subsystem_id, module_id, number)` 三元组不同即可**。例如交易服务（101）订单模块（1）的 number=1 与支付服务（103）内部钱包（2）的 number=1 是不同的错误码，不冲突。
-
-### Q7：能否在 JSON 中使用中文？
-
-可以。所有 JSON 文件使用 UTF-8 编码，中文字段（`service_name`、`modules[].desc`、`errors[].desc`）会原样输出到生成的头文件和文档中。
+**Q7：能否在 JSON 中使用中文？**
+可以。所有 JSON 文件使用 UTF-8 编码，中文字段会原样输出到生成的头文件和文档中。

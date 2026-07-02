@@ -80,9 +80,9 @@ error_context_t 构造
  → 工作线程 wait() → pop → 处理 → notify_error()  （仅 async_queue）
 ```
 
-- `notify_error()` 复制回调指针 → 释放锁 → 调用 `on_error()`，避免持锁执行用户代码导致死锁
-- 队列满拒绝入队（背压，async_queue）；缓冲满丢弃并标记 `overflow_dropped_`（sync_deferred）；`flushing` 标志防止 flush 期间递归入队
-- 工作线程首次 `enqueue()` 自动启动，析构自动 join；处理器异常隔离，工作线程不退出（async_queue）
+- `notify_error()` 复制回调指针后释放锁再调用 `on_error()`，避免持锁执行用户代码死锁
+- async_queue 队列满拒绝入队（背压）；sync_deferred 缓冲满丢弃并标记 overflow；`flushing` 标志防止 flush 期间递归入队
+- 工作线程首次 `enqueue()` 自动启动，析构自动 join；处理器异常隔离不退出（async_queue）
 
 ### 使用示例
 
@@ -93,13 +93,12 @@ my_plugin_t plugin; registry.register_plugin_ref(plugin);    // 非持有引用
 // 异步模式 + 背压控制
 feature_flags_t::set_notify_mode(feature_flags_t::notify_mode_t::async_queue);
 registry.set_max_queue_size(10000);
-// 延迟模式 + flush（构造 error_context_t 自动入缓冲）
+// 延迟模式 + flush
 feature_flags_t::set_notify_mode(feature_flags_t::notify_mode_t::sync_deferred);
 registry.set_deferred_buffer_size(1024); registry.flush_deferred_notifications();
-if (registry.deferred_buffer_overflowed()) { /* 缓冲满，部分通知被丢弃 */ }
 ```
 
-> ⚠️ **注意**：`register_plugin(unique_ptr)` 接管所有权（注销/替换自动释放）；`register_plugin_ref()` 不持有所有权，调用方负责生命周期，避免注册临时对象。`sync_deferred` 模式下，构造 `error_context_t` 会自动入队，无需手动调用 `enqueue_deferred_notification()`。
+> ⚠️ `register_plugin(unique_ptr)` 接管所有权；`register_plugin_ref()` 不持有所有权，调用方负责生命周期。`sync_deferred` 模式下构造 `error_context_t` 会自动入队，无需手动调用 `enqueue_deferred_notification()`。
 
 ---
 

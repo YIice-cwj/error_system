@@ -64,7 +64,7 @@ auto fresh = reg.get_info(code);        // 管理工具：强一致
 reg.invalidate_metadata_cache();        // 显式刷新（测试场景）
 ```
 
-纪元失效机制：任何 `register_*` / `unregister_*` 调用都会 `bump_epoch_()`（release 序），线程本地缓存检测纪元变化（acquire 序）后整体失效重建，同时缓存"已注册"与"未注册"结果。详见 [Core 层 API · error_registry_t](api/core.md#error_registry_t)。
+纪元失效：任何 `register_*` / `unregister_*` 调用 `bump_epoch_()`（release 序），线程本地缓存检测纪元变化后整体失效重建。详见 [Core 层 API · error_registry_t](api/core.md#error_registry_t)。
 
 ---
 
@@ -101,7 +101,7 @@ auto migrated = reg.migrate(ERR_OLD_DB_POOL);          // 单跳
 auto terminal = reg.migrate_recursive(ERR_OLD_DB_POOL); // 递归到终点
 ```
 
-> **注意**：废弃状态与迁移映射**分离存储**：`unmark_deprecated()` 不会清除迁移映射，便于先停止废弃警告再逐步下线。详见 [Migration 层 API · error_migration_registry_t](api/migration.md#error_migration_registry_t)。
+> 废弃状态与迁移映射**分离存储**：`unmark_deprecated()` 不会清除迁移映射，便于先停止废弃警告再逐步下线。详见 [Migration 层 API](api/migration.md#error_migration_registry_t)。
 
 ---
 
@@ -249,7 +249,7 @@ if (r.is_error()) throw error_exception_t(r.error());  // 跨异常边界
 └─ 否 → 不调用
 ```
 
-> **注意**：`status_mapper_t` 为纯静态工具类（不可实例化），所有映射方法均为 `constexpr`，**不支持运行时自定义映射**。如需特殊映射规则，请调用方自行判断后调用 `http_status_t::from_int()` / `grpc_status_t::from_int()` 构造。
+> `status_mapper_t` 为纯静态工具类（不可实例化），所有映射方法均为 `constexpr`，**不支持运行时自定义映射**。如需特殊规则，调用方自行判断后用 `http_status_t::from_int()` / `grpc_status_t::from_int()` 构造。
 
 **默认映射规则（按错误等级 + 系统域）**
 
@@ -267,17 +267,15 @@ if (r.is_error()) throw error_exception_t(r.error());  // 跨异常边界
 
 ```cpp
 using namespace error_system::mapping;
-http_status_t http = status_mapper_t::to_http_status(ERR_DB_TIMEOUT);   // 503 Service Unavailable
+http_status_t http = status_mapper_t::to_http_status(ERR_DB_TIMEOUT);   // 503
 grpc_status_t grpc = status_mapper_t::to_grpc_status(ERR_DB_TIMEOUT);  // UNAVAILABLE
 http.c_str();      // "Service Unavailable"
 http.to_int();     // 503
-http_status_t::is_valid(404);  // true
-// 如需特殊映射：调用方自行判断
-http_status_t custom = http_status_t::is_valid(404) ? http_status_t::from_int(404)
-                          : status_mapper_t::to_http_status(ERR_NOT_FOUND);
+// 如需特殊映射：调用方自行判断后构造
+http_status_t custom = http_status_t::is_valid(404) ? http_status_t::from_int(404) : status_mapper_t::to_http_status(ERR_NOT_FOUND);
 ```
 
-retryable / transient 标志在所有等级上**优先**映射为 503 / UNAVAILABLE，提示客户端重试。详见 [Mapping 层 API · status_mapper_t](api/mapping.md#status_mapper_t)。
+retryable / transient 标志在所有等级上**优先**映射为 503 / UNAVAILABLE，提示客户端重试。详见 [Mapping 层 API](api/mapping.md#status_mapper_t)。
 
 ---
 

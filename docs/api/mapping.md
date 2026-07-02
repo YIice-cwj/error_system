@@ -130,8 +130,7 @@ grpc_status_t::is_valid(13); // → true
 
 | 错误等级 | 系统域 | HTTP | gRPC |
 |------|------|:---:|:---:|
-| 成功码 | — | 200 OK | OK |
-| debug / info / warn | — | 200 OK | OK |
+| 成功码 / debug·info·warn | — | 200 OK | OK |
 | error | application | 400 Bad Request | INVALID_ARGUMENT |
 | error | third_party | 502 Bad Gateway | UNAVAILABLE |
 | error | database / middleware | 503 Service Unavailable | UNAVAILABLE / DATA_LOSS |
@@ -160,14 +159,10 @@ public:
 
 ```cpp
 error_code_t code{error_level_t::error, system_domain_t::database, 1, 2, 0x0010};
-
-auto http = status_mapper_t::to_http_status(code);  // → 503 Service Unavailable
-auto grpc = status_mapper_t::to_grpc_status(code);  // → DATA_LOSS
-
-// retryable 优先映射为 503 / UNAVAILABLE
+status_mapper_t::to_http_status(code);  // → 503 Service Unavailable
+status_mapper_t::to_grpc_status(code);  // → DATA_LOSS
 code.set_retryable(true);
-status_mapper_t::to_http_status(code);  // → 503
-status_mapper_t::to_grpc_status(code);  // → UNAVAILABLE
+status_mapper_t::to_http_status(code);  // → 503（retryable 优先）
 ```
 
-HTTP/gRPC 映射决策树详见 [决策树 · 8](../decision_tree.md#8-http--grpc-状态码映射路径)。
+映射决策树详见 [决策树 · 8](../decision_tree.md#8-httpgrpc-状态码映射选择)。

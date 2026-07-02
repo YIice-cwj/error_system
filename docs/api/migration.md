@@ -77,32 +77,24 @@ public:
 
 ### 单跳 vs 递归迁移
 
-| 方法 | 行为 | 适用 |
-|------|------|------|
-| `migrate()` | 仅一次映射跳转（a → b），即使 b 也有映射也停止 | 单步版本升级 |
-| `migrate_recursive()` | 沿链跳转到终点（a → b → c → … → 终点），最大深度 16，环检测安全 | 追溯最终替代码 |
+- `migrate()`：仅一次映射跳转（a → b），适用于单步版本升级
+- `migrate_recursive()`：沿链跳转到终点（a → b → c → … → 终点），最大深度 16，环检测安全，适用于追溯最终替代码
+
+决策树详见 [决策树 · 3](../decision_tree.md#3-错误码废弃与迁移决策)。
 
 **使用示例**
 
 ```cpp
 auto& reg = error_migration_registry_t::instance();
-
-// 场景 1：版本演进，下线旧码（同时建立迁移）
-reg.mark_deprecated(ERR_OLD_DB_POOL,
-                    {"v2.0 起改用 ERR_DB_POOL_V2", ERR_DB_POOL_V2, "2.0.0", "3.0.0"});
-
-// 场景 2：仅标记废弃，无替代
+// 版本演进，下线旧码（同时建立迁移）
+reg.mark_deprecated(ERR_OLD_DB_POOL, {"v2.0 起改用 ERR_DB_POOL_V2", ERR_DB_POOL_V2, "2.0.0", "3.0.0"});
+// 仅标记废弃，无替代
 reg.mark_deprecated(ERR_LEGACY_AUTH, {"鉴权流程已重构，下版本移除"});
-
-// 场景 3：别名映射（不标记废弃）
+// 别名映射（不标记废弃）
 reg.register_migration(ERR_USER_V1, ERR_USER_V2);
-
-if (auto info = reg.get_deprecation_info(ERR_OLD_DB_POOL); info && info->deprecated) {
-    log_warn("错误码已废弃：{}", info->reason);
-}
 
 auto migrated = reg.migrate(ERR_OLD_DB_POOL);           // 单跳到 ERR_DB_POOL_V2
 auto terminal = reg.migrate_recursive(ERR_OLD_DB_POOL); // 递归到终点
 ```
 
-`unmark_deprecated()` 不会清除迁移映射，便于先停止废弃警告再逐步下线。废弃/迁移决策树详见 [决策树 · 3](../decision_tree.md#3-错误码废弃与迁移决策)。
+`unmark_deprecated()` 不会清除迁移映射，便于先停止废弃警告再逐步下线。
